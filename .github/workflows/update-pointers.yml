@@ -44,6 +44,11 @@ jobs:
           SHA_CLINICAL:     ${{ github.event.client_payload.sha_clinical }}
           SHA_LIFE:         ${{ github.event.client_payload.sha_life }}
           SHA_DRAFTHOUSE:   ${{ github.event.client_payload.sha_drafthouse }}
+          SHA_IOT:          ${{ github.event.client_payload.sha_iot }}
+          SHA_DESIREDSTATE: ${{ github.event.client_payload.sha_desiredstate }}
+          SHA_RAS:          ${{ github.event.client_payload.sha_ras }}
+          SHA_OPS:          ${{ github.event.client_payload.sha_ops }}
+          SHA_QUARKMIND:    ${{ github.event.client_payload.sha_quarkmind }}
         run: |
           cat > /tmp/update_pointers.py << 'PYEOF'
           import subprocess, os, sys
@@ -67,6 +72,11 @@ jobs:
               'clinical':    'SHA_CLINICAL',
               'life':        'SHA_LIFE',
               'drafthouse':  'SHA_DRAFTHOUSE',
+              'iot':         'SHA_IOT',
+              'desiredstate':'SHA_DESIREDSTATE',
+              'ras':         'SHA_RAS',
+              'ops':         'SHA_OPS',
+              'quarkmind':   'SHA_QUARKMIND',
           }
 
           updated = []
