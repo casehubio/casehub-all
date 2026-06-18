@@ -1,0 +1,97 @@
+name: Sync submodule pointers
+
+on:
+  repository_dispatch:
+    types: [ecosystem-build-succeeded]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    name: Update submodule pointers to build SHAs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+
+      - name: Update submodule pointers
+        env:
+          TRIGGER:          ${{ github.event.client_payload.trigger || 'manual' }}
+          SHA_PARENT:       ${{ github.event.client_payload.sha_parent }}
+          SHA_PLATFORM:     ${{ github.event.client_payload.sha_platform }}
+          SHA_LEDGER:       ${{ github.event.client_payload.sha_ledger }}
+          SHA_EIDOS:        ${{ github.event.client_payload.sha_eidos }}
+          SHA_NEURAL_TEXT:  ${{ github.event.client_payload.sha_neural_text }}
+          SHA_CONNECTORS:   ${{ github.event.client_payload.sha_connectors }}
+          SHA_WORK:         ${{ github.event.client_payload.sha_work }}
+          SHA_QHORUS:       ${{ github.event.client_payload.sha_qhorus }}
+          SHA_ENGINE:       ${{ github.event.client_payload.sha_engine }}
+          SHA_CLAUDONY:     ${{ github.event.client_payload.sha_claudony }}
+          SHA_OPENCLAW:     ${{ github.event.client_payload.sha_openclaw }}
+          SHA_DEVTOWN:      ${{ github.event.client_payload.sha_devtown }}
+          SHA_AML:          ${{ github.event.client_payload.sha_aml }}
+          SHA_CLINICAL:     ${{ github.event.client_payload.sha_clinical }}
+          SHA_LIFE:         ${{ github.event.client_payload.sha_life }}
+          SHA_DRAFTHOUSE:   ${{ github.event.client_payload.sha_drafthouse }}
+        run: |
+          cat > /tmp/update_pointers.py << 'PYEOF'
+          import subprocess, os, sys
+
+          # submodule path -> env var name
+          POINTERS = {
+              'parent':      'SHA_PARENT',
+              'platform':    'SHA_PLATFORM',
+              'ledger':      'SHA_LEDGER',
+              'eidos':       'SHA_EIDOS',
+              'neural-text': 'SHA_NEURAL_TEXT',
+              'connectors':  'SHA_CONNECTORS',
+              'work':        'SHA_WORK',
+              'qhorus':      'SHA_QHORUS',
+              'engine':      'SHA_ENGINE',
+              'claudony':    'SHA_CLAUDONY',
+              'openclaw':    'SHA_OPENCLAW',
+              'devtown':     'SHA_DEVTOWN',
+              'aml':         'SHA_AML',
+              'clinical':    'SHA_CLINICAL',
+              'life':        'SHA_LIFE',
+              'drafthouse':  'SHA_DRAFTHOUSE',
+          }
+
+          updated = []
+          for path, env_key in POINTERS.items():
+              sha = os.environ.get(env_key, '').strip()
+              if not sha:
+                  continue  # not included in this build
+              subprocess.run(
+                  ['git', 'update-index', '--cacheinfo', f'160000,{sha},{path}'],
+                  check=True
+              )
+              updated.append(f'  {path}: {sha[:12]}')
+
+          if not updated:
+              print('No SHAs in payload — nothing to update.')
+              sys.exit(0)
+
+          # Check if anything actually changed
+          diff = subprocess.run(['git', 'diff', '--staged', '--quiet'])
+          if diff.returncode == 0:
+              print('All pointers already at these SHAs — no commit needed.')
+              sys.exit(0)
+
+          trigger = os.environ.get('TRIGGER', 'workflow_dispatch')
+          msg = f'chore: sync to build-all ({trigger})\n\n' + '\n'.join(updated)
+          subprocess.run(['git', 'commit', '-m', msg], check=True)
+          subprocess.run(['git', 'push'], check=True)
+          print(f'Updated {len(updated)} pointer(s).')
+          PYEOF
+          python3 /tmp/update_pointers.py
