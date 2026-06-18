@@ -1,0 +1,66 @@
+[submodule "platform"]
+	path = platform
+	url = https://github.com/casehubio/platform.git
+[submodule "ledger"]
+	path = ledger
+	url = https://github.com/casehubio/ledger.git
+[submodule "work"]
+	path = work
+	url = https://github.com/casehubio/work.git
+[submodule "qhorus"]
+	path = qhorus
+	url = https://github.com/casehubio/qhorus.git
+[submodule "connectors"]
+	path = connectors
+	url = https://github.com/casehubio/connectors.git
+[submodule "iot"]
+	path = iot
+	url = https://github.com/casehubio/iot.git
+[submodule "eidos"]
+	path = eidos
+	url = https://github.com/casehubio/eidos.git
+[submodule "neural-text"]
+	path = neural-text
+	url = https://github.com/casehubio/neural-text.git
+[submodule "desiredstate"]
+	path = desiredstate
+	url = https://github.com/casehubio/casehub-desiredstate.git
+[submodule "ras"]
+	path = ras
+	url = https://github.com/casehubio/casehub-ras.git
+[submodule "ops"]
+	path = ops
+	url = https://github.com/casehubio/casehub-ops.git
+[submodule "workers"]
+	path = workers
+	url = https://github.com/casehubio/workers.git
+[submodule "engine"]
+	path = engine
+	url = https://github.com/casehubio/engine.git
+[submodule "claudony"]
+	path = claudony
+	url = https://github.com/casehubio/claudony.git
+[submodule "openclaw"]
+	path = openclaw
+	url = https://github.com/casehubio/openclaw.git
+[submodule "devtown"]
+	path = devtown
+	url = https://github.com/casehubio/devtown.git
+[submodule "aml"]
+	path = aml
+	url = https://github.com/casehubio/aml.git
+[submodule "clinical"]
+	path = clinical
+	url = https://github.com/casehubio/clinical.git
+[submodule "drafthouse"]
+	path = drafthouse
+	url = https://github.com/casehubio/drafthouse.git
+[submodule "life"]
+	path = life
+	url = https://github.com/casehubio/life.git
+[submodule "quarkmind"]
+	path = quarkmind
+	url = https://github.com/casehubio/quarkmind.git
+[submodule "parent"]
+	path = parent
+	url = https://github.com/casehubio/parent.git
