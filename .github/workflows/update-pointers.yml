@@ -36,6 +36,7 @@ jobs:
           SHA_WORK:         ${{ github.event.client_payload.sha_work }}
           SHA_QHORUS:       ${{ github.event.client_payload.sha_qhorus }}
           SHA_ENGINE:       ${{ github.event.client_payload.sha_engine }}
+          SHA_WORKERS:      ${{ github.event.client_payload.sha_workers }}
           SHA_CLAUDONY:     ${{ github.event.client_payload.sha_claudony }}
           SHA_OPENCLAW:     ${{ github.event.client_payload.sha_openclaw }}
           SHA_DEVTOWN:      ${{ github.event.client_payload.sha_devtown }}
@@ -58,6 +59,7 @@ jobs:
               'work':        'SHA_WORK',
               'qhorus':      'SHA_QHORUS',
               'engine':      'SHA_ENGINE',
+              'workers':     'SHA_WORKERS',
               'claudony':    'SHA_CLAUDONY',
               'openclaw':    'SHA_OPENCLAW',
               'devtown':     'SHA_DEVTOWN',
