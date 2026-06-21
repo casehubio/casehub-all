@@ -24,48 +24,53 @@ jobs:
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
 
-      - name: Update submodule pointers
+      - name: Write updater script
         env:
           TRIGGER: ${{ github.event.client_payload.trigger || 'manual' }}
           SHAS_JSON: ${{ toJson(github.event.client_payload.shas) }}
         run: |
-          python3 - << 'PYEOF'
-import subprocess, os, sys, json
+          cat > /tmp/update_pointers.py << 'SCRIPT_END'
+          import subprocess, os, sys, json
 
-shas = json.loads(os.environ.get("SHAS_JSON", "{}") or "{}")
-if not shas or shas == "null":
-    print("No SHAs in payload — nothing to update.")
-    sys.exit(0)
+          raw = os.environ.get("SHAS_JSON", "{}")
+          if not raw or raw == "null":
+              print("No SHAs in payload — nothing to update.")
+              sys.exit(0)
 
-if isinstance(shas, str):
-    shas = json.loads(shas)
+          shas = json.loads(raw) if isinstance(raw, str) else raw
 
-updated = []
-for name, sha in shas.items():
-    if not sha:
-        continue
-    path = name.replace("_", "-")
-    try:
-        subprocess.run(
-            ["git", "update-index", "--cacheinfo", f"160000,{sha},{path}"],
-            check=True
-        )
-        updated.append(f"  {path}: {sha[:12]}")
-    except subprocess.CalledProcessError:
-        print(f"  WARNING: {path} not a submodule — skipping")
+          updated = []
+          for name, sha in shas.items():
+              if not sha:
+                  continue
+              path = name.replace("_", "-")
+              try:
+                  subprocess.run(
+                      ["git", "update-index", "--cacheinfo", f"160000,{sha},{path}"],
+                      check=True
+                  )
+                  updated.append(f"  {path}: {sha[:12]}")
+              except subprocess.CalledProcessError:
+                  print(f"  WARNING: {path} not a submodule — skipping")
 
-if not updated:
-    print("No valid submodule SHAs — nothing to update.")
-    sys.exit(0)
+          if not updated:
+              print("No valid submodule SHAs — nothing to update.")
+              sys.exit(0)
 
-diff = subprocess.run(["git", "diff", "--staged", "--quiet"])
-if diff.returncode == 0:
-    print("All pointers already at these SHAs — no commit needed.")
-    sys.exit(0)
+          diff = subprocess.run(["git", "diff", "--staged", "--quiet"])
+          if diff.returncode == 0:
+              print("All pointers already at these SHAs — no commit needed.")
+              sys.exit(0)
 
-trigger = os.environ.get("TRIGGER", "workflow_dispatch")
-msg = "chore: sync to build-all ({})\n\n".format(trigger) + "\n".join(updated)
-subprocess.run(["git", "commit", "-m", msg], check=True)
-subprocess.run(["git", "push"], check=True)
-print("Updated {} pointer(s).".format(len(updated)))
-PYEOF
+          trigger = os.environ.get("TRIGGER", "workflow_dispatch")
+          msg = "chore: sync to build-all ({})\n\n".format(trigger) + "\n".join(updated)
+          subprocess.run(["git", "commit", "-m", msg], check=True)
+          subprocess.run(["git", "push"], check=True)
+          print("Updated {} pointer(s).".format(len(updated)))
+          SCRIPT_END
+
+      - name: Run updater
+        env:
+          TRIGGER: ${{ github.event.client_payload.trigger || 'manual' }}
+          SHAS_JSON: ${{ toJson(github.event.client_payload.shas) }}
+        run: python3 /tmp/update_pointers.py
