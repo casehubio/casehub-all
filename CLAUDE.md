@@ -28,7 +28,7 @@ Run this at the start of each Claude.ai session to get the latest main from ever
 | `ledger/` | casehubio/ledger | Immutable tamper-evident audit ledger + trust scoring |
 | `work/` | casehubio/work | Human task lifecycle — WorkItem inbox, SLA, delegation |
 | `qhorus/` | casehubio/qhorus | Agent communication mesh — speech acts, commitments, channels |
-| `pages/` | casehubio/casehub-pages | YAML dashboard rendering, component API, forms |
+| `pages/` | casehubio/casehub-pages | Web application framework — layouts, data pipelines, visualization, forms, component hosting, inter-panel communication |
 | `connectors/` | casehubio/connectors | Outbound/inbound message connectors (Slack, Teams, email) |
 | `iot/` | casehubio/iot | Typed IoT device abstraction — Matter-aligned hierarchy, HA/OpenHAB providers |
 | `eidos/` | casehubio/eidos | Structured agent identity — descriptors, discovery, system prompt generation |
