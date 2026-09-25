@@ -67,3 +67,6 @@
 [submodule "parent"]
 	path = parent
 	url = https://github.com/casehubio/parent.git
+[submodule "casehub-langchain4j"]
+	path = casehub-langchain4j
+	url = https://github.com/casehubio/casehub-langchain4j.git
