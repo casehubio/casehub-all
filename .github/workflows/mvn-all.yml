@@ -69,7 +69,7 @@ jobs:
       - name: Maven reactor build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn install -fae -f parent/aggregator.xml --batch-mode ${{ inputs.maven_args }}
+        run: mvn install -fae -f parent/aggregator.xml --batch-mode -T 1C ${{ inputs.maven_args }}
 
       - name: Advance submodule pointers
         if: success()
