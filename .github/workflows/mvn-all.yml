@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: false
+          submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git
@@ -29,13 +29,13 @@ jobs:
           git config user.name "GitHub Actions"
 
       - name: Update parent to latest main
-        run: git submodule update --init --remote parent
+        run: git submodule update --remote parent
 
       - name: Reconcile submodules from CSVs
         run: python3 scripts/reconcile-submodules.py
 
-      - name: Update submodules to latest main
-        run: git submodule update --init --remote --merge
+      - name: Update all submodules to latest main
+        run: git submodule update --remote
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
