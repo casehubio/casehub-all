@@ -37,6 +37,12 @@ jobs:
       - name: Update all submodules to latest main
         run: git submodule update --remote
 
+      - name: Record SHA manifest
+        run: |
+          echo "::group::SHA manifest (pin these to reproduce this build)"
+          git submodule status | sort
+          echo "::endgroup::"
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
@@ -86,4 +92,9 @@ jobs:
             else
               echo "❌ **Reactor build failed — pointers unchanged.**"
             fi
+            echo ""
+            echo "## SHA Manifest"
+            echo '```'
+            git submodule status | sort
+            echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
