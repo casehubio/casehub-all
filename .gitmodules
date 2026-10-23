@@ -10,9 +10,6 @@
 [submodule "qhorus"]
 	path = qhorus
 	url = https://github.com/casehubio/qhorus.git
-[submodule "pages"]
-	path = pages
-	url = https://github.com/casehubio/casehub-pages.git
 [submodule "connectors"]
 	path = connectors
 	url = https://github.com/casehubio/connectors.git
@@ -91,3 +88,6 @@
 [submodule "scaffold"]
 	path = scaffold
 	url = https://github.com/casehubio/scaffold.git
+[submodule "pages"]
+	path = pages
+	url = https://github.com/casehubio/casehub-pages.git
