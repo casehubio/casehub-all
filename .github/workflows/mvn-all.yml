@@ -20,11 +20,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Configure git
+        run: |
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+
+      - name: Update parent to latest main
+        run: git submodule update --init --remote parent
+
+      - name: Reconcile submodules from CSVs
+        run: python3 scripts/reconcile-submodules.py
+
       - name: Update submodules to latest main
-        run: git submodule update --remote --merge
+        run: git submodule update --init --remote --merge
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -56,8 +67,6 @@ jobs:
       - name: Advance submodule pointers
         if: success()
         run: |
-          git config user.email "github-actions@github.com"
-          git config user.name "GitHub Actions"
           git add -A
           git diff --staged --quiet || {
             git commit -m "chore: advance pointers to verified main SHAs (mvn-all)"
