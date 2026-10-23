@@ -3,10 +3,6 @@ name: Maven All
 on:
   workflow_dispatch:
     inputs:
-      update_to_latest:
-        description: "Update submodules to latest main before building"
-        type: boolean
-        default: false
       maven_args:
         description: "Extra Maven args (e.g. -DskipTests, -T 1C)"
         type: string
@@ -28,7 +24,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update submodules to latest main
-        if: inputs.update_to_latest
         run: git submodule update --remote --merge
 
       - name: Set up Java 21
@@ -58,14 +53,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mvn install -fae -f parent/aggregator.xml --batch-mode ${{ inputs.maven_args }}
 
-      - name: Commit updated pointers
-        if: success() && inputs.update_to_latest
+      - name: Advance submodule pointers
+        if: success()
         run: |
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
-          git diff --staged --quiet && git diff --quiet || {
-            git add -A
-            git commit -m "chore: sync submodules to latest main (mvn-all)"
+          git add -A
+          git diff --staged --quiet || {
+            git commit -m "chore: advance pointers to verified main SHAs (mvn-all)"
             git push
           }
 
@@ -75,11 +70,11 @@ jobs:
           {
             echo "# Maven All"
             echo ""
-            echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Args: \`${{ inputs.maven_args || 'none' }}\` | Updated to latest: ${{ inputs.update_to_latest }}_"
+            echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Args: \`${{ inputs.maven_args || 'none' }}\`_"
             echo ""
             if [ "${{ job.status }}" = "success" ]; then
-              echo "✅ **Reactor build passed.**"
+              echo "✅ **Reactor build passed — pointers advanced.**"
             else
-              echo "❌ **Reactor build failed.**"
+              echo "❌ **Reactor build failed — pointers unchanged.**"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
