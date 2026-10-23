@@ -22,9 +22,6 @@
 [submodule "eidos"]
 	path = eidos
 	url = https://github.com/casehubio/eidos.git
-[submodule "neural-text"]
-	path = neural-text
-	url = https://github.com/casehubio/neural-text.git
 [submodule "desiredstate"]
 	path = desiredstate
 	url = https://github.com/casehubio/casehub-desiredstate.git
@@ -70,3 +67,27 @@
 [submodule "casehub-langchain4j"]
 	path = casehub-langchain4j
 	url = https://github.com/casehubio/casehub-langchain4j.git
+[submodule "worker"]
+	path = worker
+	url = https://github.com/casehubio/casehub-worker.git
+[submodule "neocortex"]
+	path = neocortex
+	url = https://github.com/casehubio/neocortex.git
+[submodule "agency"]
+	path = agency
+	url = https://github.com/casehubio/agency.git
+[submodule "casehub-mosaic"]
+	path = casehub-mosaic
+	url = https://github.com/casehubio/casehub-mosaic.git
+[submodule "chat-app"]
+	path = chat-app
+	url = https://github.com/casehubio/chat-app.git
+[submodule "soc"]
+	path = soc
+	url = https://github.com/casehubio/soc.git
+[submodule "fsitrading"]
+	path = fsitrading
+	url = https://github.com/casehubio/fsitrading.git
+[submodule "scaffold"]
+	path = scaffold
+	url = https://github.com/casehubio/scaffold.git
