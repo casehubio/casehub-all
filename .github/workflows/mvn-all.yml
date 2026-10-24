@@ -48,10 +48,16 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-          cache: 'maven'
           server-id: github
           server-username: GITHUB_ACTOR
           server-password: GITHUB_TOKEN
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
