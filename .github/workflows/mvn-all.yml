@@ -64,12 +64,12 @@ jobs:
       - name: Install parent POM
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn install -N -f parent/pom.xml --batch-mode -q
+        run: mvn install -N -f parent/pom.xml --batch-mode -q -s .mvn/settings.xml
 
       - name: Maven reactor build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn install -fae -f parent/aggregator.xml --batch-mode -T 1C ${{ inputs.maven_args }}
+        run: mvn install -fae -f parent/aggregator.xml --batch-mode -T 1C -s .mvn/settings.xml ${{ inputs.maven_args }}
 
       - name: Advance submodule pointers
         if: success()

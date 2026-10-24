@@ -1,0 +1,13 @@
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0">
+  <!-- Redirect GitHub Packages to Central for reactor builds.
+       The reactor builds all casehubio artifacts from source,
+       so GitHub Packages is never needed. This eliminates slow
+       404 round-trips for every third-party dependency. -->
+  <mirrors>
+    <mirror>
+      <id>redirect-github-to-central</id>
+      <mirrorOf>github</mirrorOf>
+      <url>https://repo.maven.apache.org/maven2</url>
+    </mirror>
+  </mirrors>
+</settings>
