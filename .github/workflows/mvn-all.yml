@@ -101,7 +101,13 @@ jobs:
       - name: Advance submodule pointers
         if: success()
         run: |
-          git add -A
+          if [ -z "${{ inputs.resume_from }}" ]; then
+            git add -A
+          else
+            git submodule status | awk '{print $2}' | while read mod; do
+              grep -q "<module>../$mod" parent/aggregator-apps.xml && git add "$mod"
+            done
+          fi
           git diff --staged --quiet || {
             git commit -m "chore: advance pointers to verified main SHAs (mvn-all)"
             git push
