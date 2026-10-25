@@ -72,14 +72,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mvn install -N -f parent/pom.xml --batch-mode -q
 
-      - name: Compile foundation (parallel, no augmentation)
+      - name: Build foundation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAVEN_OPTS: '-Xmx4g'
-        timeout-minutes: 15
-        run: mvn install -fae -f parent/aggregator-foundation.xml --batch-mode -T 1C -DskipTests -ntp -Dquarkus.bootstrap.blocking-task-runner=true ${{ inputs.maven_args }}
+        timeout-minutes: 20
+        run: mvn install -fae -f parent/aggregator-foundation.xml --batch-mode -DskipTests -ntp ${{ inputs.maven_args }}
 
-      - name: Build applications (serial, with augmentation)
+      - name: Build applications
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAVEN_OPTS: '-Xmx4g'
