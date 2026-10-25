@@ -78,12 +78,6 @@ jobs:
           GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yarn install
 
-      - name: Install mosaic dependencies
-        working-directory: casehub-mosaic
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: yarn install
-
       - name: Build foundation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
