@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       maven_args:
-        description: "Extra Maven args (e.g. -Dmaven.test.skip=true, -T 1C)"
+        description: "Extra Maven args (e.g. -Dmaven.test.skip=true)"
+        type: string
+        default: ''
+      resume_from:
+        description: "Resume apps from module (e.g. :casehub-openclaw-app). Skips foundation — uses .m2 cache."
         type: string
         default: ''
 
@@ -73,6 +77,7 @@ jobs:
         run: mvn install -N -f parent/pom.xml --batch-mode -q
 
       - name: Build foundation
+        if: inputs.resume_from == ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -86,7 +91,12 @@ jobs:
           GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAVEN_OPTS: '-Xmx4g'
         timeout-minutes: 20
-        run: mvn install -fae -f parent/aggregator-apps.xml --batch-mode -Dmaven.test.skip=true -Denforcer.skip=true -ntp ${{ inputs.maven_args }}
+        run: |
+          RF=""
+          if [ -n "${{ inputs.resume_from }}" ]; then
+            RF="-rf ${{ inputs.resume_from }}"
+          fi
+          mvn install -fae -f parent/aggregator-apps.xml --batch-mode -Dmaven.test.skip=true -Denforcer.skip=true -ntp $RF ${{ inputs.maven_args }}
 
       - name: Advance submodule pointers
         if: success()
@@ -103,7 +113,7 @@ jobs:
           {
             echo "# Maven All"
             echo ""
-            echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Args: \`${{ inputs.maven_args || 'none' }}\`_"
+            echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Args: \`${{ inputs.maven_args || 'none' }}\` | Resume: \`${{ inputs.resume_from || 'none' }}\`_"
             echo ""
             if [ "${{ job.status }}" = "success" ]; then
               echo "✅ **Reactor build passed — pointers advanced.**"
