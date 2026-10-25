@@ -74,10 +74,14 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: pages
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yarn install
 
       - name: Install mosaic dependencies
         working-directory: casehub-mosaic
+        env:
+          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: yarn install
 
       - name: Build foundation
