@@ -72,12 +72,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mvn install -N -f parent/pom.xml --batch-mode -q
 
-      - name: Install frontend dependencies
-        working-directory: pages
-        env:
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: yarn install
-
       - name: Build foundation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
