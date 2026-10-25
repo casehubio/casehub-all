@@ -72,10 +72,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mvn install -N -f parent/pom.xml --batch-mode -q
 
-      - name: Maven reactor build
+      - name: Compile foundation (parallel, no augmentation)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn install -fae -f parent/aggregator.xml --batch-mode -T 1C ${{ inputs.maven_args }}
+          MAVEN_OPTS: '-Xmx4g'
+        timeout-minutes: 15
+        run: mvn install -fae -f parent/aggregator-foundation.xml --batch-mode -T 1C -DskipTests -Dquarkus.build.skip=true -ntp ${{ inputs.maven_args }}
+
+      - name: Build applications (serial, with augmentation)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAVEN_OPTS: '-Xmx4g'
+        timeout-minutes: 20
+        run: mvn install -fae -f parent/aggregator-apps.xml --batch-mode -DskipTests -ntp ${{ inputs.maven_args }}
 
       - name: Advance submodule pointers
         if: success()
