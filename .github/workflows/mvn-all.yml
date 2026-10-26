@@ -184,13 +184,22 @@ jobs:
         run: mvn install -T 1C -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
 
-      - name: Upload slice artifacts
+      - name: Upload slice .m2 artifacts
         uses: actions/upload-artifact@v4
         with:
           name: m2-platform-slice-${{ matrix.slice }}
           path: ~/.m2/repository/io/casehub/casehub-platform*
           retention-days: 1
           compression-level: 1
+
+      - name: Upload slice Jandex indexes
+        uses: actions/upload-artifact@v4
+        with:
+          name: jandex-platform-slice-${{ matrix.slice }}
+          path: platform/*/target/classes/META-INF/jandex.idx
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: ignore
 
   # ════════════════════════════════════════════════════════════════════
   # Phases 2-8: Convergence + G1-G6 ecosystem build
@@ -274,13 +283,21 @@ jobs:
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
 
-      # Download all platform artifacts from slice jobs (merged into .m2)
-      - name: Download platform artifacts
+      # Download all platform artifacts from slice jobs
+      - name: Download platform .m2 artifacts
         if: inputs.resume_from == ''
         uses: actions/download-artifact@v4
         with:
           pattern: m2-platform-*
           path: ~/.m2/repository/io/casehub
+          merge-multiple: true
+
+      - name: Download platform Jandex indexes
+        if: inputs.resume_from == ''
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jandex-platform-*
+          path: .
           merge-multiple: true
 
       # ── Phase 2: Platform convergence ─────────────────────────────────
