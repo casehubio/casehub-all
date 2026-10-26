@@ -12,6 +12,41 @@ two levels:
    together. Uses git submodules to pull all repos into one workspace and builds
    them as a single Maven reactor via dependency-grouped aggregator POMs.
 
+### Why casehub-all exists
+
+Per-repo CI only proves that each repo compiles and passes tests against the
+SNAPSHOT artifacts that happened to be in GitHub Packages at that moment. It
+cannot detect cross-repo breakage:
+
+- **API drift:** Repo A changes a method signature and publishes. Repo B's CI
+  runs before B's code is updated — it pulls A's new SNAPSHOT and fails. But
+  if B's CI ran a minute earlier, it would have pulled A's old SNAPSHOT and
+  passed. Per-repo CI gives inconsistent results depending on timing.
+- **Diamond dependencies:** Repo C depends on both A and B. A and B both
+  depend on platform. If platform publishes a breaking change and A updates
+  but B hasn't yet, C's CI might pull updated-A and stale-B — a combination
+  that was never tested together.
+- **No reproducibility:** Per-repo CI builds against whatever SNAPSHOTs
+  are currently published. There's no record of which exact combination of
+  repo versions was verified. A build that passed yesterday might fail today
+  with identical code because a transitive dependency published a new SNAPSHOT.
+
+casehub-all solves these problems:
+
+- **Single reactor, source-level:** All repos build from source in one Maven
+  reactor. No SNAPSHOT resolution — modules depend on the reactor-built
+  artifacts from earlier phases. API drift is caught immediately.
+- **Reproducible SHA manifest:** Every build records the exact SHA of every
+  repo. Given these SHAs, the build can be reproduced deterministically.
+  `git submodule status` is the bill of materials.
+- **Pointer advance = verified state:** The committed submodule pointers
+  represent the last combination that compiled together. Anyone cloning
+  casehub-all gets a known-good set of versions.
+- **Single `.m2` cache:** Building in one workspace means each phase's
+  `mvn install` populates `.m2` for subsequent phases. No external artifact
+  resolution, no SNAPSHOT timing races, no stale-cache surprises (within a
+  single run).
+
 ## SHA Management and Submodule Pointers
 
 casehub-all tracks every repo as a git submodule. Each submodule pointer is a
