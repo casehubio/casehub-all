@@ -162,6 +162,10 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Update platform to latest main
+        run: git submodule update --remote platform
+        timeout-minutes: 2
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
