@@ -121,13 +121,22 @@ jobs:
         run: mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 5
 
-      - name: Upload platform base artifacts
+      - name: Upload platform base .m2 artifacts
         uses: actions/upload-artifact@v4
         with:
           name: m2-platform-base
           path: ~/.m2/repository/io/casehub/casehub-platform*
           retention-days: 1
           compression-level: 1
+
+      - name: Upload platform base Jandex indexes
+        uses: actions/upload-artifact@v4
+        with:
+          name: jandex-platform-base
+          path: platform/*/target/classes/META-INF/jandex.idx
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: ignore
 
   # ════════════════════════════════════════════════════════════════════
   # Phase 1: Platform slices — 4 parallel jobs, each with its own 2 CPUs
