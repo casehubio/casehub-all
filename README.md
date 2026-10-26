@@ -101,45 +101,46 @@ Phase 7 ─── G6: devtown, aml, clinical, quarkmind, scaffold, ops, fsitradi
 
 Within each group, Maven's `-T 1C` parallelises compilation across modules.
 
-### Per-Repo CI Times (standalone, with tests)
+### Per-Repo CI Times (standalone build + test)
 
-Sorted by CI time, descending. Times from latest green CI run as of 2026-10-26.
+Canonical times from the latest successful main-branch CI run per repo as of
+2026-10-26. These are full `mvn verify` runs including all tests.
 
 | Repo | CI Time | Modules | @QuarkusTest | Group | Status |
 |------|---------|---------|-------------|-------|--------|
-| platform | 36 min | 212 | 61 | Slices | green |
-| engine | 22 min | 69 | 141 | G3 | green |
-| work | 21 min | 28 | 150 | G3 | red (test) |
-| iot | 18 min | 14 | — | G5 | green |
-| neocortex | 16 min | 96 | — | G1 | green |
-| quarkmind | 16 min | — | — | G6 | green |
-| connectors | 15 min | 43 | — | G1 | green |
-| qhorus | 12 min | 43 | — | G2 | green |
-| casehub-langchain4j | 10 min | — | — | G4 | green |
-| casehub-mosaic | 8 min | — | — | G4 | red (test) |
-| agency | 8 min | — | — | G4 | green |
-| ledger | 8 min | — | — | G1 | green |
-| eidos | 7 min | — | — | G2 | green |
-| devtown | 7 min | — | — | G6 | green |
-| aml | 7 min | — | — | G6 | green |
-| fsitrading | 6 min | — | — | G6 | red (test) |
-| drafthouse | 6 min | — | — | G3 | green |
-| life | 4 min | — | — | G6 | green |
-| chat-app | 3 min | — | — | G5 | green |
-| workers | 3 min | — | — | G4 | green |
-| clinical | 3 min | — | — | G6 | green |
-| openclaw | 3 min | — | — | G5 | green |
-| claudony | — | — | — | G5 | green |
-| soc | — | — | — | G5 | red (expression engine — fix in progress) |
+| platform | 35m 54s | 212 | 61 | Slices | green |
+| work | 26m 43s | 28 | 150 | G3 | red (test) |
+| engine | 21m 48s | 69 | 141 | G3 | green |
+| iot | 17m 52s | 14 | — | G5 | green |
+| neocortex | 15m 50s | 96 | — | G1 | green |
+| quarkmind | 15m 40s | — | — | G6 | green |
+| connectors | 14m 44s | 43 | — | G1 | green |
+| casehub-mosaic | 13m 58s | — | — | G4 | red (test) |
+| fsitrading | 12m 44s | — | — | G6 | red (test) |
+| qhorus | 12m 14s | 43 | — | G2 | green |
+| casehub-langchain4j | 10m 22s | — | — | G4 | green |
+| soc | 8m 05s | — | — | G5 | red (expression engine — fix in progress) |
+| agency | 7m 31s | — | — | G4 | green |
+| ledger | 7m 30s | — | — | G1 | green |
+| eidos | 7m 16s | — | — | G2 | green |
+| devtown | 6m 44s | — | — | G6 | green |
+| aml | 6m 36s | — | — | G6 | green |
+| scaffold | 6m 24s | — | — | G6 | green |
+| claudony | 6m 12s | — | — | G5 | green |
+| drafthouse | 5m 37s | — | — | G3 | green |
+| life | 4m 18s | — | — | G6 | green |
+| chat-app | 3m 04s | — | — | G5 | green |
+| workers | 2m 59s | — | — | G4 | green |
+| clinical | 2m 54s | — | — | G6 | green |
+| openclaw | 2m 47s | — | — | G5 | green |
 | worker | — | — | — | G1 | no CI |
 | desiredstate | — | — | — | G5 | no CI |
 | ras | — | — | — | G4 | no CI |
 | pages | — | — | — | G1 | no CI |
 | ops | — | — | — | G6 | no CI |
-| scaffold | — | — | — | G6 | no CI |
 
-**Critical path** (longest sequential chain): platform → engine → ops → fsitrading
-(~36 + 22 + ? + 6 ≈ 64+ min if tests ran sequentially across repos).
+**Critical path** (longest sequential chain): platform → work → engine → ops → fsitrading.
+If tests ran sequentially across repos: ~36 + 27 + 22 + ? + 13 ≈ 98+ min.
 
 ### casehub-all Build Times (compile-only, `test_mode=skip`)
 
