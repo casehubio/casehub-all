@@ -12,6 +12,63 @@ two levels:
    together. Uses git submodules to pull all repos into one workspace and builds
    them as a single Maven reactor via dependency-grouped aggregator POMs.
 
+## SHA Management and Submodule Pointers
+
+casehub-all tracks every repo as a git submodule. Each submodule pointer is a
+SHA — the exact commit that was last verified to compile with the rest of the
+ecosystem.
+
+### The Build Cycle
+
+```
+1. Checkout casehub-all (with submodule pointers from last green build)
+2. git submodule update --remote parent    ← pull parent to latest main first
+3. reconcile-submodules.py                 ← add/remove submodules based on CSVs
+4. git submodule update --remote           ← pull ALL submodules to latest main
+5. Record SHA manifest                     ← log exact SHAs for reproducibility
+6. Build all phases (platform → G1-G6)
+7. If green: git add -A && git commit && git push  ← advance pointers
+```
+
+After step 4, every submodule points to the latest `main` commit of its repo.
+If the build succeeds, step 7 commits those SHAs back to casehub-all. This
+means the committed submodule pointers always represent the **last known-good
+combination** of all repos.
+
+### SHA Manifest
+
+Step 5 logs every submodule SHA in the CI output under "SHA manifest". This is
+the reproducibility record — given these exact SHAs, the build is guaranteed
+to produce the same result. Useful for bisecting cross-repo regressions.
+
+### Resuming from a Group
+
+The `resume_from` input skips earlier phases. For example, `resume_from=g3`
+skips platform and G1+G2, jumping straight to G3 (middleware). This works
+because:
+
+1. Earlier phases installed their artifacts into `.m2/repository` during a
+   prior run.
+2. GitHub Actions caches `.m2/repository` between runs (keyed on
+   `parent/pom.xml` hash).
+3. G3+ phases resolve their dependencies from `.m2` — they don't care whether
+   the artifacts were built in this run or restored from cache.
+
+**When resumption is safe:** Immediately after a failure in a later group, when
+the earlier groups haven't changed. You fix the failing repo, push, and
+re-trigger with `resume_from=g3` to skip the 5+ minutes of rebuilding platform
+and core libs.
+
+**When resumption is unsafe:** If any earlier repo has published a new SNAPSHOT
+since the cached run. The cache holds stale artifacts, so downstream modules
+compile against the old API. This can cause false positives (build passes with
+old API) or false negatives (build fails due to cache/live mismatch).
+
+**What the resumed run does to SHAs:** The submodule update in step 4 still
+pulls ALL repos to latest main regardless of `resume_from`. So the SHA manifest
+and pointer advance reflect the true latest state — the skip only affects which
+Maven phases execute, not which SHAs are recorded.
+
 ## Dependency Graph
 
 Every cross-repo dependency is declared in `parent/build/modules-core.csv` and
@@ -266,10 +323,9 @@ flags" step and logged via `::notice::`.
 ## Known Limitations
 
 ### resume_from is fragile
-`resume_from=g3` skips platform through G2, relying on `.m2` cache from a
-previous run. If the cache is stale (e.g. platform published a new SNAPSHOT
-since the cached run), downstream modules may see version mismatches. Only
-useful for iterating on a specific group after a full green run.
+See "Resuming from a Group" above. Only safe when earlier groups haven't
+changed since the cached run. Stale cache artifacts can mask or fabricate
+failures.
 
 ### Pointer advance race
 The workflow advances submodule pointers and pushes on success. If two runs
