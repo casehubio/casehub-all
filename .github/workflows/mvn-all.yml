@@ -8,7 +8,7 @@ on:
         type: string
         default: ''
       resume_from:
-        description: "Resume apps from module (e.g. :casehub-openclaw-app). Skips foundation — uses .m2 cache."
+        description: "Resume from group (e.g. g3). Skips earlier groups — uses .m2 cache."
         type: string
         default: ''
 
@@ -20,6 +20,12 @@ jobs:
   build:
     name: Maven Reactor Build
     runs-on: ubuntu-latest
+
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
+      MVN_COMMON: '--batch-mode -DskipTests -Denforcer.skip=true -Dquarkus.build.skip=true -ntp'
 
     steps:
       - uses: actions/checkout@v4
@@ -71,43 +77,83 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
-      - name: Install parent POM
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: mvn install -N -f parent/pom.xml --batch-mode -q
-
-      - name: Compile foundation (parallel, no augmentation)
-        if: inputs.resume_from == ''
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAVEN_OPTS: '-Xmx4g'
-        timeout-minutes: 25
-        run: mvn install -fae -T 1C -f parent/aggregator-foundation.xml --batch-mode -DskipTests -Denforcer.skip=true -Dquarkus.build.skip=true -ntp ${{ inputs.maven_args }}
-
-      - name: Build applications
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MAVEN_OPTS: '-Xmx4g'
-        timeout-minutes: 20
+      # ── Phase 0: Install parent POMs ──────────────────────────────────
+      - name: Install parent POMs
         run: |
-          RF=""
-          if [ -n "${{ inputs.resume_from }}" ]; then
-            RF="-rf ${{ inputs.resume_from }}"
-          fi
-          mvn install -fae -T 1C -f parent/aggregator-apps.xml --batch-mode -Dmaven.test.skip=true -Denforcer.skip=true -Dquarkus.build.skip=true -ntp $RF ${{ inputs.maven_args }}
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
 
+      # ── Phase 1: Platform (4 parallel slices) ─────────────────────────
+      - name: "Platform: base"
+        if: inputs.resume_from == ''
+        run: mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON ${{ inputs.maven_args }}
+        timeout-minutes: 2
+
+      - name: "Platform: slices A/B/C/D in parallel"
+        if: inputs.resume_from == ''
+        run: |
+          mvn install -T 1C -f platform/aggregator-slice-a.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[A] /' &
+          PID_A=$!
+          mvn install -T 1C -f platform/aggregator-slice-b.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[B] /' &
+          PID_B=$!
+          mvn install -T 1C -f platform/aggregator-slice-c.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[C] /' &
+          PID_C=$!
+          mvn install -T 1C -f platform/aggregator-slice-d.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[D] /' &
+          PID_D=$!
+
+          FAILED=0
+          wait $PID_A || FAILED=$((FAILED + 1))
+          wait $PID_B || FAILED=$((FAILED + 1))
+          wait $PID_C || FAILED=$((FAILED + 1))
+          wait $PID_D || FAILED=$((FAILED + 1))
+          if [ $FAILED -gt 0 ]; then echo "::error::$FAILED platform slice(s) failed"; exit 1; fi
+        timeout-minutes: 20
+
+      - name: "Platform: convergence"
+        if: inputs.resume_from == ''
+        run: mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON ${{ inputs.maven_args }}
+        timeout-minutes: 5
+
+      # ── Phase 2: Core libs + Domain (parallel) ────────────────────────
+      - name: "G1+G2: Core libraries and domain (parallel)"
+        if: inputs.resume_from == '' || inputs.resume_from == 'g1'
+        run: |
+          mvn install -fae -T 1C -f parent/aggregator-g1-core-libs.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[G1] /' &
+          PID_G1=$!
+          mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[G2] /' &
+          PID_G2=$!
+
+          FAILED=0
+          wait $PID_G1 || FAILED=$((FAILED + 1))
+          wait $PID_G2 || FAILED=$((FAILED + 1))
+          if [ $FAILED -gt 0 ]; then echo "::error::$FAILED group(s) failed"; exit 1; fi
+        timeout-minutes: 15
+
+      # ── Phase 3: Middleware ───────────────────────────────────────────
+      - name: "G3: Middleware (work, engine, drafthouse)"
+        if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3'
+        run: mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON ${{ inputs.maven_args }}
+        timeout-minutes: 15
+
+      # ── Phase 4: Extensions ──────────────────────────────────────────
+      - name: "G4: Extensions (ras, agency, langchain4j, mosaic, workers)"
+        if: inputs.resume_from == '' || inputs.resume_from <= 'g4'
+        run: mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON ${{ inputs.maven_args }}
+        timeout-minutes: 10
+
+      # ── Phase 5: Apps ────────────────────────────────────────────────
+      - name: "G5+G6: Apps (parallel independent, then chain)"
+        if: inputs.resume_from == '' || inputs.resume_from <= 'g6'
+        run: |
+          mvn install -fae -T 1C -f parent/aggregator-g5-apps-independent.xml $MVN_COMMON ${{ inputs.maven_args }}
+          mvn install -fae -T 1C -f parent/aggregator-g6-apps-chain.xml $MVN_COMMON ${{ inputs.maven_args }}
+        timeout-minutes: 15
+
+      # ── Advance pointers ─────────────────────────────────────────────
       - name: Advance submodule pointers
         if: success()
         run: |
-          if [ -z "${{ inputs.resume_from }}" ]; then
-            git add -A
-          else
-            git submodule status | awk '{print $2}' | while read mod; do
-              grep -q "<module>../$mod" parent/aggregator-apps.xml && git add "$mod"
-            done
-          fi
+          git add -A
           git diff --staged --quiet || {
             git commit -m "chore: advance pointers to verified main SHAs (mvn-all)"
             git push
