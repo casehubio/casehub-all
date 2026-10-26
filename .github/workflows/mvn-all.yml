@@ -82,8 +82,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           MAVEN_OPTS: '-Xmx4g'
-        timeout-minutes: 15
-        run: mvn install -fae -f parent/aggregator-foundation.xml --batch-mode -DskipTests -Denforcer.skip=true -ntp ${{ inputs.maven_args }}
+        timeout-minutes: 25
+        run: mvn install -fae -T 1C -f parent/aggregator-foundation.xml --batch-mode -DskipTests -Denforcer.skip=true -Dquarkus.build.skip=true -Dcasehub.generators.skip=true -ntp ${{ inputs.maven_args }}
 
       - name: Build applications
         env:
