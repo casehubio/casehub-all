@@ -96,7 +96,7 @@ jobs:
           if [ -n "${{ inputs.resume_from }}" ]; then
             RF="-rf ${{ inputs.resume_from }}"
           fi
-          mvn install -fae -f parent/aggregator-apps.xml --batch-mode -Dmaven.test.skip=true -Denforcer.skip=true -ntp $RF ${{ inputs.maven_args }}
+          mvn install -fae -T 1C -f parent/aggregator-apps.xml --batch-mode -Dmaven.test.skip=true -Denforcer.skip=true -Dquarkus.build.skip=true -ntp $RF ${{ inputs.maven_args }}
 
       - name: Advance submodule pointers
         if: success()
