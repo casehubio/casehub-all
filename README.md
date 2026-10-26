@@ -86,7 +86,7 @@ to produce the same result. Useful for bisecting cross-repo regressions.
 ### Resuming from a Group
 
 The `resume_from` input skips earlier phases. For example, `resume_from=g3`
-skips platform and G1+G2, jumping straight to G3 (middleware). This works
+skips platform, G1, and G2, jumping straight to G3 (middleware). This works
 because:
 
 1. Earlier phases installed their artifacts into `.m2/repository` during a
@@ -224,7 +224,7 @@ Canonical times from the latest successful main-branch CI run per repo as of
 | fsitrading | 12m 44s | — | — | G6 | red (test) |
 | qhorus | 12m 14s | 43 | — | G2 | green |
 | casehub-langchain4j | 10m 22s | — | — | G4 | green |
-| soc | 8m 05s | — | — | G5 | red (expression engine — fix in progress) |
+| soc | 8m 05s | — | — | G5 | green |
 | agency | 7m 31s | — | — | G4 | green |
 | ledger | 7m 30s | — | — | G1 | green |
 | eidos | 7m 16s | — | — | G2 | green |
@@ -341,7 +341,7 @@ shapes the CI strategy:
 | 2 CPUs | `-T 1C` means 2 threads max. Parallelism tops out at 2x. | Platform uses 4 separate Maven processes (background `&`), not `-T 1C` within one process. Each gets its own JVM. |
 | 2 CPUs | 4 parallel processes time-share, not truly parallel. | Still faster than serial: Maven's I/O-wait phases (dependency resolution, JAR writes) overlap with another process's CPU phases (compilation). |
 | 7 GB RAM | Multiple Maven processes compete for heap. | `MAVEN_OPTS='-Xmx4g'` for the main process. Slice processes inherit this. |
-| No persistent cache across runs | `.m2` cache is restored from GitHub Actions cache, adding ~30s startup. | Cache keyed on `parent/pom.xml` hash. Restore-keys fall back to any prior cache. |
+| No persistent cache across runs | `.m2` cache is restored from GitHub Actions cache, adding ~30s startup. | Cache keyed on `parent/pom.xml` + `platform/pom.xml` hash. Restore-keys fall back to any prior cache. |
 | No cross-job artifact sharing | Each job starts clean. | All phases run in a single job to share `.m2` artifacts installed by earlier phases. |
 
 **Why 4 platform slices, not 2:** On a 2-CPU runner, 4 concurrent Maven processes
@@ -436,6 +436,6 @@ platform/
   aggregator-convergence.xml      — Spring convergence (40 modules)
 
 casehub-all/
-  .github/workflows/mvn-all.yml   — 6-phase grouped build (parameterised)
+  .github/workflows/mvn-all.yml   — 9-phase grouped build (parameterised)
   scripts/reconcile-submodules.py — syncs submodules from CSVs
 ```
