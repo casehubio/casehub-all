@@ -38,16 +38,172 @@ permissions:
   contents: write
   packages: read
 
-jobs:
-  build:
-    name: Maven Reactor Build
-    runs-on: ubuntu-latest
+# ── Reusable env block (duplicated per job — YAML anchors don't work in GHA) ──
+# GITHUB_TOKEN, GH_PACKAGES_TOKEN, MAVEN_OPTS are set per-job.
 
+jobs:
+
+  # ════════════════════════════════════════════════════════════════════
+  # Phase 0: Prepare — checkout, submodule update, parent POMs, platform base
+  # ════════════════════════════════════════════════════════════════════
+  prepare:
+    name: "Prepare + Platform base"
+    if: inputs.resume_from == ''
+    runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+    outputs:
+      mvn-common: ${{ steps.flags.outputs.mvn-common }}
+      maven-args: ${{ steps.flags.outputs.maven-args }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Update submodules to latest main
+        run: |
+          git submodule update --remote parent
+          git submodule update --remote
+        timeout-minutes: 5
+
+      - name: Record SHA manifest
+        run: |
+          echo "::group::SHA manifest (pin these to reproduce this build)"
+          git submodule status | sort
+          echo "::endgroup::"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
+
+      - name: Configure Maven flags
+        id: flags
+        run: |
+          FLAGS="--batch-mode -ntp"
+          if [ "${{ inputs.test_mode }}" = "skip" ]; then
+            FLAGS="$FLAGS -Dmaven.test.skip=true"
+          elif [ "${{ inputs.test_mode }}" = "compile" ]; then
+            FLAGS="$FLAGS -DskipTests"
+          fi
+          if [ "${{ inputs.quarkus_build }}" != "true" ]; then
+            FLAGS="$FLAGS -Dquarkus.build.skip=true"
+          fi
+          if [ "${{ inputs.enforcer }}" != "true" ]; then
+            FLAGS="$FLAGS -Denforcer.skip=true"
+          fi
+          echo "MVN_COMMON=$FLAGS" >> "$GITHUB_ENV"
+          echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
+          echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
+          echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
+          echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
+
+      - name: Install parent POMs
+        run: |
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+
+      - name: "Platform: base (3 modules)"
+        run: mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 5
+
+      - name: Upload platform base artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-platform-base
+          path: ~/.m2/repository/io/casehub/casehub-platform*
+          retention-days: 1
+          compression-level: 1
+
+  # ════════════════════════════════════════════════════════════════════
+  # Phase 1: Platform slices — 4 parallel jobs, each with its own 2 CPUs
+  # ════════════════════════════════════════════════════════════════════
+  platform-slices:
+    name: "Platform slice ${{ matrix.slice }}"
+    if: inputs.resume_from == ''
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: [a, b, c, d]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
+      MVN_COMMON: ${{ needs.prepare.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.prepare.outputs.maven-args }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
+
+      - name: Install parent POMs
+        run: |
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+
+      - name: Download platform base artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-platform-base
+          path: ~/.m2/repository/io/casehub
+
+      - name: "Build slice ${{ matrix.slice }}"
+        run: mvn install -T 1C -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 45
+
+      - name: Upload slice artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-platform-slice-${{ matrix.slice }}
+          path: ~/.m2/repository/io/casehub/casehub-platform*
+          retention-days: 1
+          compression-level: 1
+
+  # ════════════════════════════════════════════════════════════════════
+  # Phases 2-8: Convergence + G1-G6 ecosystem build
+  # ════════════════════════════════════════════════════════════════════
+  build:
+    name: "Convergence + Ecosystem"
+    needs: [prepare, platform-slices]
+    if: always() && (needs.prepare.result == 'success' && needs.platform-slices.result == 'success' || inputs.resume_from != '')
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -59,15 +215,10 @@ jobs:
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
 
-      - name: Update parent to latest main
-        run: git submodule update --remote parent
-        timeout-minutes: 5
-
-      - name: Reconcile submodules from CSVs
-        run: python3 scripts/reconcile-submodules.py
-
-      - name: Update all submodules to latest main
-        run: git submodule update --remote
+      - name: Update submodules to latest main
+        run: |
+          git submodule update --remote parent
+          git submodule update --remote
         timeout-minutes: 5
 
       - name: Record SHA manifest
@@ -100,7 +251,6 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
-      # ── Assemble MVN_COMMON and MAVEN_ARGS from inputs ───────────────
       - name: Configure Maven flags
         run: |
           FLAGS="--batch-mode -ntp"
@@ -119,70 +269,51 @@ jobs:
           echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
-      # ── Phase 0: Install parent POMs ──────────────────────────────────
       - name: Install parent POMs
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
 
-      # ── Phase 1: Platform base ────────────────────────────────────────
-      - name: "Platform: base"
+      # Download all platform artifacts from slice jobs (merged into .m2)
+      - name: Download platform artifacts
         if: inputs.resume_from == ''
-        run: mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 5
+        uses: actions/download-artifact@v4
+        with:
+          pattern: m2-platform-*
+          path: ~/.m2/repository/io/casehub
+          merge-multiple: true
 
-      # ── Phase 2: Platform slices (4 parallel processes) ───────────────
-      - name: "Platform: slices A/B/C/D in parallel"
-        if: inputs.resume_from == ''
-        run: |
-          SLICE_FAILED=""
-          mvn install -T 1C -f platform/aggregator-slice-a.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | sed 's/^/[A] /' &
-          PID_A=$!
-          mvn install -T 1C -f platform/aggregator-slice-b.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | sed 's/^/[B] /' &
-          PID_B=$!
-          mvn install -T 1C -f platform/aggregator-slice-c.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | sed 's/^/[C] /' &
-          PID_C=$!
-          mvn install -T 1C -f platform/aggregator-slice-d.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | sed 's/^/[D] /' &
-          PID_D=$!
-
-          wait $PID_A || { echo "::error::Slice A failed"; SLICE_FAILED="$SLICE_FAILED A"; }
-          wait $PID_B || { echo "::error::Slice B failed"; SLICE_FAILED="$SLICE_FAILED B"; }
-          wait $PID_C || { echo "::error::Slice C failed"; SLICE_FAILED="$SLICE_FAILED C"; }
-          wait $PID_D || { echo "::error::Slice D failed"; SLICE_FAILED="$SLICE_FAILED D"; }
-          if [ -n "$SLICE_FAILED" ]; then echo "::error::Failed slices:$SLICE_FAILED"; exit 1; fi
-        timeout-minutes: 45
-
-      # ── Phase 3: Platform convergence ─────────────────────────────────
+      # ── Phase 2: Platform convergence ─────────────────────────────────
       - name: "Platform: convergence"
         if: inputs.resume_from == ''
         run: mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 10
 
-      # ── Phase 4: G1 Core libs ─────────────────────────────────────────
+      # ── Phase 3: G1 Core libs ─────────────────────────────────────────
       - name: "G1: Core libraries (worker, ledger, connectors, neocortex, pages)"
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
         run: mvn install -fae -T 1C -f parent/aggregator-g1-core-libs.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 25
 
-      # ── Phase 5: G2 Domain (depends on G1 — ledger, connectors) ──────
+      # ── Phase 4: G2 Domain ────────────────────────────────────────────
       - name: "G2: Domain (eidos, qhorus)"
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
         run: mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
 
-      # ── Phase 6: G3 Middleware ────────────────────────────────────────
+      # ── Phase 5: G3 Middleware ────────────────────────────────────────
       - name: "G3: Middleware (work, engine, drafthouse)"
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3'
         run: mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
 
-      # ── Phase 7: G4 Extensions ───────────────────────────────────────
+      # ── Phase 6: G4 Extensions ───────────────────────────────────────
       - name: "G4: Extensions (ras, agency, langchain4j, mosaic, workers)"
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4'
         run: mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 30
 
-      # ── Phase 8: G5+G6 Apps ──────────────────────────────────────────
+      # ── Phase 7+8: G5+G6 Apps ────────────────────────────────────────
       - name: "G5+G6: Apps (independent, then chain)"
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4' || inputs.resume_from == 'g5'
         run: |
