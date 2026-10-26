@@ -10,7 +10,7 @@ two levels:
    tests, and publishes SNAPSHOT artifacts to GitHub Packages on push to main.
 2. **Cross-repo CI** (`casehub-all`) — verifies the entire ecosystem compiles
    together. Uses git submodules to pull all repos into one workspace and builds
-   them as a single Maven reactor via dependency-grouped aggregator POMs.
+   them via dependency-grouped aggregator POMs across multiple GitHub Actions jobs.
 
 ### Why casehub-all exists
 
@@ -44,10 +44,6 @@ casehub-all solves these problems:
 - **Pointer advance = verified state:** The committed submodule pointers
   represent the last combination that compiled together. Anyone cloning
   casehub-all gets a known-good set of versions.
-- **Single `.m2` cache:** Building in one workspace means each phase's
-  `mvn install` populates `.m2` for subsequent phases. No external artifact
-  resolution, no SNAPSHOT timing races, no stale-cache surprises (within a
-  single run).
 
 ## SHA Management and Submodule Pointers
 
@@ -59,16 +55,15 @@ ecosystem.
 
 ```
 1. Checkout casehub-all (with submodule pointers from last green build)
-2. git submodule update --remote parent    ← pull parent to latest main first
-3. reconcile-submodules.py                 ← add/remove submodules based on CSVs
-4. git submodule update --remote           ← pull ALL submodules to latest main
-5. Record SHA manifest                     ← log exact SHAs for reproducibility
-6. Build all phases (platform → G1-G6)
-7. If green: git add -u && git commit && git push  ← advance pointers
+2. git submodule update --remote           ← pull ALL submodules to latest main
+3. Record SHA manifest                     ← log exact SHAs for reproducibility
+4. Build platform (base → slices → convergence)
+5. Build ecosystem (G1 → G2 → G3 → G4 → G5 → G6)
+6. If green: git add -u && git commit && git push  ← advance pointers
 ```
 
-After step 4, every submodule points to the latest `main` commit of its repo.
-If the build succeeds, step 7 commits those SHAs back to casehub-all. This
+After step 2, every submodule points to the latest `main` commit of its repo.
+If the build succeeds, step 6 commits those SHAs back to casehub-all. This
 means the committed submodule pointers always represent the **last known-good
 combination** of all repos.
 
@@ -79,35 +74,36 @@ on main always represent a fully-verified combination, never a partial build.
 
 ### SHA Manifest
 
-Step 5 logs every submodule SHA in the CI output under "SHA manifest". This is
-the reproducibility record — given these exact SHAs, the build is guaranteed
-to produce the same result. Useful for bisecting cross-repo regressions.
+The SHA manifest is logged in the CI output for every run. This is the
+reproducibility record — given these exact SHAs, the build can be reproduced
+deterministically. Useful for bisecting cross-repo regressions.
 
 ### Resuming from a Group
 
-The `resume_from` input skips earlier phases. For example, `resume_from=g3`
-skips platform, G1, and G2, jumping straight to G3 (middleware). This works
-because:
+The `resume_from` input (choice type: `g1`, `g3`, `g4`, `g5`) skips earlier
+phases. For example, `resume_from=g3` skips platform, G1, and G2, jumping
+straight to G3 (middleware). This works because:
 
 1. Earlier phases installed their artifacts into `.m2/repository` during a
    prior run.
 2. GitHub Actions caches `.m2/repository` between runs (keyed on
-   `parent/pom.xml` hash).
+   `parent/pom.xml` + `platform/pom.xml` hash).
 3. G3+ phases resolve their dependencies from `.m2` — they don't care whether
    the artifacts were built in this run or restored from cache.
 
+When resuming, the prepare and platform-slices jobs are skipped entirely. The
+build job runs standalone using cached `.m2`.
+
 **When resumption is safe:** Immediately after a failure in a later group, when
 the earlier groups haven't changed. You fix the failing repo, push, and
-re-trigger with `resume_from=g3` to skip the 5+ minutes of rebuilding platform
-and core libs.
+re-trigger with `resume_from=g3` to skip rebuilding platform and core libs.
 
 **When resumption is unsafe:** If any earlier repo has published a new SNAPSHOT
 since the cached run. The cache holds stale artifacts, so downstream modules
-compile against the old API. This can cause false positives (build passes with
-old API) or false negatives (build fails due to cache/live mismatch).
+compile against the old API.
 
 **Warning — resumed builds weaken the pointer guarantee:** The submodule
-update in step 4 pulls ALL repos to latest main regardless of `resume_from`.
+update still pulls ALL repos to latest main regardless of `resume_from`.
 If the build passes, the pointer advance commits SHAs for *every* repo —
 including repos whose build phases were skipped. The SHAs are accurate (latest
 main), but the verification is partial: skipped phases were not rebuilt, so
@@ -161,29 +157,73 @@ Every cross-repo dependency is declared in `parent/build/modules-core.csv` and
 
 ## Build Grouping and Parallelism
 
-The dependency graph determines the minimum number of sequential phases. Within
-each phase, independent repos build in parallel.
+The workflow uses three GitHub Actions jobs. Each job runs on its own runner
+(2 CPUs, 7 GB RAM). Platform slices use a matrix strategy to spawn 4 parallel
+jobs, giving the slice phase 8 CPUs total.
+
+### Job Architecture
+
+```
+┌──────────────────────────┐
+│  Job 1: prepare          │  1 runner (2 CPUs)
+│  checkout + submodules   │
+│  platform base (3 mods)  │
+│  upload .m2 + jandex     │
+└──────────┬───────────────┘
+           │ needs: prepare
+           ▼
+┌──────────────────────────┐
+│  Job 2: platform-slices  │  4 runners (8 CPUs total)
+│  matrix: [a, b, c, d]   │
+│  download base artifacts │
+│  build slice             │
+│  upload .m2 + jandex     │
+└──────────┬───────────────┘
+           │ needs: platform-slices (waits for ALL 4)
+           ▼
+┌──────────────────────────┐
+│  Job 3: build            │  1 runner (2 CPUs)
+│  download all artifacts  │
+│  convergence             │
+│  G1 → G2 → G3 → G4      │
+│  → G5 → G6              │
+│  advance pointers        │
+└──────────────────────────┘
+```
+
+Artifacts passed between jobs:
+- **`.m2` artifacts** (`m2-platform-*`): installed JARs for Maven dependency
+  resolution. Downloaded into `~/.m2/repository/io/casehub/`.
+- **Jandex indexes** (`jandex-platform-*`): `target/classes/META-INF/jandex.idx`
+  files. Downloaded into `platform/` in the workspace. Required because the
+  Spring generators read Jandex from the filesystem, not `.m2`.
 
 ### Phase Layout
 
 ```
-Phase 0 ─── Platform base (3 modules)
-              │
-Phase 1 ─── Platform slices A/B/C/D (4 parallel Maven processes)
-              │
-Phase 2 ─── Platform convergence (Spring modules)
-              │
-Phase 3 ─── G1: worker, ledger, connectors, neocortex, pages
-              │
-Phase 4 ─── G2: eidos, qhorus
-              │
-Phase 5 ─── G3: work, engine, drafthouse
-              │
-Phase 6 ─── G4: ras, agency, langchain4j, mosaic, workers
-              │
-Phase 7 ─── G5: claudony, openclaw, soc, desiredstate, life, iot, chat-app
-              │
-Phase 8 ─── G6: devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading
+Job 1 (prepare):
+  Phase 0 ─── Platform base (3 modules)
+
+Job 2 (platform-slices, 4 parallel runners):
+  Phase 1 ─── Slice A (44 modules) — Agent/AI: agents, simulation, mcp, llm-config
+              Slice B (57 modules) — Identity/Auth: authn, acl, persistence, subscriptions
+              Slice C (53 modules) — Events/Comms: streams, notifications, callback, graphql
+              Slice D (15 modules) — YAML/Tooling: yaml, observability, pdf, signing
+
+Job 3 (build):
+  Phase 2 ─── Platform convergence (40 modules) — Spring starters + generators
+                │
+  Phase 3 ─── G1: worker, ledger, connectors, neocortex, pages
+                │
+  Phase 4 ─── G2: eidos, qhorus
+                │
+  Phase 5 ─── G3: work, engine, drafthouse
+                │
+  Phase 6 ─── G4: ras, agency, langchain4j, mosaic, workers
+                │
+  Phase 7 ─── G5: claudony, openclaw, soc, desiredstate, life, iot, chat-app
+                │
+  Phase 8 ─── G6: devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading
 ```
 
 **Note:** `engine` and `work` have a circular dependency (engine depends on
@@ -192,19 +232,20 @@ within a single reactor phase.
 
 ### Grouping Table
 
-| Phase | Group | Repos | Parallelism | Rationale |
-|-------|-------|-------|-------------|-----------|
-| 0 | Platform base | platform-api, platform-core, playbook-catalog | Sequential | Required by all slices |
-| 1 | Platform slices | A (44 modules), B (57), C (53), D (15) | 4 parallel processes | Zero cross-deps between slices; separate JVMs avoid Quarkus deadlock |
-| 2 | Platform convergence | Spring starters + generators (40 modules) | Sequential | Depends on all 4 slices |
-| 3 | G1 Core libs | worker, ledger, connectors, neocortex, pages | Sequential | All depend only on platform |
-| 4 | G2 Domain | eidos, qhorus | Sequential | eidos depends on ledger (G1), qhorus depends on ledger + connectors + eidos |
-| 5 | G3 Middleware | work, engine, drafthouse | Sequential | Depend on G1+G2 outputs; engine↔work cycle resolved within reactor |
-| 6 | G4 Extensions | ras, agency, langchain4j, mosaic, workers | Sequential | Depend on G3 outputs |
-| 7 | G5 Apps (independent) | claudony, openclaw, soc, desiredstate, life, iot, chat-app | Sequential | Depend on G4 outputs |
-| 8 | G6 Apps (chain) | devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading | Sequential | Some depend on G5 outputs (life, iot) |
+| Phase | Group | Repos | Runner | Rationale |
+|-------|-------|-------|--------|-----------|
+| 0 | Platform base | platform-api, platform-core, playbook-catalog | prepare | Required by all slices |
+| 1 | Platform slices | A (44), B (57), C (53), D (15 modules) | 4 separate runners | Zero cross-deps; each gets its own 2 CPUs |
+| 2 | Convergence | Spring starters + generators (40 modules) | build | Depends on all 4 slices + Jandex indexes |
+| 3 | G1 Core libs | worker, ledger, connectors, neocortex, pages | build | All depend only on platform |
+| 4 | G2 Domain | eidos, qhorus | build | eidos depends on ledger (G1), qhorus on ledger + connectors + eidos |
+| 5 | G3 Middleware | work, engine, drafthouse | build | Depend on G1+G2; engine↔work cycle resolved within reactor |
+| 6 | G4 Extensions | ras, agency, langchain4j, mosaic, workers | build | Depend on G3 outputs |
+| 7 | G5 Apps (independent) | claudony, openclaw, soc, desiredstate, life, iot, chat-app | build | Depend on G4 outputs |
+| 8 | G6 Apps (chain) | devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading | build | Some depend on G5 outputs (life, iot) |
 
-Within each group, Maven's `-T 1C` parallelises compilation across modules.
+Within each group, Maven's `-T 1C` parallelises compilation across modules
+(2 threads per runner).
 
 ### Per-Repo CI Times (standalone build + test)
 
@@ -257,15 +298,17 @@ If tests ran sequentially across repos: ~36 + 15 + 12 + 27 + ? + 13 ≈ 103+ min
 
 ### casehub-all Build Times (compile-only, `test_mode=skip`)
 
-| Phase | Time |
-|-------|------|
-| Platform: base + 4 slices + convergence | 84s |
-| G1: Core libs | ~2m 30s |
-| G2: Domain | ~1m 30s |
-| G3: Middleware | 1m 30s |
-| G4: Extensions | 4m 19s |
-| G5+G6: Apps | 1m 20s |
-| **Total (incl setup)** | **~14 min** |
+| Phase | Runner | Time |
+|-------|--------|------|
+| Prepare + platform base | prepare | ~2m |
+| Platform slices A/B/C/D | 4 parallel runners | ~2m (wall clock) |
+| Convergence + G1-G6 | build | ~12m |
+| **Total** | | **~16 min** |
+
+Setup overhead per job (checkout, cache restore, artifact download) adds ~1-2
+minutes per job transition. This overhead is offset by true CPU parallelism
+when tests are enabled (platform tests take 35+ minutes — 4 dedicated runners
+cut this to the longest single slice).
 
 ## Quarkus Bugs and Limitations
 
@@ -325,31 +368,36 @@ sibling module `target/` directories via filesystem path, not Maven dependency.
 In a multi-module reactor, Maven cannot guarantee the sibling compiles before
 the generator runs.
 
-**Workaround:** Each `-spring` module declares a `provided`-scope dependency on
-its paired Quarkus module. This establishes reactor ordering without polluting
-the transitive dependency graph. Applied to engine (x5), platform (x1), work (x1).
+**Workaround (single-job builds):** Each `-spring` module declares a
+`provided`-scope dependency on its paired Quarkus module. This establishes
+reactor ordering without polluting the transitive dependency graph. Applied to
+engine (x5), platform (x1), work (x1).
+
+**Workaround (multi-job builds):** Slice jobs upload their
+`target/classes/META-INF/jandex.idx` files as artifacts. The build job
+downloads them into the `platform/` workspace before running convergence.
+Both `.m2` artifacts (JARs) and Jandex indexes (filesystem) must be passed.
 
 **Escape hatch:** `-Dcasehub.generators.skip=true`
 
 ## Runner Constraints (GitHub Actions Free Tier)
 
-GitHub Actions free-tier runners have **2 CPUs** and 7 GB RAM. This fundamentally
-shapes the CI strategy:
+GitHub Actions free-tier runners have **2 CPUs** and 7 GB RAM. Each job in the
+workflow gets its own runner.
 
 | Constraint | Impact | Mitigation |
 |-----------|--------|------------|
-| 2 CPUs | `-T 1C` means 2 threads max. Parallelism tops out at 2x. | Platform uses 4 separate Maven processes (background `&`), not `-T 1C` within one process. Each gets its own JVM. |
-| 2 CPUs | 4 parallel processes time-share, not truly parallel. | Still faster than serial: Maven's I/O-wait phases (dependency resolution, JAR writes) overlap with another process's CPU phases (compilation). |
-| 7 GB RAM | Multiple Maven processes compete for heap. | `MAVEN_OPTS='-Xmx4g'` for the main process. Slice processes inherit this. |
-| No persistent cache across runs | `.m2` cache is restored from GitHub Actions cache, adding ~30s startup. | Cache keyed on `parent/pom.xml` + `platform/pom.xml` hash. Restore-keys fall back to any prior cache. |
-| No cross-job artifact sharing | Each job starts clean. | All phases run in a single job to share `.m2` artifacts installed by earlier phases. |
+| 2 CPUs per runner | `-T 1C` means 2 threads per job. | Platform slices run as 4 separate jobs = 8 CPUs total for the slice phase. |
+| 7 GB RAM per runner | Each job has its own 7 GB — no memory sharing between jobs. | `MAVEN_OPTS='-Xmx4g'` per job. |
+| No shared filesystem | Each job starts with a clean workspace. | Artifacts pass `.m2` JARs and Jandex indexes between jobs via `actions/upload-artifact` / `actions/download-artifact`. |
+| Cache is per-repo, not per-job | All jobs restore the same `.m2` cache (snapshot from prior run). | Each job restores independently. Fresh build outputs pass via artifacts, not cache. |
 
-**Why 4 platform slices, not 2:** On a 2-CPU runner, 4 concurrent Maven processes
-outperform 2 because Maven's build phases alternate between CPU-bound and I/O-bound
-work. While slice A waits on a dependency download, slice D can use the CPU for
-compilation. Slice D (15 modules, 0 `@QuarkusTest`) finishes in ~26 seconds and
-frees its process for the heavier slices. Merging it into a larger slice would
-add 15 modules to an already-heavy build without reducing wall-clock time.
+**Why 4 platform slices:** The slices have zero cross-dependencies (verified).
+Each runs on its own 2-CPU runner. The wall-clock time for the slice phase is
+determined by the slowest slice, not the sum. For compile-only, each slice
+takes ~30s-1m. For test-enabled builds, slice C (53 modules, 25 @QuarkusTest)
+is the bottleneck — having its own 2 CPUs avoids contention with the other
+slices.
 
 ## Workflow Inputs
 
@@ -360,8 +408,8 @@ The `mvn-all.yml` workflow is parameterised via `workflow_dispatch` inputs:
 | `test_mode` | choice | `skip` | `skip` = no compile/run (`maven.test.skip=true`); `compile` = compile tests only (`-DskipTests`); `run` = compile + execute tests |
 | `quarkus_build` | boolean | `false` | When true, runs Quarkus augmentation (produces runner JARs). Leave false — the deadlock makes this unsafe with `-T 1C`. |
 | `enforcer` | boolean | `false` | When true, runs Maven enforcer plugin. |
-| `maven_args` | string | (empty) | Escape hatch for any additional Maven flags. |
-| `resume_from` | choice | (empty) | Resume from a group: `g1`, `g3`, `g4`, or `g5`. Skips earlier groups — relies on `.m2` cache from a prior run. |
+| `maven_args` | string | (empty) | Escape hatch for additional Maven flags. Passed via `GITHUB_ENV` to prevent shell injection. |
+| `resume_from` | choice | (empty) | Resume from: `g1`, `g3`, `g4`, or `g5`. Skips prepare + platform-slices jobs entirely; build job uses cached `.m2`. |
 
 ```bash
 # Default (compile-only, no tests)
@@ -374,8 +422,9 @@ gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=compile
 gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run
 ```
 
-`MVN_COMMON` is assembled dynamically from these inputs in the "Configure Maven
-flags" step and logged via `::notice::`.
+`MVN_COMMON` is assembled dynamically from inputs in the "Configure Maven
+flags" step. `maven_args` is set as the `MAVEN_ARGS` environment variable
+(not interpolated directly) and logged via `::notice::`.
 
 ## Known Limitations
 
@@ -386,13 +435,20 @@ failures.
 
 ### Pointer advance race
 The workflow advances submodule pointers and pushes on success. If two runs
-complete near-simultaneously, the second push is rejected (`fetch first`).
-Harmless — the pointers from the first run are correct.
+complete near-simultaneously, the second push may fail. Mitigated with
+`git pull --rebase` before push. If rebase fails, the push is skipped —
+the pointers from the other run are correct.
 
 ### SNAPSHOT timing between repos
 Each repo publishes SNAPSHOTs independently. If repo A publishes a breaking
 change and repo B's CI runs before A's CI finishes publishing, B pulls the old
 SNAPSHOT. Fix: wait for upstream CI to publish, then re-trigger downstream.
+
+### Aggregator POM drift
+The `<modules>` lists in `aggregator-g*.xml` and `aggregator-slice-*.xml` are
+manually maintained. When a new module is added to a repo, the aggregator
+must be updated manually. A future improvement: generate aggregator POMs from
+CSVs, or add a CI validation step.
 
 ## Operations
 
@@ -418,8 +474,6 @@ parent/
   build/
     modules-core.csv              — core repo dependency declarations
     modules-applications.csv      — app repo dependency declarations
-  aggregator-foundation.xml       — legacy: all core repos (still works)
-  aggregator-apps.xml             — legacy: all app repos (still works)
   aggregator-g1-core-libs.xml     — G1: worker, ledger, connectors, neocortex, pages
   aggregator-g2-domain.xml        — G2: eidos, qhorus
   aggregator-g3-middleware.xml    — G3: work, engine, drafthouse
@@ -436,6 +490,6 @@ platform/
   aggregator-convergence.xml      — Spring convergence (40 modules)
 
 casehub-all/
-  .github/workflows/mvn-all.yml   — 9-phase grouped build (parameterised)
+  .github/workflows/mvn-all.yml   — 3-job, 9-phase build (parameterised)
   scripts/reconcile-submodules.py — syncs submodules from CSVs
 ```
