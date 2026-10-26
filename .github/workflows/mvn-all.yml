@@ -24,8 +24,14 @@ on:
         type: string
         default: ''
       resume_from:
-        description: "Resume from group (e.g. g3). Skips earlier groups — uses .m2 cache."
-        type: string
+        description: "Resume from group. Skips earlier groups — uses .m2 cache."
+        type: choice
+        options:
+          - ''
+          - g1
+          - g3
+          - g4
+          - g5
         default: ''
 
 permissions:
@@ -55,12 +61,14 @@ jobs:
 
       - name: Update parent to latest main
         run: git submodule update --remote parent
+        timeout-minutes: 5
 
       - name: Reconcile submodules from CSVs
         run: python3 scripts/reconcile-submodules.py
 
       - name: Update all submodules to latest main
         run: git submodule update --remote
+        timeout-minutes: 5
 
       - name: Record SHA manifest
         run: |
@@ -81,7 +89,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml') }}
+          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
 
       - name: Set up Node 22
@@ -92,7 +100,7 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
-      # ── Assemble MVN_COMMON from inputs ──────────────────────────────
+      # ── Assemble MVN_COMMON and MAVEN_ARGS from inputs ───────────────
       - name: Configure Maven flags
         run: |
           FLAGS="--batch-mode -ntp"
@@ -108,7 +116,8 @@ jobs:
             FLAGS="$FLAGS -Denforcer.skip=true"
           fi
           echo "MVN_COMMON=$FLAGS" >> "$GITHUB_ENV"
-          echo "::notice::MVN_COMMON=$FLAGS ${{ inputs.maven_args }}"
+          echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
+          echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
       # ── Phase 0: Install parent POMs ──────────────────────────────────
       - name: Install parent POMs
@@ -116,79 +125,79 @@ jobs:
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
 
-      # ── Phase 1: Platform (4 parallel slices) ─────────────────────────
+      # ── Phase 1: Platform base ────────────────────────────────────────
       - name: "Platform: base"
         if: inputs.resume_from == ''
-        run: mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON ${{ inputs.maven_args }}
+        run: mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 5
 
+      # ── Phase 2: Platform slices (4 parallel processes) ───────────────
       - name: "Platform: slices A/B/C/D in parallel"
         if: inputs.resume_from == ''
         run: |
-          mvn install -T 1C -f platform/aggregator-slice-a.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[A] /' &
+          SLICE_FAILED=""
+          mvn install -T 1C -f platform/aggregator-slice-a.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | sed 's/^/[A] /' &
           PID_A=$!
-          mvn install -T 1C -f platform/aggregator-slice-b.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[B] /' &
+          mvn install -T 1C -f platform/aggregator-slice-b.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | sed 's/^/[B] /' &
           PID_B=$!
-          mvn install -T 1C -f platform/aggregator-slice-c.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[C] /' &
+          mvn install -T 1C -f platform/aggregator-slice-c.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | sed 's/^/[C] /' &
           PID_C=$!
-          mvn install -T 1C -f platform/aggregator-slice-d.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[D] /' &
+          mvn install -T 1C -f platform/aggregator-slice-d.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | sed 's/^/[D] /' &
           PID_D=$!
 
-          FAILED=0
-          wait $PID_A || FAILED=$((FAILED + 1))
-          wait $PID_B || FAILED=$((FAILED + 1))
-          wait $PID_C || FAILED=$((FAILED + 1))
-          wait $PID_D || FAILED=$((FAILED + 1))
-          if [ $FAILED -gt 0 ]; then echo "::error::$FAILED platform slice(s) failed"; exit 1; fi
+          wait $PID_A || { echo "::error::Slice A failed"; SLICE_FAILED="$SLICE_FAILED A"; }
+          wait $PID_B || { echo "::error::Slice B failed"; SLICE_FAILED="$SLICE_FAILED B"; }
+          wait $PID_C || { echo "::error::Slice C failed"; SLICE_FAILED="$SLICE_FAILED C"; }
+          wait $PID_D || { echo "::error::Slice D failed"; SLICE_FAILED="$SLICE_FAILED D"; }
+          if [ -n "$SLICE_FAILED" ]; then echo "::error::Failed slices:$SLICE_FAILED"; exit 1; fi
         timeout-minutes: 45
 
+      # ── Phase 3: Platform convergence ─────────────────────────────────
       - name: "Platform: convergence"
         if: inputs.resume_from == ''
-        run: mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON ${{ inputs.maven_args }}
+        run: mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 10
 
-      # ── Phase 2: Core libs + Domain (parallel) ────────────────────────
-      - name: "G1+G2: Core libraries and domain (parallel)"
+      # ── Phase 4: G1 Core libs ─────────────────────────────────────────
+      - name: "G1: Core libraries (worker, ledger, connectors, neocortex, pages)"
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
-        run: |
-          mvn install -fae -T 1C -f parent/aggregator-g1-core-libs.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[G1] /' &
-          PID_G1=$!
-          mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON ${{ inputs.maven_args }} 2>&1 | sed 's/^/[G2] /' &
-          PID_G2=$!
+        run: mvn install -fae -T 1C -f parent/aggregator-g1-core-libs.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 25
 
-          FAILED=0
-          wait $PID_G1 || FAILED=$((FAILED + 1))
-          wait $PID_G2 || FAILED=$((FAILED + 1))
-          if [ $FAILED -gt 0 ]; then echo "::error::$FAILED group(s) failed"; exit 1; fi
-        timeout-minutes: 30
+      # ── Phase 5: G2 Domain (depends on G1 — ledger, connectors) ──────
+      - name: "G2: Domain (eidos, qhorus)"
+        if: inputs.resume_from == '' || inputs.resume_from == 'g1'
+        run: mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 20
 
-      # ── Phase 3: Middleware ───────────────────────────────────────────
+      # ── Phase 6: G3 Middleware ────────────────────────────────────────
       - name: "G3: Middleware (work, engine, drafthouse)"
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3'
-        run: mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON ${{ inputs.maven_args }}
+        run: mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
 
-      # ── Phase 4: Extensions ──────────────────────────────────────────
+      # ── Phase 7: G4 Extensions ───────────────────────────────────────
       - name: "G4: Extensions (ras, agency, langchain4j, mosaic, workers)"
-        if: inputs.resume_from == '' || inputs.resume_from <= 'g4'
-        run: mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON ${{ inputs.maven_args }}
+        if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4'
+        run: mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 30
 
-      # ── Phase 5: Apps ────────────────────────────────────────────────
-      - name: "G5+G6: Apps (parallel independent, then chain)"
-        if: inputs.resume_from == '' || inputs.resume_from <= 'g6'
+      # ── Phase 8: G5+G6 Apps ──────────────────────────────────────────
+      - name: "G5+G6: Apps (independent, then chain)"
+        if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4' || inputs.resume_from == 'g5'
         run: |
-          mvn install -fae -T 1C -f parent/aggregator-g5-apps-independent.xml $MVN_COMMON ${{ inputs.maven_args }}
-          mvn install -fae -T 1C -f parent/aggregator-g6-apps-chain.xml $MVN_COMMON ${{ inputs.maven_args }}
+          mvn install -fae -T 1C -f parent/aggregator-g5-apps-independent.xml $MVN_COMMON $MAVEN_ARGS
+          mvn install -fae -T 1C -f parent/aggregator-g6-apps-chain.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
 
       # ── Advance pointers ─────────────────────────────────────────────
       - name: Advance submodule pointers
         if: success()
         run: |
-          git add -A
+          git add -u
           git diff --staged --quiet || {
             git commit -m "chore: advance pointers to verified main SHAs (mvn-all)"
+            git pull --rebase origin main || true
             git push
           }
 
@@ -198,7 +207,7 @@ jobs:
           {
             echo "# Maven All"
             echo ""
-            echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Tests: \`${{ inputs.test_mode }}\` | Quarkus build: \`${{ inputs.quarkus_build }}\` | Enforcer: \`${{ inputs.enforcer }}\` | Args: \`${{ inputs.maven_args || 'none' }}\` | Resume: \`${{ inputs.resume_from || 'none' }}\`_"
+            echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Tests: \`${{ inputs.test_mode }}\` | Quarkus build: \`${{ inputs.quarkus_build }}\` | Enforcer: \`${{ inputs.enforcer }}\` | Args: \`$MAVEN_ARGS\` | Resume: \`${{ inputs.resume_from || 'none' }}\`_"
             echo ""
             if [ "${{ job.status }}" = "success" ]; then
               echo "✅ **Reactor build passed — pointers advanced.**"

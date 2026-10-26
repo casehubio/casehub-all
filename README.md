@@ -33,9 +33,11 @@ cannot detect cross-repo breakage:
 
 casehub-all solves these problems:
 
-- **Single reactor, source-level:** All repos build from source in one Maven
-  reactor. No SNAPSHOT resolution — modules depend on the reactor-built
-  artifacts from earlier phases. API drift is caught immediately.
+- **Source-level, staged pipeline:** All repos build from source in a staged
+  pipeline. Each phase runs `mvn install`, populating `.m2` for subsequent
+  phases. This uses the same resolution mechanism as SNAPSHOTs, but is
+  deterministic within a single run because no external publishes can
+  intervene. API drift is caught immediately.
 - **Reproducible SHA manifest:** Every build records the exact SHA of every
   repo. Given these SHAs, the build can be reproduced deterministically.
   `git submodule status` is the bill of materials.
@@ -62,13 +64,18 @@ ecosystem.
 4. git submodule update --remote           ← pull ALL submodules to latest main
 5. Record SHA manifest                     ← log exact SHAs for reproducibility
 6. Build all phases (platform → G1-G6)
-7. If green: git add -A && git commit && git push  ← advance pointers
+7. If green: git add -u && git commit && git push  ← advance pointers
 ```
 
 After step 4, every submodule points to the latest `main` commit of its repo.
 If the build succeeds, step 7 commits those SHAs back to casehub-all. This
 means the committed submodule pointers always represent the **last known-good
 combination** of all repos.
+
+**Pointer advance is all-or-nothing.** A failure in any phase prevents
+advancing any pointers, even for phases that succeeded earlier. The `git push`
+only runs `if: success()` — meaning every phase must pass. The committed SHAs
+on main always represent a fully-verified combination, never a partial build.
 
 ### SHA Manifest
 
@@ -99,10 +106,12 @@ since the cached run. The cache holds stale artifacts, so downstream modules
 compile against the old API. This can cause false positives (build passes with
 old API) or false negatives (build fails due to cache/live mismatch).
 
-**What the resumed run does to SHAs:** The submodule update in step 4 still
-pulls ALL repos to latest main regardless of `resume_from`. So the SHA manifest
-and pointer advance reflect the true latest state — the skip only affects which
-Maven phases execute, not which SHAs are recorded.
+**Warning — resumed builds weaken the pointer guarantee:** The submodule
+update in step 4 pulls ALL repos to latest main regardless of `resume_from`.
+If the build passes, the pointer advance commits SHAs for *every* repo —
+including repos whose build phases were skipped. The SHAs are accurate (latest
+main), but the verification is partial: skipped phases were not rebuilt, so
+API compatibility between skipped and built phases is assumed, not proven.
 
 ## Dependency Graph
 
@@ -164,18 +173,22 @@ Phase 1 ─── Platform slices A/B/C/D (4 parallel Maven processes)
               │
 Phase 2 ─── Platform convergence (Spring modules)
               │
-Phase 3 ─── G1 + G2 (parallel)
-              │     G1: worker, ledger, connectors, neocortex, pages
-              │     G2: eidos, qhorus
+Phase 3 ─── G1: worker, ledger, connectors, neocortex, pages
               │
-Phase 4 ─── G3: work, engine, drafthouse
+Phase 4 ─── G2: eidos, qhorus
               │
-Phase 5 ─── G4: ras, agency, langchain4j, mosaic, workers
+Phase 5 ─── G3: work, engine, drafthouse
               │
-Phase 6 ─── G5: claudony, openclaw, soc, desiredstate, life, iot, chat-app
+Phase 6 ─── G4: ras, agency, langchain4j, mosaic, workers
               │
-Phase 7 ─── G6: devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading
+Phase 7 ─── G5: claudony, openclaw, soc, desiredstate, life, iot, chat-app
+              │
+Phase 8 ─── G6: devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading
 ```
+
+**Note:** `engine` and `work` have a circular dependency (engine depends on
+work, work depends on engine). Both are in G3 — Maven resolves the cycle
+within a single reactor phase.
 
 ### Grouping Table
 
@@ -184,12 +197,12 @@ Phase 7 ─── G6: devtown, aml, clinical, quarkmind, scaffold, ops, fsitradi
 | 0 | Platform base | platform-api, platform-core, playbook-catalog | Sequential | Required by all slices |
 | 1 | Platform slices | A (44 modules), B (57), C (53), D (15) | 4 parallel processes | Zero cross-deps between slices; separate JVMs avoid Quarkus deadlock |
 | 2 | Platform convergence | Spring starters + generators (40 modules) | Sequential | Depends on all 4 slices |
-| 3 | G1 Core libs | worker, ledger, connectors, neocortex, pages | Parallel with G2 | All depend only on platform |
-| 3 | G2 Domain | eidos, qhorus | Parallel with G1 | All depend only on platform + G1 deps |
-| 4 | G3 Middleware | work, engine, drafthouse | Sequential | Depend on G1+G2 outputs |
-| 5 | G4 Extensions | ras, agency, langchain4j, mosaic, workers | Sequential | Depend on G3 outputs |
-| 6 | G5 Apps (independent) | claudony, openclaw, soc, desiredstate, life, iot, chat-app | Sequential | Depend on G4 outputs |
-| 7 | G6 Apps (chain) | devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading | Sequential | Depend on G5 outputs (life, iot) |
+| 3 | G1 Core libs | worker, ledger, connectors, neocortex, pages | Sequential | All depend only on platform |
+| 4 | G2 Domain | eidos, qhorus | Sequential | eidos depends on ledger (G1), qhorus depends on ledger + connectors + eidos |
+| 5 | G3 Middleware | work, engine, drafthouse | Sequential | Depend on G1+G2 outputs; engine↔work cycle resolved within reactor |
+| 6 | G4 Extensions | ras, agency, langchain4j, mosaic, workers | Sequential | Depend on G3 outputs |
+| 7 | G5 Apps (independent) | claudony, openclaw, soc, desiredstate, life, iot, chat-app | Sequential | Depend on G4 outputs |
+| 8 | G6 Apps (chain) | devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading | Sequential | Some depend on G5 outputs (life, iot) |
 
 Within each group, Maven's `-T 1C` parallelises compilation across modules.
 
@@ -231,15 +244,24 @@ Canonical times from the latest successful main-branch CI run per repo as of
 | pages | — | — | — | G1 | no CI |
 | ops | — | — | — | G6 | no CI |
 
-**Critical path** (longest sequential chain): platform → work → engine → ops → fsitrading.
-If tests ran sequentially across repos: ~36 + 27 + 22 + ? + 13 ≈ 98+ min.
+**Repos without CI:** These repos are verified only via casehub-all (compile)
+and as transitive dependencies of downstream repos that do have CI.
+- **worker** — small library, API stable, consumed by engine/agency/iot
+- **pages** — Yarn/TypeScript monorepo, tested via casehub-mosaic CI
+- **ras** — tested transitively via soc, fsitrading, ops
+- **desiredstate** — tested transitively via ops, soc
+- **ops** — tested transitively via fsitrading
+
+**Critical path** (longest sequential chain): platform → G1 → G2 → G3 → ops → fsitrading.
+If tests ran sequentially across repos: ~36 + 15 + 12 + 27 + ? + 13 ≈ 103+ min.
 
 ### casehub-all Build Times (compile-only, `test_mode=skip`)
 
 | Phase | Time |
 |-------|------|
 | Platform: base + 4 slices + convergence | 84s |
-| G1+G2: Core libs + domain | 3m 35s |
+| G1: Core libs | ~2m 30s |
+| G2: Domain | ~1m 30s |
 | G3: Middleware | 1m 30s |
 | G4: Extensions | 4m 19s |
 | G5+G6: Apps | 1m 20s |
@@ -339,7 +361,7 @@ The `mvn-all.yml` workflow is parameterised via `workflow_dispatch` inputs:
 | `quarkus_build` | boolean | `false` | When true, runs Quarkus augmentation (produces runner JARs). Leave false — the deadlock makes this unsafe with `-T 1C`. |
 | `enforcer` | boolean | `false` | When true, runs Maven enforcer plugin. |
 | `maven_args` | string | (empty) | Escape hatch for any additional Maven flags. |
-| `resume_from` | string | (empty) | Resume from a group (e.g. `g3`). Skips earlier groups — relies on `.m2` cache from a prior run. |
+| `resume_from` | choice | (empty) | Resume from a group: `g1`, `g3`, `g4`, or `g5`. Skips earlier groups — relies on `.m2` cache from a prior run. |
 
 ```bash
 # Default (compile-only, no tests)
