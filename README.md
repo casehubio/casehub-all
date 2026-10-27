@@ -109,6 +109,65 @@ including repos whose build phases were skipped. The SHAs are accurate (latest
 main), but the verification is partial: skipped phases were not rebuilt, so
 API compatibility between skipped and built phases is assumed, not proven.
 
+## Frontend Build Cache
+
+Three modules have heavy frontend builds (yarn install + TypeScript compilation):
+**pages**, **casehub-mosaic**, and **drafthouse**. These are cached between runs
+using the submodule commit SHA as the cache key.
+
+### How it works
+
+After `git submodule update --remote`, the workflow computes each submodule's
+HEAD SHA and uses it as the `actions/cache` key:
+
+```
+key: frontend-Linux-<pages-sha>-<mosaic-sha>-<drafthouse-sha>
+```
+
+The cache stores:
+- `node_modules/` — skips `yarn install` / `npm install` on hit
+- `dist/` directories — skips `tsc --build` on hit (TypeScript output)
+- `.tsbuildinfo` files — enables TypeScript incremental compilation
+- `target/quinoa/` — skips Quinoa build on hit (pages, drafthouse)
+
+### When the cache resets
+
+The cache key includes all three SHAs. A new commit to **any** of the three
+repos changes the key, causing a full cache miss and rebuild of **all** three.
+This is intentional — a single composite key is simpler than three separate
+caches, and frontend modules rarely all change independently in the same build.
+
+### When the cache hits
+
+If none of pages, mosaic, or drafthouse have new commits since the last build:
+- `yarn install` → no-op (node_modules already present)
+- `tsc --build` → no-op (incremental build sees nothing changed)
+- Quinoa → skips build (target/quinoa already has resources)
+
+Expected savings: **~15 min per unchanged module** (pages ~5 min, mosaic ~12 min,
+drafthouse ~3 min).
+
+### Observing cache behaviour
+
+Every build summary reports cache status:
+
+```
+## Frontend Cache
+✅ Cache HIT — yarn install + tsc build skipped for unchanged modules
+
+| Module | SHA |
+|--------|-----|
+| pages | abc1234 |
+| mosaic | def5678 |
+| drafthouse | ghi9012 |
+```
+
+Compare total run duration between a MISS run (first build after a frontend
+change) and a HIT run (no frontend changes) to measure the savings.
+
+The `actions/cache` step also logs `Cache restored from key: ...` or
+`Cache not found for input keys: ...` in the step output.
+
 ## Dependency Graph
 
 Every cross-repo dependency is declared in `parent/build/modules-core.csv` and
