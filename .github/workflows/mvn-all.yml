@@ -91,8 +91,8 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
 
-      - name: Purge stale casehub SNAPSHOTs from cache
-        run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge stale npm SNAPSHOT artifacts from cache
+        run: rm -rf ~/.m2/repository/io/casehub/casehub-pages-npm ~/.m2/repository/io/casehub/casehub-mosaic-npm
 
       - name: Configure Maven flags
         id: flags
@@ -185,8 +185,8 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
 
-      - name: Purge stale casehub SNAPSHOTs from cache
-        run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge stale npm SNAPSHOT artifacts from cache
+        run: rm -rf ~/.m2/repository/io/casehub/casehub-pages-npm ~/.m2/repository/io/casehub/casehub-mosaic-npm
 
       - name: Install parent POMs
         run: |
@@ -271,8 +271,8 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
 
-      - name: Purge stale casehub SNAPSHOTs from cache
-        run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge stale npm SNAPSHOT artifacts from cache
+        run: rm -rf ~/.m2/repository/io/casehub/casehub-pages-npm ~/.m2/repository/io/casehub/casehub-mosaic-npm
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
