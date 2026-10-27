@@ -306,68 +306,74 @@ within a single reactor phase.
 Within each group, Maven's `-T 1C` parallelises compilation across modules
 (2 threads per runner).
 
-### Per-Repo CI Times (standalone build + test)
+### Per-Repo CI Status (as of 2026-10-27)
 
-Canonical times from the latest successful main-branch CI run per repo as of
-2026-10-26. These are full `mvn verify` runs including all tests.
+All per-repo CIs are green. Full `mvn verify` times from latest successful runs.
 
-| Repo | CI Time | Modules | @QuarkusTest | Group | Status |
-|------|---------|---------|-------------|-------|--------|
-| platform | 35m 54s | 212 | 61 | Slices | green |
-| work | 26m 43s | 28 | 150 | G3 | red (test) |
-| engine | 21m 48s | 69 | 141 | G3 | green |
-| iot | 17m 52s | 14 | — | G5 | green |
-| neocortex | 15m 50s | 96 | — | G1 | green |
-| quarkmind | 15m 40s | — | — | G6 | green |
-| connectors | 14m 44s | 43 | — | G1 | green |
-| casehub-mosaic | 13m 58s | — | — | G4 | red (test) |
-| fsitrading | 12m 44s | — | — | G6 | red (test) |
-| qhorus | 12m 14s | 43 | — | G2 | green |
-| casehub-langchain4j | 10m 22s | — | — | G4 | green |
-| soc | 8m 05s | — | — | G5 | green |
-| agency | 7m 31s | — | — | G4 | green |
-| ledger | 7m 30s | — | — | G1 | green |
-| eidos | 7m 16s | — | — | G2 | green |
-| devtown | 6m 44s | — | — | G6 | green |
-| aml | 6m 36s | — | — | G6 | green |
-| scaffold | 6m 24s | — | — | G6 | green |
-| claudony | 6m 12s | — | — | G5 | green |
-| drafthouse | 5m 37s | — | — | G3 | green |
-| life | 4m 18s | — | — | G6 | green |
-| chat-app | 3m 04s | — | — | G5 | green |
-| workers | 2m 59s | — | — | G4 | green |
-| clinical | 2m 54s | — | — | G6 | green |
-| openclaw | 2m 47s | — | — | G5 | green |
-| worker | — | — | — | G1 | no CI |
-| desiredstate | — | — | — | G5 | no CI |
-| ras | — | — | — | G4 | no CI |
-| pages | — | — | — | G1 | no CI |
-| ops | — | — | — | G6 | no CI |
+| Repo | CI Time | Group | Notes |
+|------|---------|-------|-------|
+| platform | ~36m | Slices | 212 modules, 61 @QuarkusTest |
+| work | ~27m | G3 | MongoDB tests skip without Docker |
+| engine | ~22m | G3 | ~1500 tests |
+| iot | ~18m | G5 | HomeAssistant WS tests skip on CI |
+| neocortex | ~16m | G1 | ONNX latency test skips on CI |
+| quarkmind | ~16m | G6 | |
+| connectors | ~15m | G1 | Discord WS + Email tests hardened for CI |
+| casehub-mosaic | ~12m | G4 | declaration emit disabled for agent-viewer |
+| fsitrading | ~13m | G6 | ops-service excluded from classpath |
+| qhorus | ~12m | G2 | |
+| casehub-langchain4j | ~10m | G4 | |
+| soc | ~8m | G5 | |
+| agency | ~8m | G4 | |
+| ledger | ~8m | G1 | |
+| eidos | ~7m | G2 | |
+| devtown | ~7m | G6 | |
+| aml | ~7m | G6 | |
+| scaffold | ~6m | G6 | |
+| claudony | ~6m | G5 | |
+| drafthouse | ~6m | G3 | E2E tests excluded (need Playwright) |
+| ops | ~5m | G5 | |
+| life | ~4m | G6 | |
+| chat-app | ~3m | G5 | |
+| workers | ~3m | G4 | Script tests skip on CI |
+| clinical | ~3m | G6 | |
+| openclaw | ~3m | G5 | |
+| pages | ~8m | G1 | Maven publish + frontend-artifacts |
 
-**Repos without CI:** These repos are verified only via casehub-all (compile)
-and as transitive dependencies of downstream repos that do have CI.
-- **worker** — small library, API stable, consumed by engine/agency/iot
-- **pages** — Yarn/TypeScript monorepo, tested via casehub-mosaic CI
-- **ras** — tested transitively via soc, fsitrading, ops
-- **desiredstate** — tested transitively via ops, soc
-- **ops** — tested transitively via fsitrading
+### Tests Skipped on CI
 
-**Critical path** (longest sequential chain): platform → G1 → G2 → G3 → ops → fsitrading.
-If tests ran sequentially across repos: ~36 + 15 + 12 + 27 + ? + 13 ≈ 103+ min.
+Some tests require infrastructure not available on GitHub Actions runners.
+They run locally but are skipped on CI via `@DisabledIfEnvironmentVariable(CI=true)`
+or surefire `<exclude>`:
 
-### casehub-all Build Times (compile-only, `test_mode=skip`)
+| Test | Repo | Reason |
+|------|------|--------|
+| `DiscordGatewayTest` | connectors | WebSocket needs quiet env, flaky under `-T 1C` |
+| `StrategyClassifierOnnxTest.latencyUnderThreshold` | neocortex | Latency benchmark unreliable on shared runners |
+| `HomeAssistantWebSocketClientTest` | iot | Connects to hardcoded port 8081 |
+| `ScriptWorkerExecutionManagerTest` | workers | Process execution flaky under `-T 1C` |
+| `BrainstormE2ETest` + all `e2e/*` | drafthouse | Playwright browser driver not installed |
 
-| Phase | Runner | Time |
-|-------|--------|------|
-| Prepare + platform base | prepare | ~2m |
-| Platform slices A/B/C/D | 4 parallel runners | ~2m (wall clock) |
-| Convergence + G1-G6 | build | ~12m |
-| **Total** | | **~16 min** |
+### casehub-all Build Times
+
+| Mode | Phases | Total |
+|------|--------|-------|
+| `test_mode=skip` (compile only) | prepare ~2m, slices ~2m, G1-G6 ~12m | **~16 min** |
+| `test_mode=run` (full tests) | prepare ~2m, slices ~15m, G1-G6 ~75m | **~90 min** |
+
+Step timeouts (per-step, not per-job):
+
+| Step | Timeout | Typical |
+|------|---------|---------|
+| Platform convergence | 10m | ~3m |
+| G1: Core libs | 25m | ~15m |
+| G2: Domain | 20m | ~10m |
+| G3: Middleware | 60m | ~45m (engine tests) |
+| G4: Extensions | 90m | ~15m |
+| G5+G6: Apps | 90m | ~30m |
 
 Setup overhead per job (checkout, cache restore, artifact download) adds ~1-2
-minutes per job transition. This overhead is offset by true CPU parallelism
-when tests are enabled (platform tests take 35+ minutes — 4 dedicated runners
-cut this to the longest single slice).
+minutes per job transition.
 
 ## Quarkus Bugs and Limitations
 
@@ -489,8 +495,11 @@ flags" step. `maven_args` is set as the `MAVEN_ARGS` environment variable
 
 ### resume_from is fragile
 See "Resuming from a Group" above. Only safe when earlier groups haven't
-changed since the cached run. Stale cache artifacts can mask or fabricate
-failures.
+changed since the cached run. The Maven `.m2` cache is keyed on
+`parent/pom.xml` + `platform/pom.xml` hash — it does NOT invalidate when
+individual repo SNAPSHOTs are republished. Stale cache artifacts can mask
+or fabricate failures. Always run a full build (no `resume_from`) for
+definitive verification.
 
 ### Pointer advance race
 The workflow advances submodule pointers and pushes on success. If two runs
@@ -498,16 +507,43 @@ complete near-simultaneously, the second push may fail. Mitigated with
 `git pull --rebase` before push. If rebase fails, the push is skipped —
 the pointers from the other run are correct.
 
+### Stale submodule pointers
+The committed submodule SHAs only advance when a full green build completes.
+If the reactor is red, pointers stay at the last green build — which may be
+days old. This is by design (pointers = verified state), but means
+`git submodule update` without `--remote` gives stale code.
+
 ### SNAPSHOT timing between repos
 Each repo publishes SNAPSHOTs independently. If repo A publishes a breaking
 change and repo B's CI runs before A's CI finishes publishing, B pulls the old
 SNAPSHOT. Fix: wait for upstream CI to publish, then re-trigger downstream.
+
+Maven also caches "not found" resolution failures. If a dependency wasn't
+published when Maven first checked, it won't retry until the update interval
+expires. Fix: add `-U` to force SNAPSHOT update checks.
 
 ### Aggregator POM drift
 The `<modules>` lists in `aggregator-g*.xml` and `aggregator-slice-*.xml` are
 manually maintained. When a new module is added to a repo, the aggregator
 must be updated manually. A future improvement: generate aggregator POMs from
 CSVs, or add a CI validation step.
+
+### Reactor-only CDI issues
+Some modules have CDI deployment problems that only manifest in the casehub-all
+reactor, not in standalone CI. The reactor classpath can differ from standalone
+because Maven reactor resolution resolves from `target/` instead of `.m2`,
+and `-fae` continues past failures that change the effective classpath.
+
+Known: claudony has 28 unsatisfied CDI dependencies in G5+G6 `test_mode=run`
+(Ledger SPIs, ProvisionerConfigRegistry). Standalone claudony CI is green.
+
+### Mosaic TypeScript in reactor context
+Mosaic's TypeScript build resolves `@casehubio/*` packages via portal links
+to `.casehub-packages/` (unpacked from Maven artifacts). The type resolution
+can differ from standalone Yarn workspace resolution, causing TS errors that
+don't reproduce locally. Current mitigations:
+- `declaration: false` in agent-viewer's tsconfig.build.json (TS4094)
+- `never` exhaustiveness checks replaced with fallback defaults
 
 ## Operations
 
