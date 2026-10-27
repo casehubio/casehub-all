@@ -281,6 +281,7 @@ jobs:
           echo "drafthouse=$(git -C drafthouse rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Cache frontend builds (keyed by submodule SHA)
+        id: frontend-cache
         uses: actions/cache@v4
         with:
           path: |
@@ -397,6 +398,20 @@ jobs:
             else
               echo "❌ **Reactor build failed — pointers unchanged.**"
             fi
+            echo ""
+            echo "## Frontend Cache"
+            echo ""
+            if [ "${{ steps.frontend-cache.outputs.cache-hit }}" = "true" ]; then
+              echo "✅ **Cache HIT** — yarn install + tsc build skipped for unchanged modules"
+            else
+              echo "⬜ **Cache MISS** — full frontend rebuild (first run or SHA changed)"
+            fi
+            echo ""
+            echo "| Module | SHA |"
+            echo "|--------|-----|"
+            echo "| pages | \`${{ steps.frontend-shas.outputs.pages }}\` |"
+            echo "| mosaic | \`${{ steps.frontend-shas.outputs.mosaic }}\` |"
+            echo "| drafthouse | \`${{ steps.frontend-shas.outputs.drafthouse }}\` |"
             echo ""
             echo "## SHA Manifest"
             echo '```'
