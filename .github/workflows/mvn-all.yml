@@ -335,7 +335,7 @@ jobs:
       - name: "G3: Middleware (work, engine, drafthouse)"
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3'
         run: mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 45
+        timeout-minutes: 60
 
       # ── Phase 6: G4 Extensions ───────────────────────────────────────
       - name: "G4: Extensions (ras, agency, langchain4j, mosaic, workers)"
