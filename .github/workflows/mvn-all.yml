@@ -273,6 +273,28 @@ jobs:
       - name: Enable Corepack
         run: corepack enable
 
+      - name: Compute frontend submodule SHAs
+        id: frontend-shas
+        run: |
+          echo "pages=$(git -C pages rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "mosaic=$(git -C casehub-mosaic rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "drafthouse=$(git -C drafthouse rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache frontend builds (keyed by submodule SHA)
+        uses: actions/cache@v4
+        with:
+          path: |
+            pages/node_modules
+            pages/backend/*/target/quinoa
+            casehub-mosaic/node_modules
+            casehub-mosaic/.yarn/cache
+            casehub-mosaic/packages/*/dist
+            casehub-mosaic/components/*/dist
+            casehub-mosaic/**/tsconfig.tsbuildinfo
+            drafthouse/server/runtime/src/main/webui/node_modules
+            drafthouse/server/runtime/target/quinoa
+          key: frontend-${{ runner.os }}-${{ steps.frontend-shas.outputs.pages }}-${{ steps.frontend-shas.outputs.mosaic }}-${{ steps.frontend-shas.outputs.drafthouse }}
+
       - name: Configure Maven flags
         run: |
           FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
