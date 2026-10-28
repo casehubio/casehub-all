@@ -33,6 +33,18 @@ on:
           - g4
           - g5
         default: ''
+      submodule_update:
+        description: "pinned = use committed SHAs, all = pull latest main for all repos, list = pull latest only for named repos (comma-separated in submodule_list)"
+        type: choice
+        options:
+          - pinned
+          - all
+          - list
+        default: pinned
+      submodule_list:
+        description: "Comma-separated repo names to update (only when submodule_update=list). E.g. 'engine,aml,claudony'"
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -63,10 +75,28 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update submodules to latest main
+      - name: Update submodules
         run: |
-          git submodule update --remote parent
-          git submodule update --remote
+          if [ "${{ inputs.submodule_update }}" = "all" ]; then
+            echo "Updating ALL submodules to latest main"
+            git submodule update --remote parent
+            git submodule update --remote
+          elif [ "${{ inputs.submodule_update }}" = "list" ]; then
+            echo "Updating parent + listed submodules: ${{ inputs.submodule_list }}"
+            git submodule update --remote parent
+            IFS=',' read -ra REPOS <<< "${{ inputs.submodule_list }}"
+            for repo in "${REPOS[@]}"; do
+              repo=$(echo "$repo" | xargs)
+              if [ -d "$repo" ]; then
+                echo "  Updating $repo"
+                git submodule update --remote "$repo"
+              else
+                echo "  WARNING: $repo not found, skipping"
+              fi
+            done
+          else
+            echo "Using pinned submodule SHAs (committed pointers)"
+          fi
         timeout-minutes: 5
 
       - name: Record SHA manifest
@@ -162,8 +192,14 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update platform to latest main
-        run: git submodule update --remote platform
+      - name: Update platform submodule
+        run: |
+          if [ "${{ inputs.submodule_update }}" != "pinned" ]; then
+            echo "Updating platform to latest main"
+            git submodule update --remote platform
+          else
+            echo "Using pinned platform SHA"
+          fi
         timeout-minutes: 2
 
       - name: Set up Java 21
@@ -237,10 +273,28 @@ jobs:
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
 
-      - name: Update submodules to latest main
+      - name: Update submodules
         run: |
-          git submodule update --remote parent
-          git submodule update --remote
+          if [ "${{ inputs.submodule_update }}" = "all" ]; then
+            echo "Updating ALL submodules to latest main"
+            git submodule update --remote parent
+            git submodule update --remote
+          elif [ "${{ inputs.submodule_update }}" = "list" ]; then
+            echo "Updating parent + listed submodules: ${{ inputs.submodule_list }}"
+            git submodule update --remote parent
+            IFS=',' read -ra REPOS <<< "${{ inputs.submodule_list }}"
+            for repo in "${REPOS[@]}"; do
+              repo=$(echo "$repo" | xargs)
+              if [ -d "$repo" ]; then
+                echo "  Updating $repo"
+                git submodule update --remote "$repo"
+              else
+                echo "  WARNING: $repo not found, skipping"
+              fi
+            done
+          else
+            echo "Using pinned submodule SHAs (committed pointers)"
+          fi
         timeout-minutes: 5
 
       - name: Record SHA manifest
