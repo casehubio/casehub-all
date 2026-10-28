@@ -45,6 +45,10 @@ on:
         description: "Comma-separated repo names to update (only when submodule_update=list). E.g. 'engine,aml,claudony'"
         type: string
         default: ''
+      retry_count:
+        description: "Auto-retry counter (0 = first attempt, max 2 retries)"
+        type: number
+        default: 0
 
 permissions:
   contents: write
@@ -395,36 +399,42 @@ jobs:
 
       # ── Phase 2: Platform convergence ─────────────────────────────────
       - name: "Platform: convergence"
+        id: platform-convergence
         if: inputs.resume_from == ''
         run: mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 10
 
       # ── Phase 3: G1 Core libs ─────────────────────────────────────────
       - name: "G1: Core libraries (worker, ledger, connectors, neocortex, pages)"
+        id: g1
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
         run: mvn install -fae -T 1C -f parent/aggregator-g1-core-libs.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 25
 
       # ── Phase 4: G2 Domain ────────────────────────────────────────────
       - name: "G2: Domain (eidos, qhorus)"
+        id: g2
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
         run: mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
 
       # ── Phase 5: G3 Middleware ────────────────────────────────────────
       - name: "G3: Middleware (work, engine, drafthouse)"
+        id: g3
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3'
         run: mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 60
 
       # ── Phase 6: G4 Extensions ───────────────────────────────────────
       - name: "G4: Extensions (ras, agency, langchain4j, mosaic, workers)"
+        id: g4
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4'
         run: mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 90
 
       # ── Phase 7+8: G5+G6 Apps ────────────────────────────────────────
       - name: "G5+G6: Apps (independent, then chain)"
+        id: g5g6
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4' || inputs.resume_from == 'g5'
         run: |
           mvn install -fae -T 1C -f parent/aggregator-g5-apps-independent.xml $MVN_COMMON $MAVEN_ARGS
@@ -475,3 +485,30 @@ jobs:
             git submodule status | sort
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # ── Auto-retry on transient failure ──────────────────────────────
+      - name: Auto-retry on transient failure
+        if: failure() && inputs.retry_count < 2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RESUME=""
+          if [ "${{ steps.platform-convergence.outcome }}" = "failure" ]; then
+            RESUME=""
+          elif [ "${{ steps.g1.outcome }}" = "failure" ]; then
+            RESUME="g1"
+          elif [ "${{ steps.g3.outcome }}" = "failure" ]; then
+            RESUME="g3"
+          elif [ "${{ steps.g4.outcome }}" = "failure" ]; then
+            RESUME="g4"
+          elif [ "${{ steps.g5g6.outcome }}" = "failure" ]; then
+            RESUME="g5"
+          fi
+          RETRY=$(( ${{ inputs.retry_count }} + 1 ))
+          echo "::warning::Build failed at ${RESUME:-platform-convergence}. Auto-retrying (attempt $RETRY/2) with resume_from=${RESUME:-empty}"
+          gh workflow run mvn-all.yml \
+            -f test_mode=${{ inputs.test_mode }} \
+            -f submodule_update=${{ inputs.submodule_update }} \
+            -f submodule_list="${{ inputs.submodule_list }}" \
+            -f resume_from="$RESUME" \
+            -f retry_count="$RETRY"
