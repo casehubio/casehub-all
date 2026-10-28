@@ -368,6 +368,9 @@ jobs:
           echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
+      - name: Purge stale platform snapshots from cache
+        run: rm -rf ~/.m2/repository/io/casehub/casehub-platform*
+
       - name: Install parent POMs
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
