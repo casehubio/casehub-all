@@ -458,12 +458,12 @@ jobs:
           fi
 
       # ── Phase 2: Platform convergence ─────────────────────────────────
-      - name: "Platform: convergence (full rebuild)"
+      - name: "Platform: convergence (full rebuild, tests already ran in slices)"
         id: platform-convergence
         if: inputs.resume_from == ''
         run: |
-          mvn install -T 1C -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 30
+          mvn install -T 1C -DskipTests -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 20
 
       # ── Phase 3: G1 Core libs ─────────────────────────────────────────
       - name: "G1: Core libraries (worker, ledger, connectors, neocortex, pages)"
