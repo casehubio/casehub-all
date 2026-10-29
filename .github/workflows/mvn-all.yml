@@ -395,8 +395,12 @@ jobs:
           echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
-      - name: Purge all casehub snapshots from cache
-        run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge non-platform casehub snapshots from cache
+        run: |
+          cd ~/.m2/repository/io/casehub 2>/dev/null || exit 0
+          for d in */; do
+            case "$d" in casehub-platform*) ;; *) rm -rf "$d" ;; esac
+          done
 
       - name: Install parent POMs
         run: |
