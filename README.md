@@ -233,33 +233,114 @@ jobs, giving the slice phase 8 CPUs total.
 
 ### Job Architecture
 
-```
-┌──────────────────────────┐
-│  Job 1: prepare          │  1 runner (2 CPUs)
-│  checkout + submodules   │
-│  platform base (3 mods)  │
-│  upload .m2 + jandex     │
-└──────────┬───────────────┘
-           │ needs: prepare
-           ▼
-┌──────────────────────────┐
-│  Job 2: platform-slices  │  4 runners (8 CPUs total)
-│  matrix: [a, b, c, d]   │
-│  download base artifacts │
-│  build slice             │
-│  upload .m2 + jandex     │
-└──────────┬───────────────┘
-           │ needs: platform-slices (waits for ALL 4)
-           ▼
-┌──────────────────────────┐
-│  Job 3: build            │  1 runner (2 CPUs)
-│  download all artifacts  │
-│  convergence             │
-│  G1 → G2 → G3 → G4      │
-│  → G5 → G6              │
-│  advance pointers        │
-└──────────────────────────┘
-```
+<svg viewBox="0 0 720 520" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#555"/></marker>
+    <style>
+      .box { fill:#f8f9fa; stroke:#333; stroke-width:1.5; rx:6 }
+      .label { font-weight:600; font-size:13px; fill:#222 }
+      .detail { fill:#555; font-size:11px }
+      .artifact { fill:#e8f4e8; stroke:#4a4; stroke-width:1; rx:4 }
+      .validate { fill:#fff3cd; stroke:#d69e2e; stroke-width:1; rx:4 }
+      .arrow { stroke:#555; stroke-width:1.5; fill:none; marker-end:url(#ah) }
+      .arrowlabel { fill:#777; font-size:10px; font-style:italic }
+    </style>
+  </defs>
+
+  <!-- Job 1: Prepare -->
+  <rect class="box" x="240" y="10" width="240" height="80"/>
+  <text class="label" x="280" y="35">Job 1: Prepare</text>
+  <text class="detail" x="255" y="52">1 runner (2 CPUs)</text>
+  <text class="detail" x="255" y="66">checkout + platform base (3 mods)</text>
+  <text class="detail" x="255" y="80">validate JARs + upload artifacts</text>
+
+  <!-- Arrow down -->
+  <path class="arrow" d="M360,90 L360,120"/>
+  <text class="arrowlabel" x="370" y="110">m2 JARs + Jandex</text>
+
+  <!-- Job 2: Slices -->
+  <rect class="box" x="40" y="120" width="640" height="90"/>
+  <text class="label" x="245" y="142">Job 2: Platform Slices</text>
+  <text class="detail" x="245" y="157">4 parallel runners (8 CPUs total)</text>
+
+  <rect class="artifact" x="60" y="165" width="140" height="34"/>
+  <text class="detail" x="75" y="178">Slice A</text>
+  <text class="detail" x="75" y="191">Agent/AI (44)</text>
+
+  <rect class="artifact" x="215" y="165" width="140" height="34"/>
+  <text class="detail" x="230" y="178">Slice B</text>
+  <text class="detail" x="230" y="191">Identity (57)</text>
+
+  <rect class="artifact" x="370" y="165" width="140" height="34"/>
+  <text class="detail" x="385" y="178">Slice C</text>
+  <text class="detail" x="385" y="191">Events (53)</text>
+
+  <rect class="artifact" x="525" y="165" width="140" height="34"/>
+  <text class="detail" x="540" y="178">Slice D</text>
+  <text class="detail" x="540" y="191">YAML (15)</text>
+
+  <!-- Arrow down -->
+  <path class="arrow" d="M360,210 L360,240"/>
+  <text class="arrowlabel" x="370" y="230">m2 JARs + Jandex (4 artifacts)</text>
+
+  <!-- Job 3: Convergence + Ecosystem -->
+  <rect class="box" x="40" y="240" width="640" height="270"/>
+  <text class="label" x="170" y="262">Job 3: Convergence + Ecosystem</text>
+  <text class="detail" x="420" y="262">1 runner (2 CPUs)</text>
+
+  <!-- Purge + Download + Validate -->
+  <rect class="validate" x="60" y="272" width="210" height="28"/>
+  <text class="detail" x="72" y="291">Purge non-platform SNAPSHOTs</text>
+
+  <rect class="artifact" x="285" y="272" width="180" height="28"/>
+  <text class="detail" x="297" y="291">Download slice artifacts</text>
+
+  <rect class="validate" x="480" y="272" width="185" height="28"/>
+  <text class="detail" x="492" y="291">Validate JARs + Jandex (0xCAFE)</text>
+
+  <!-- Convergence -->
+  <rect x="60" y="310" width="605" height="28" fill="#e8e8f4" stroke="#66a" rx="4"/>
+  <text class="detail" x="72" y="329">Phase 2: Platform full rebuild (mvn install -DskipTests -f platform/pom.xml) — ~220 modules</text>
+
+  <!-- Ecosystem phases -->
+  <rect x="60" y="348" width="115" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
+  <text class="detail" x="72" y="365">G1: Core libs</text>
+
+  <path class="arrow" d="M175,360 L185,360"/>
+
+  <rect x="190" y="348" width="95" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
+  <text class="detail" x="202" y="365">G2: Domain</text>
+
+  <path class="arrow" d="M285,360 L295,360"/>
+
+  <rect x="300" y="348" width="115" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
+  <text class="detail" x="312" y="365">G3: Middleware</text>
+
+  <path class="arrow" d="M415,360 L425,360"/>
+
+  <rect x="430" y="348" width="105" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
+  <text class="detail" x="442" y="365">G4: Extensions</text>
+
+  <path class="arrow" d="M535,360 L545,360"/>
+
+  <rect x="550" y="348" width="115" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
+  <text class="detail" x="562" y="365">G5+G6: Apps</text>
+
+  <!-- Advance pointers -->
+  <rect x="60" y="382" width="605" height="24" fill="#e8f4e8" stroke="#4a4" rx="3"/>
+  <text class="detail" x="220" y="399">If green: advance submodule pointers + push</text>
+
+  <!-- Legend -->
+  <text class="detail" x="60" y="435">Legend:</text>
+  <rect class="artifact" x="110" y="425" width="14" height="14"/>
+  <text class="detail" x="130" y="436">Build step</text>
+  <rect class="validate" x="220" y="425" width="14" height="14"/>
+  <text class="detail" x="240" y="436">Validation / purge</text>
+  <rect x="350" y="425" width="14" height="14" fill="#e8e8f4" stroke="#66a" rx="2"/>
+  <text class="detail" x="370" y="436">Platform convergence</text>
+  <rect x="520" y="425" width="14" height="14" fill="#f0f0f0" stroke="#999" rx="2"/>
+  <text class="detail" x="540" y="436">Ecosystem group</text>
+</svg>
 
 Artifacts passed between jobs:
 - **`.m2` artifacts** (`m2-platform-*`): installed JARs for Maven dependency
@@ -267,6 +348,20 @@ Artifacts passed between jobs:
 - **Jandex indexes** (`jandex-platform-*`): `target/classes/META-INF/jandex.idx`
   files. Downloaded into `platform/` in the workspace. Required because the
   Spring generators read Jandex from the filesystem, not `.m2`.
+
+#### Artifact Integrity Validation
+
+GitHub Actions artifact uploads/downloads occasionally produce corrupt files
+(`invalid CEN header` for JARs, `Not a jandex index` for Jandex). The pipeline
+validates artifacts at two points:
+
+- **Producer-side (each slice runner):** After Maven build, validates all
+  produced JARs with `jar tf` before uploading. Catches Maven/disk corruption
+  at source.
+- **Consumer-side (convergence runner):** After downloading artifacts, validates
+  JARs (`jar tf`) and Jandex indexes (checks `0xCAFE` magic header). Corrupt
+  files are **deleted** — the convergence step recompiles everything from source
+  via `platform/pom.xml`, so deleted files are regenerated fresh.
 
 ### Phase Layout
 
@@ -281,7 +376,7 @@ Job 2 (platform-slices, 4 parallel runners):
               Slice D (15 modules) — YAML/Tooling: yaml, observability, pdf, signing
 
 Job 3 (build):
-  Phase 2 ─── Platform convergence (40 modules) — Spring starters + generators
+  Phase 2 ─── Platform convergence (full rebuild, tests skipped)
                 │
   Phase 3 ─── G1: worker, ledger, connectors, neocortex, pages
                 │
@@ -306,7 +401,7 @@ within a single reactor phase.
 |-------|-------|-------|--------|-----------|
 | 0 | Platform base | platform-api, platform-core, playbook-catalog | prepare | Required by all slices |
 | 1 | Platform slices | A (44), B (57), C (53), D (15 modules) | 4 separate runners | Zero cross-deps; each gets its own 2 CPUs |
-| 2 | Convergence | Spring starters + generators (40 modules) | build | Depends on all 4 slices + Jandex indexes |
+| 2 | Convergence | All ~220 platform modules (full rebuild) | build | Compiles all platform modules from source (`-DskipTests`). Full rebuild eliminates Jandex corruption from artifact downloads. Tests already ran in slices. |
 | 3 | G1 Core libs | worker, ledger, connectors, neocortex, pages | build | All depend only on platform |
 | 4 | G2 Domain | eidos, qhorus | build | eidos depends on ledger (G1), qhorus on ledger + connectors + eidos |
 | 5 | G3 Middleware | work, engine, drafthouse | build | Depend on G1+G2; engine↔work cycle resolved within reactor |
@@ -376,7 +471,7 @@ Step timeouts (per-step, not per-job):
 
 | Step | Timeout | Typical |
 |------|---------|---------|
-| Platform convergence | 10m | ~3m |
+| Platform convergence (full rebuild) | 20m | ~10m |
 | G1: Core libs | 25m | ~15m |
 | G2: Domain | 20m | ~10m |
 | G3: Middleware | 60m | ~45m (engine tests) |
@@ -385,6 +480,25 @@ Step timeouts (per-step, not per-job):
 
 Setup overhead per job (checkout, cache restore, artifact download) adds ~1-2
 minutes per job transition.
+
+## Surefire Configuration
+
+### Forked Process Timeout
+
+`forkedProcessTimeoutInSeconds=300` (parent POM) kills any hung Surefire
+forked JVM after 5 minutes. This prevents a single stuck test from consuming
+the entire CI job budget (previously caused 45-minute job timeouts).
+
+The timeout applies per fork, not per test. If a fork has multiple tests,
+the 5-minute budget covers all of them. Individual tests should use JUnit
+`@Timeout` for per-test safety nets.
+
+### Surefire Version Alignment
+
+All repos use Surefire **3.5.5** (set in `casehub-parent`). Engine previously
+overrode to 3.5.5 independently — the parent now adopts 3.5.5 ecosystem-wide,
+and engine inherits. Surefire 3.5.5 has stricter module-path validation that
+detects split packages (classes in the same Java package across different JARs).
 
 ## Quarkus Bugs and Limitations
 
@@ -566,8 +680,13 @@ reactor, not in standalone CI. The reactor classpath can differ from standalone
 because Maven reactor resolution resolves from `target/` instead of `.m2`,
 and `-fae` continues past failures that change the effective classpath.
 
-Known: claudony has 28 unsatisfied CDI dependencies in G5+G6 `test_mode=run`
-(Ledger SPIs, ProvisionerConfigRegistry). Standalone claudony CI is green.
+**Claudony (resolved):** Previously had 28 unsatisfied CDI dependencies.
+Fixed by narrowing the `quarkus.arc.exclude-types` glob from
+`io.casehub.qhorus.runtime.**` to per-sub-package globs. The `identity`
+sub-package is intentionally kept alive so `TenancyContextFilter`
+(`@Provider @PreMatching`) remains a CDI bean — RESTEasy Reactive discovers
+`@Provider` classes from Jandex independently of CDI exclusion, and without
+CDI management the filter's `@Inject` fields are null.
 
 ### Mosaic TypeScript in reactor context
 Mosaic's TypeScript build resolves `@casehubio/*` packages via portal links
@@ -614,7 +733,7 @@ platform/
   aggregator-slice-b.xml          — Identity/Auth (57 modules)
   aggregator-slice-c.xml          — Events/Comms (53 modules)
   aggregator-slice-d.xml          — YAML/Tooling (15 modules)
-  aggregator-convergence.xml      — Spring convergence (40 modules)
+  aggregator-convergence.xml      — Spring convergence (historical — convergence now uses platform/pom.xml directly)
 
 casehub-all/
   .github/workflows/mvn-all.yml   — 3-job, 9-phase build (parameterised)
