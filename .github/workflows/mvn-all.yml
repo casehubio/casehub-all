@@ -156,6 +156,17 @@ jobs:
         run: mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 5
 
+      - name: Validate produced JARs
+        run: |
+          BAD=0
+          while IFS= read -r -d '' jar; do
+            if ! jar tf "$jar" > /dev/null 2>&1; then
+              echo "::error::Corrupt JAR produced: $jar"
+              BAD=$((BAD + 1))
+            fi
+          done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
+          if [ "$BAD" -gt 0 ]; then exit 1; fi
+
       - name: Upload platform base .m2 artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -237,6 +248,17 @@ jobs:
       - name: "Build slice ${{ matrix.slice }}"
         run: mvn install -T 1C -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
+
+      - name: Validate produced JARs
+        run: |
+          BAD=0
+          while IFS= read -r -d '' jar; do
+            if ! jar tf "$jar" > /dev/null 2>&1; then
+              echo "::error::Corrupt JAR produced: $jar"
+              BAD=$((BAD + 1))
+            fi
+          done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
+          if [ "$BAD" -gt 0 ]; then exit 1; fi
 
       - name: Upload slice .m2 artifacts
         uses: actions/upload-artifact@v4
