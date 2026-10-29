@@ -53,6 +53,7 @@ on:
 permissions:
   contents: write
   packages: read
+  actions: write
 
 # ── Reusable env block (duplicated per job — YAML anchors don't work in GHA) ──
 # GITHUB_TOKEN, GH_PACKAGES_TOKEN, MAVEN_OPTS are set per-job.
@@ -372,8 +373,8 @@ jobs:
           echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
-      - name: Purge stale platform snapshots from cache
-        run: rm -rf ~/.m2/repository/io/casehub/casehub-platform*
+      - name: Purge all casehub snapshots from cache
+        run: rm -rf ~/.m2/repository/io/casehub
 
       - name: Install parent POMs
         run: |
