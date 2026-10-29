@@ -405,7 +405,8 @@ jobs:
           CORRUPT=0
           while IFS= read -r -d '' jar; do
             if ! jar tf "$jar" > /dev/null 2>&1; then
-              echo "::error::Corrupt JAR: $jar"
+              echo "::warning::Corrupt JAR (deleted): $jar"
+              rm -f "$jar"
               CORRUPT=$((CORRUPT + 1))
             fi
           done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
@@ -413,16 +414,17 @@ jobs:
           echo "::group::Validating Jandex indexes"
           while IFS= read -r -d '' idx; do
             if [ ! -s "$idx" ]; then
-              echo "::error::Empty Jandex index: $idx"
+              echo "::warning::Empty Jandex index (deleted): $idx"
+              rm -f "$idx"
               CORRUPT=$((CORRUPT + 1))
             fi
           done < <(find platform -name 'jandex.idx' -print0)
           echo "::endgroup::"
           if [ "$CORRUPT" -gt 0 ]; then
-            echo "::error::$CORRUPT corrupt artifact(s) detected — re-trigger the build"
-            exit 1
+            echo "::warning::$CORRUPT corrupt artifact(s) deleted — Maven will rebuild from source"
+          else
+            echo "All artifacts validated"
           fi
-          echo "All artifacts validated"
 
       # ── Phase 2: Platform convergence ─────────────────────────────────
       - name: "Platform: convergence"
