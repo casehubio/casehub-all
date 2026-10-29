@@ -395,12 +395,8 @@ jobs:
           echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
-      - name: Purge non-platform casehub snapshots from cache
-        run: |
-          cd ~/.m2/repository/io/casehub 2>/dev/null || exit 0
-          for d in */; do
-            case "$d" in casehub-platform*) ;; *) rm -rf "$d" ;; esac
-          done
+      - name: Purge all casehub snapshots from cache
+        run: rm -rf ~/.m2/repository/io/casehub
 
       - name: Install parent POMs
         run: |
@@ -423,6 +419,15 @@ jobs:
           pattern: jandex-platform-*
           path: platform
           merge-multiple: true
+
+      - name: Verify downloaded platform modules
+        if: inputs.resume_from == ''
+        run: |
+          echo "::group::Platform modules in .m2 after download"
+          ls ~/.m2/repository/io/casehub/ | grep casehub-platform | sort
+          COUNT=$(ls -d ~/.m2/repository/io/casehub/casehub-platform*/ 2>/dev/null | wc -l)
+          echo "::notice::$COUNT platform module directories found"
+          echo "::endgroup::"
 
       - name: Validate downloaded artifacts
         if: inputs.resume_from == ''
