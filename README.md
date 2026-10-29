@@ -55,17 +55,28 @@ ecosystem.
 
 ```
 1. Checkout casehub-all (with submodule pointers from last green build)
-2. git submodule update --remote           ← pull ALL submodules to latest main
+2. Update submodules (mode-dependent — see submodule_update input)
 3. Record SHA manifest                     ← log exact SHAs for reproducibility
 4. Build platform (base → slices → convergence)
 5. Build ecosystem (G1 → G2 → G3 → G4 → G5 → G6)
 6. If green: git add -u && git commit && git push  ← advance pointers
+7. If failed: auto-retry with resume_from at the failed group (max 2 retries)
 ```
 
-After step 2, every submodule points to the latest `main` commit of its repo.
-If the build succeeds, step 6 commits those SHAs back to casehub-all. This
-means the committed submodule pointers always represent the **last known-good
+Step 2 depends on the `submodule_update` input:
+- **`pinned`** (default): use committed SHAs — deterministic, no surprises
+- **`all`**: pull latest main for every repo (legacy behavior)
+- **`list`**: pull latest main only for named repos (comma-separated)
+
+If the build succeeds, step 6 commits the SHAs back to casehub-all. The
+committed submodule pointers always represent the **last known-good
 combination** of all repos.
+
+If the build fails, step 7 detects which group failed and triggers a new
+run with `resume_from` set to that group. This handles transient failures
+(corrupted artifact downloads, CI runner timeouts) automatically. The
+`retry_count` input caps retries at 2 to prevent infinite loops on
+deterministic failures.
 
 **Pointer advance is all-or-nothing.** A failure in any phase prevents
 advancing any pointers, even for phases that succeeded earlier. The `git push`
@@ -306,7 +317,7 @@ within a single reactor phase.
 Within each group, Maven's `-T 1C` parallelises compilation across modules
 (2 threads per runner).
 
-### Per-Repo CI Status (as of 2026-10-27)
+### Per-Repo CI Status (as of 2026-10-29)
 
 All per-repo CIs are green. Full `mvn verify` times from latest successful runs.
 
@@ -475,16 +486,25 @@ The `mvn-all.yml` workflow is parameterised via `workflow_dispatch` inputs:
 | `enforcer` | boolean | `false` | When true, runs Maven enforcer plugin. |
 | `maven_args` | string | (empty) | Escape hatch for additional Maven flags. Passed via `GITHUB_ENV` to prevent shell injection. |
 | `resume_from` | choice | (empty) | Resume from: `g1`, `g3`, `g4`, or `g5`. Skips prepare + platform-slices jobs entirely; build job uses cached `.m2`. |
+| `submodule_update` | choice | `pinned` | `pinned` = use committed SHAs (deterministic); `all` = pull latest main for all repos; `list` = pull latest only for repos named in `submodule_list`. |
+| `submodule_list` | string | (empty) | Comma-separated repo names to update (only when `submodule_update=list`). E.g. `engine,aml,claudony`. |
+| `retry_count` | number | `0` | Auto-retry counter. Set automatically by the retry step — do not set manually. Max 2 retries. |
 
 ```bash
-# Default (compile-only, no tests)
+# Default (compile-only, pinned SHAs, no tests)
 gh workflow run mvn-all.yml --repo casehubio/casehub-all
 
-# Compile tests but don't run them (surfaces cross-repo API drift)
-gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=compile
-
-# Full test run
+# Full test run with pinned SHAs (recommended for verification)
 gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run
+
+# Pull latest main for all repos, then full test run
+gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f submodule_update=all
+
+# Pull latest for specific repos only (after fixing a repo)
+gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f submodule_update=list -f submodule_list="engine,aml"
+
+# Resume from G3 after fixing an engine test (uses cached G1/G2 artifacts)
+gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f resume_from=g3
 ```
 
 `MVN_COMMON` is assembled dynamically from inputs in the "Configure Maven
@@ -500,6 +520,18 @@ changed since the cached run. The Maven `.m2` cache is keyed on
 individual repo SNAPSHOTs are republished. Stale cache artifacts can mask
 or fabricate failures. Always run a full build (no `resume_from`) for
 definitive verification.
+
+The auto-retry mechanism uses `resume_from` to skip already-green groups.
+This is safe for transient failures (corrupted downloads, runner timeouts)
+but will retry deterministic failures too — the 2-retry cap prevents
+infinite loops.
+
+### Stale cache between jobs
+The convergence job restores a Maven cache from a previous run, which may
+contain stale or corrupted casehub snapshot JARs. A purge step
+(`rm -rf ~/.m2/repository/io/casehub`) runs before downloading fresh
+artifacts from the slice jobs. This ensures the convergence build always
+uses artifacts from the current run's slices, not stale cache entries.
 
 ### Pointer advance race
 The workflow advances submodule pointers and pushes on success. If two runs
