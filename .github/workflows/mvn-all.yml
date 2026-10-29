@@ -398,6 +398,32 @@ jobs:
           path: platform
           merge-multiple: true
 
+      - name: Validate downloaded artifacts
+        if: inputs.resume_from == ''
+        run: |
+          echo "::group::Validating JARs"
+          CORRUPT=0
+          while IFS= read -r -d '' jar; do
+            if ! jar tf "$jar" > /dev/null 2>&1; then
+              echo "::error::Corrupt JAR: $jar"
+              CORRUPT=$((CORRUPT + 1))
+            fi
+          done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
+          echo "::endgroup::"
+          echo "::group::Validating Jandex indexes"
+          while IFS= read -r -d '' idx; do
+            if [ ! -s "$idx" ]; then
+              echo "::error::Empty Jandex index: $idx"
+              CORRUPT=$((CORRUPT + 1))
+            fi
+          done < <(find platform -name 'jandex.idx' -print0)
+          echo "::endgroup::"
+          if [ "$CORRUPT" -gt 0 ]; then
+            echo "::error::$CORRUPT corrupt artifact(s) detected — re-trigger the build"
+            exit 1
+          fi
+          echo "All artifacts validated"
+
       # ── Phase 2: Platform convergence ─────────────────────────────────
       - name: "Platform: convergence"
         id: platform-convergence
