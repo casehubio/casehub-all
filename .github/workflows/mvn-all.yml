@@ -428,8 +428,17 @@ jobs:
       - name: "Platform: convergence"
         id: platform-convergence
         if: inputs.resume_from == ''
-        run: mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 10
+        run: |
+          if mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON $MAVEN_ARGS; then
+            echo "::notice::Convergence succeeded on first attempt"
+          else
+            echo "::warning::Convergence failed — purging casehub artifacts and retrying once"
+            rm -rf ~/.m2/repository/io/casehub
+            mvn install -N -f parent/pom.xml --batch-mode -q
+            mvn install -N -f platform/pom.xml --batch-mode -q
+            mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON $MAVEN_ARGS
+          fi
+        timeout-minutes: 20
 
       # ── Phase 3: G1 Core libs ─────────────────────────────────────────
       - name: "G1: Core libraries (worker, ledger, connectors, neocortex, pages)"
