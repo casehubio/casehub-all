@@ -444,8 +444,8 @@ jobs:
           echo "::endgroup::"
           echo "::group::Validating Jandex indexes"
           while IFS= read -r -d '' idx; do
-            if [ ! -s "$idx" ]; then
-              echo "::warning::Empty Jandex index (deleted): $idx"
+            if [ ! -s "$idx" ] || ! python3 -c "f=open('$idx','rb');m=f.read(2);f.close();exit(0 if m==b'\\xca\\xfe' else 1)" 2>/dev/null; then
+              echo "::warning::Corrupt Jandex index (deleted): $idx"
               rm -f "$idx"
               CORRUPT=$((CORRUPT + 1))
             fi
