@@ -458,18 +458,12 @@ jobs:
           fi
 
       # ── Phase 2: Platform convergence ─────────────────────────────────
-      - name: "Platform: convergence"
+      - name: "Platform: convergence (full rebuild)"
         id: platform-convergence
         if: inputs.resume_from == ''
         run: |
-          if mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON $MAVEN_ARGS; then
-            echo "::notice::Convergence succeeded on first attempt"
-          else
-            echo "::warning::Convergence failed — cleaning convergence targets and retrying once"
-            find platform -maxdepth 2 -name target -type d -exec rm -rf {} + 2>/dev/null || true
-            mvn install -T 1C -f platform/aggregator-convergence.xml $MVN_COMMON $MAVEN_ARGS
-          fi
-        timeout-minutes: 20
+          mvn install -T 1C -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 30
 
       # ── Phase 3: G1 Core libs ─────────────────────────────────────────
       - name: "G1: Core libraries (worker, ledger, connectors, neocortex, pages)"
