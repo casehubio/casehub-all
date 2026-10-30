@@ -105,6 +105,8 @@ function renderCurrent(current) {
     <a href="${current.run_url}" target="_blank">Run #${current.run_id}</a>
     <span class="commit">${current.commit || ''}</span>
     <span style="color:var(--muted)">started ${elapsed(current.started)} ago</span>
+    ${current.resume_from ? `<span style="color:var(--yellow)">resumed from ${current.resume_from}</span>` : ''}
+    ${current.retry_count > 0 ? `<span style="color:var(--yellow)">retry #${current.retry_count}</span>` : ''}
   `;
 
   const pipeline = document.getElementById('pipeline');
@@ -116,10 +118,16 @@ function renderCurrent(current) {
     if (p.modules) stats.push(`${p.modules} modules`);
     if (p.tests_run) stats.push(`${p.tests_run} tests`);
     if (p.tests_failed) stats.push(`<span style="color:var(--red)">${p.tests_failed} failed</span>`);
+    if (p.tests_flaky) stats.push(`<span style="color:var(--yellow)">${p.tests_flaky} flaky</span>`);
+    if (p.timeouts) stats.push(`<span style="color:var(--red)">${p.timeouts} timeout</span>`);
+    const healing = p.self_healing;
+    const healed = healing && (healing.corrupt_jars_deleted || healing.corrupt_jandex_deleted || healing.retries);
     return `<div class="phase ${p.status}">
       <div class="name">${p.name}</div>
       <div class="dur">${dur || '—'}</div>
       ${stats.length ? `<div class="dur">${stats.join(' · ')}</div>` : ''}
+      ${healed ? `<div class="dur" style="color:var(--yellow)">🔧 ${healing.corrupt_jars_deleted || 0} JARs · ${healing.corrupt_jandex_deleted || 0} Jandex · ${healing.retries || 0} retries</div>` : ''}
+      ${p.failed_modules ? `<div class="dur" style="color:var(--red)">${p.failed_modules.join(', ')}</div>` : ''}
     </div>`;
   }).join('');
 }

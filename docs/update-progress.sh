@@ -57,13 +57,37 @@ if time_match:
     else:
         total_time_s = int(float(t))
 
+# Flaky tests (surefire 3.5.5 reports Flakes: N)
+flakes = sum(int(m) for m in re.findall(r'Flakes: (\d+)', log))
+
+# Timeouts
+timeouts = len(re.findall(r'TimeoutException|timed out|forkedProcessTimeoutInSeconds', log, re.IGNORECASE))
+
+# Failed modules from reactor summary
+failed_modules = re.findall(r'^\[INFO\] ([\w. -]+?) \.+ FAILURE', log, re.MULTILINE)
+
+# Robustness events — artifact validation, retries, self-healing
+corrupt_jars = len(re.findall(r'Corrupt JAR', log))
+corrupt_jandex = len(re.findall(r'Corrupt Jandex', log))
+retries = len(re.findall(r'retrying once|retry', log, re.IGNORECASE))
+
 stats = {
     'modules': modules,
     'tests_run': tests_run,
     'tests_failed': failures + errors,
     'tests_skipped': skipped,
+    'tests_flaky': flakes,
+    'timeouts': timeouts,
     'maven_time_s': total_time_s
 }
+if failed_modules:
+    stats['failed_modules'] = [m.strip() for m in failed_modules]
+if corrupt_jars or corrupt_jandex or retries:
+    stats['self_healing'] = {
+        'corrupt_jars_deleted': corrupt_jars,
+        'corrupt_jandex_deleted': corrupt_jandex,
+        'retries': retries
+    }
 print(json.dumps(stats))
 " 2>/dev/null || echo '{}'
 }
@@ -77,11 +101,15 @@ case "${1:-}" in
     UPDATED=$(python3 -c "
 import json, sys
 data = json.loads(sys.stdin.read())
+resume_from = '${RESUME_FROM:-}'
+retry_count = '${RETRY_COUNT:-0}'
 data['current'] = {
     'run_id': ${GITHUB_RUN_ID:-0},
     'run_url': '$RUN_URL',
     'commit': '${GITHUB_SHA:0:7}',
     'started': '$NOW',
+    'resume_from': resume_from or None,
+    'retry_count': int(retry_count) if retry_count else 0,
     'phases': [{'name': p, 'status': 'pending'} for p in [
         'Prepare + Platform base', 'Slice A', 'Slice B', 'Slice C', 'Slice D',
         'Platform convergence', 'G1: Core libs', 'G2: Domain',

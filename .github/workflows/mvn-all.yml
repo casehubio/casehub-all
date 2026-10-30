@@ -394,6 +394,9 @@ jobs:
       - name: Initialize CI dashboard
         run: bash docs/update-progress.sh init
         continue-on-error: true
+        env:
+          RESUME_FROM: ${{ inputs.resume_from }}
+          RETRY_COUNT: ${{ inputs.retry_count }}
 
       - name: Purge all casehub snapshots from cache
         run: rm -rf ~/.m2/repository/io/casehub
@@ -432,6 +435,7 @@ jobs:
       - name: Validate downloaded artifacts
         if: inputs.resume_from == ''
         run: |
+          exec > >(tee /tmp/validation.log) 2>&1
           echo "::group::Validating JARs"
           CORRUPT=0
           while IFS= read -r -d '' jar; do
@@ -464,7 +468,9 @@ jobs:
         run: |
           bash docs/update-progress.sh phase "Platform convergence" in_progress || true
           mvn install -T 1C -DskipTests -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/convergence.log
-          bash docs/update-progress.sh phase "Platform convergence" success /tmp/convergence.log || true
+          # Prepend validation log so self-healing events are captured
+          cat /tmp/validation.log /tmp/convergence.log > /tmp/convergence-full.log 2>/dev/null || true
+          bash docs/update-progress.sh phase "Platform convergence" success /tmp/convergence-full.log || true
         timeout-minutes: 20
 
       # ── Phase 3: G1 Core libs ─────────────────────────────────────────
