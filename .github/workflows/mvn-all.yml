@@ -76,6 +76,38 @@ jobs:
       mvn-common: ${{ steps.flags.outputs.mvn-common }}
       maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
+      - name: Initialize CI dashboard
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          GIST_ID="2858101a4be664207373bf9491005f7d"
+          python3 - "$GIST_ID" "$RUN_URL" "$NOW" "${{ inputs.resume_from }}" "${{ inputs.retry_count || 0 }}" "${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" <<'PYEOF'
+          import json, sys, subprocess
+          gist_id, run_url, now, resume, retry, run_id, sha = sys.argv[1:8]
+          try:
+            r = subprocess.run(['gh','api',f'gists/{gist_id}','--jq','.files["progress.json"].content'], capture_output=True, text=True)
+            old = json.loads(r.stdout) if r.returncode == 0 else {}
+          except: old = {}
+          phases = ['Prepare + Platform base','Slice A','Slice B','Slice C','Slice D',
+                    'Platform convergence','G1: Core libs','G2: Domain',
+                    'G3: Middleware','G4: Extensions','G5+G6: Apps']
+          data = {
+            'current': {'run_id': int(run_id), 'run_url': run_url, 'commit': sha,
+                        'started': now, 'resume_from': resume or None,
+                        'retry_count': int(retry),
+                        'phases': [{'name': p, 'status': 'pending'} for p in phases]},
+            'history': old.get('history', []),
+            '_archives': old.get('_archives', [])
+          }
+          content = json.dumps(data, indent=2)
+          escaped = json.dumps(content)
+          payload = f'{{"files":{{"progress.json":{{"content":{escaped}}}}}}}'
+          subprocess.run(['gh','api',f'gists/{gist_id}','-X','PATCH','--input','-'],
+                         input=payload, text=True, capture_output=True)
+          PYEOF
+          echo "::notice::Dashboard: https://casehub.org/casehub-all/"
+        continue-on-error: true
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -146,12 +178,6 @@ jobs:
           echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
-      - name: Initialize CI dashboard
-        run: bash docs/update-progress.sh init
-        continue-on-error: true
-        env:
-          RESUME_FROM: ${{ inputs.resume_from }}
-          RETRY_COUNT: ${{ inputs.retry_count }}
 
       - name: Install parent POMs
         run: |
