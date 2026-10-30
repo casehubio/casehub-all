@@ -93,7 +93,7 @@ jobs:
                         'resume_from': '${{ inputs.resume_from }}' or None,
                         'retry_count': ${{ inputs.retry_count || 0 }},
                         'phases': [{'name': p, 'status': 'pending'} for p in [
-                          'Prepare + Platform base','Slice A','Slice B','Slice C','Slice D',
+                          'Prepare + Platform base','Platform A','Platform B','Platform C','Platform D',
                           'Platform convergence','G1: Core libs','G2: Domain',
                           'G3: Middleware','G4: Extensions','G5+G6: Apps']]},
             'history': old.get('history', []),
@@ -283,7 +283,7 @@ jobs:
 
       - name: "Build slice ${{ matrix.slice }}"
         run: |
-          SLICE_NAME="Slice $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
+          SLICE_NAME="Platform $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
           bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -T 1C -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
 

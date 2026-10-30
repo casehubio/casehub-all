@@ -205,7 +205,7 @@ print(json.dumps(data, indent=2))
     # Fetch each phase file that exists for this run
     PHASE_FILES='{}'
     if [ -n "$RUN_ID" ]; then
-      for phase_name in "prepare---platform-base" "slice-a" "slice-b" "slice-c" "slice-d"; do
+      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d"; do
         KEY="phase-${RUN_ID}-${phase_name}"
         CONTENT=$(curl -sf "$WORKER_URL/$KEY" 2>/dev/null || echo "")
         if [ -n "$CONTENT" ] && [ "$CONTENT" != "{}" ]; then
@@ -274,7 +274,7 @@ print(json.dumps(data, indent=2))
 
     # Clean up phase files
     if [ -n "$RUN_ID" ]; then
-      for phase_name in "prepare---platform-base" "slice-a" "slice-b" "slice-c" "slice-d"; do
+      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d"; do
         curl -sf -X DELETE "$WORKER_URL/phase-${RUN_ID}-${phase_name}" \
           -H "Authorization: Bearer $WORKER_TOKEN" > /dev/null 2>&1 || true
       done

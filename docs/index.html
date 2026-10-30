@@ -191,16 +191,26 @@ function renderPipe(phases,id,clickFn){
   const el=document.getElementById(id);if(!el)return;
   const m={};(phases||[]).forEach(p=>m[p.name]=p);
   const prep=m['Prepare + Platform base'];
-  const slices=['Slice A','Slice B','Slice C','Slice D'].map(n=>m[n]);
-  const seq=['Platform convergence','G1: Core libs','G2: Domain','G3: Middleware','G4: Extensions','G5+G6: Apps'].map(n=>m[n]);
+  const plat=['Platform A','Platform B','Platform C','Platform D'].map(n=>m[n]);
+  const conv=m['Platform convergence'];
+  const g1=m['G1: Core libs'], g2=m['G2: Domain'];
+  const g3=m['G3: Middleware'], g4=m['G4: Extensions'], g56=m['G5+G6: Apps'];
   el.innerHTML=`<div class="pipe">`+
     `<div class="pipe-row pipe-full">${phaseBox(prep,clickFn)}</div>`+
     `<div class="pipe-connector"></div>`+
     `<div class="pipe-fan"></div>`+
-    `<div class="pipe-row pipe-parallel">${slices.map(s=>phaseBox(s,clickFn)).join('')}</div>`+
+    `<div class="pipe-row pipe-parallel">${plat.map(s=>phaseBox(s,clickFn)).join('')}</div>`+
     `<div class="pipe-fan"></div>`+
     `<div class="pipe-connector"></div>`+
-    seq.map(p=>`<div class="pipe-row pipe-full">${phaseBox(p,clickFn)}</div>`).join('')+
+    `<div class="pipe-row pipe-full">${phaseBox(conv,clickFn)}</div>`+
+    `<div class="pipe-connector"></div>`+
+    `<div class="pipe-fan"></div>`+
+    `<div class="pipe-row pipe-parallel" style="grid-template-columns:1fr 1fr">${phaseBox(g1,clickFn)}${phaseBox(g2,clickFn)}</div>`+
+    `<div class="pipe-fan"></div>`+
+    `<div class="pipe-connector"></div>`+
+    `<div class="pipe-row pipe-full">${phaseBox(g3,clickFn)}</div>`+
+    `<div class="pipe-row pipe-full">${phaseBox(g4,clickFn)}</div>`+
+    `<div class="pipe-row pipe-full">${phaseBox(g56,clickFn)}</div>`+
     `</div>`;
 }
 
@@ -280,8 +290,8 @@ function renderStats(hist){
 function renderCharts(hist){
   const el=document.getElementById('charts');if(!hist||hist.length<2){el.innerHTML='';return;}
   const runs=hist.slice(0,50).reverse();
-  const pn=['Prepare + P…','Slice A','Slice B','Slice C','Slice D','Convergence','G1','G2','G3','G4','G5+G6'];
-  const pfull=['Prepare + Platform base','Slice A','Slice B','Slice C','Slice D','Platform convergence','G1: Core libs','G2: Domain','G3: Middleware','G4: Extensions','G5+G6: Apps'];
+  const pn=['Prepare + P…','Platform A','Platform B','Platform C','Platform D','Convergence','G1','G2','G3','G4','G5+G6'];
+  const pfull=['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','G1: Core libs','G2: Domain','G3: Middleware','G4: Extensions','G5+G6: Apps'];
   el.innerHTML=`<div class="chart-card"><h3>Build Duration</h3><div id="ch-dur"></div></div>`+
     `<div class="chart-card"><h3>Test Count</h3><div id="ch-tests"></div></div>`+
     `<div class="chart-card"><h3>Phase Failure Heatmap</h3><div id="ch-heat"></div></div>`+
@@ -330,7 +340,7 @@ async function refresh(){
     // Merge phase files from parallel jobs
     if(data.current){
       const runId=data.current.run_id;
-      const phaseKeys=['prepare---platform-base','slice-a','slice-b','slice-c','slice-d'];
+      const phaseKeys=['prepare---platform-base','platform-a','platform-b','platform-c','platform-d'];
       await Promise.all(phaseKeys.map(async k=>{
         try{
           const pr=await fetch(`${WORKER_URL}/phase-${runId}-${k}`);
