@@ -680,21 +680,24 @@ jobs:
       - name: "G2: Domain (eidos, qhorus)"
         id: g2
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
-        run: bash docs/run-with-progress.sh "G2: Domain" mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS
+        run: |
+          bash docs/run-with-progress.sh "G2: Domain" mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
 
       # ── G3: Middleware ───────────────────────────────────────────────
       - name: "G3: Middleware (work, engine, drafthouse)"
         id: g3
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3'
-        run: bash docs/run-with-progress.sh "G3: Middleware" mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
+        run: |
+          bash docs/run-with-progress.sh "G3: Middleware" mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 60
 
       # ── G4: Extensions ──────────────────────────────────────────────
       - name: "G4: Extensions (ras, agency, langchain4j, mosaic, workers)"
         id: g4
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4'
-        run: bash docs/run-with-progress.sh "G4: Extensions" mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS
+        run: |
+          bash docs/run-with-progress.sh "G4: Extensions" mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 90
 
       # ── G5+G6: Apps ─────────────────────────────────────────────────
