@@ -331,6 +331,23 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
     steps:
+      - name: Dashboard — ecosystem job started
+        run: |
+          curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(curl -sf "$CI_DASHBOARD_URL/progress" | python3 -c "
+          import json,sys,datetime
+          d=json.load(sys.stdin)
+          if d.get('current'):
+            now=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            for p in d['current']['phases']:
+              if p['name']=='Platform convergence':
+                p['status']='in_progress'; p['started']=now; break
+          print(json.dumps(d))
+          ")" > /dev/null
+        continue-on-error: true
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
