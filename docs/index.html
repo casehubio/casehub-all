@@ -340,7 +340,7 @@ async function refresh(){
     // Merge phase files from parallel jobs
     if(data.current){
       const runId=data.current.run_id;
-      const phaseKeys=['prepare---platform-base','platform-a','platform-b','platform-c','platform-d'];
+      const phaseKeys=['prepare---platform-base','platform-a','platform-b','platform-c','platform-d','g1--worker','g1--ledger','g1--connectors','g1--neocortex','g1--pages'];
       await Promise.all(phaseKeys.map(async k=>{
         try{
           const pr=await fetch(`${WORKER_URL}/phase-${runId}-${k}`);

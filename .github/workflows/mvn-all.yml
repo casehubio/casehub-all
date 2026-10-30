@@ -96,8 +96,9 @@ jobs:
                           {'name': 'Prepare + Platform base', 'status': 'in_progress', 'started': '$NOW'},
                         ] + [{'name': p, 'status': 'pending'} for p in [
                           'Platform A','Platform B','Platform C','Platform D',
-                          'Platform convergence','G1: Core libs','G2: Domain',
-                          'G3: Middleware','G4: Extensions','G5+G6: Apps']]},
+                          'Platform convergence',
+                          'G1: worker','G1: ledger','G1: connectors','G1: neocortex','G1: pages',
+                          'G2: Domain','G3: Middleware','G4: Extensions','G5+G6: Apps']]},
             'history': old.get('history', []),
             '_archives': old.get('_archives', [])
           }
@@ -329,12 +330,12 @@ jobs:
           if-no-files-found: ignore
 
   # ════════════════════════════════════════════════════════════════════
-  # Phases 2-8: Convergence + G1-G6 ecosystem build
+  # Phase 2: Platform convergence — full rebuild from source
   # ════════════════════════════════════════════════════════════════════
-  build:
-    name: "Convergence + Ecosystem"
+  convergence:
+    name: "Platform convergence"
     needs: [prepare, platform-slices]
-    if: always() && !cancelled() && (needs.prepare.result == 'success' || inputs.resume_from != '')
+    if: inputs.resume_from == ''
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -343,8 +344,11 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+    outputs:
+      mvn-common: ${{ steps.flags.outputs.mvn-common }}
+      maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
-      - name: Dashboard — ecosystem job started
+      - name: Dashboard — convergence started
         run: |
           curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
@@ -356,7 +360,7 @@ jobs:
             now=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
             for p in d['current']['phases']:
               if p['name']=='Platform convergence':
-                p['status']='in_progress'; p['started']=now; break
+                p['status']='in_progress'; p.setdefault('started',now); break
           print(json.dumps(d))
           ")" > /dev/null
         continue-on-error: true
@@ -365,41 +369,6 @@ jobs:
         with:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        run: |
-          git config user.email "github-actions@github.com"
-          git config user.name "GitHub Actions"
-
-      - name: Update submodules
-        run: |
-          if [ "${{ inputs.submodule_update }}" = "all" ]; then
-            echo "Updating ALL submodules to latest main"
-            git submodule update --remote parent
-            git submodule update --remote
-          elif [ "${{ inputs.submodule_update }}" = "list" ]; then
-            echo "Updating parent + listed submodules: ${{ inputs.submodule_list }}"
-            git submodule update --remote parent
-            IFS=',' read -ra REPOS <<< "${{ inputs.submodule_list }}"
-            for repo in "${REPOS[@]}"; do
-              repo=$(echo "$repo" | xargs)
-              if [ -d "$repo" ]; then
-                echo "  Updating $repo"
-                git submodule update --remote "$repo"
-              else
-                echo "  WARNING: $repo not found, skipping"
-              fi
-            done
-          else
-            echo "Using pinned submodule SHAs (committed pointers)"
-          fi
-        timeout-minutes: 5
-
-      - name: Record SHA manifest
-        run: |
-          echo "::group::SHA manifest (pin these to reproduce this build)"
-          git submodule status | sort
-          echo "::endgroup::"
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -417,6 +386,222 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
 
+      - name: Configure Maven flags
+        id: flags
+        run: |
+          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
+          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
+            FLAGS="$FLAGS -DskipTests"
+          fi
+          if [ "${{ inputs.quarkus_build }}" != "true" ]; then
+            FLAGS="$FLAGS -Dquarkus.build.skip=true"
+          fi
+          if [ "${{ inputs.enforcer }}" != "true" ]; then
+            FLAGS="$FLAGS -Denforcer.skip=true"
+          fi
+          echo "MVN_COMMON=$FLAGS" >> "$GITHUB_ENV"
+          echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
+          echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
+          echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
+
+      - name: Purge all casehub snapshots from cache
+        run: rm -rf ~/.m2/repository/io/casehub
+
+      - name: Install parent POMs
+        run: |
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+
+      - name: Download platform .m2 artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: m2-platform-*
+          path: ~/.m2/repository/io/casehub
+          merge-multiple: true
+
+      - name: Download platform Jandex indexes
+        uses: actions/download-artifact@v4
+        with:
+          pattern: jandex-platform-*
+          path: platform
+          merge-multiple: true
+
+      - name: Validate downloaded artifacts
+        run: |
+          CORRUPT=0
+          while IFS= read -r -d '' jar; do
+            if ! jar tf "$jar" > /dev/null 2>&1; then
+              echo "::warning::Corrupt JAR (deleted): $jar"
+              rm -f "$jar"
+              CORRUPT=$((CORRUPT + 1))
+            fi
+          done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
+          while IFS= read -r -d '' idx; do
+            if [ ! -s "$idx" ] || ! python3 -c "f=open('$idx','rb');m=f.read(2);f.close();exit(0 if m==b'\\xca\\xfe' else 1)" 2>/dev/null; then
+              echo "::warning::Corrupt Jandex (deleted): $idx"
+              rm -f "$idx"
+              CORRUPT=$((CORRUPT + 1))
+            fi
+          done < <(find platform -name 'jandex.idx' -print0)
+          if [ "$CORRUPT" -gt 0 ]; then echo "::warning::$CORRUPT corrupt artifact(s) deleted"; fi
+
+      - name: "Platform: full rebuild (-DskipTests)"
+        run: bash docs/run-with-progress.sh "Platform convergence" mvn install -T 1C -DskipTests -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 20
+
+      - name: Upload convergence artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-ecosystem-base
+          path: ~/.m2/repository/io/casehub
+          retention-days: 1
+          compression-level: 1
+
+  # ════════════════════════════════════════════════════════════════════
+  # Phase 3: G1 repos — 5 parallel jobs (worker, ledger, connectors, neocortex, pages)
+  # ════════════════════════════════════════════════════════════════════
+  g1-repos:
+    name: "G1: ${{ matrix.repo }}"
+    needs: convergence
+    if: inputs.resume_from == ''
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: [worker, ledger, connectors, neocortex, pages]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+    steps:
+      - name: Dashboard — G1 ${{ matrix.repo }} started
+        run: |
+          PHASE_NAME="G1: ${{ matrix.repo }}"
+          SAFE_NAME="${GITHUB_RUN_ID}-g1--${{ matrix.repo }}"
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE_NAME" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"$PHASE_NAME\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
+        continue-on-error: true
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
+
+      - name: Purge casehub snapshots
+        run: rm -rf ~/.m2/repository/io/casehub
+
+      - name: Install parent POMs
+        run: |
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+
+      - name: Download convergence artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: m2-ecosystem-base
+          path: ~/.m2/repository/io/casehub
+
+      - name: "Build ${{ matrix.repo }}"
+        run: |
+          bash docs/run-with-progress.sh --parallel "G1: ${{ matrix.repo }}" mvn install -fae -T 1C -f ${{ matrix.repo }}/pom.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 25
+
+      - name: Upload repo artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: m2-g1-${{ matrix.repo }}
+          path: ~/.m2/repository/io/casehub
+          retention-days: 1
+          compression-level: 1
+
+  # ════════════════════════════════════════════════════════════════════
+  # Phases 4-8: G2-G6 ecosystem build
+  # ════════════════════════════════════════════════════════════════════
+  ecosystem:
+    name: "Ecosystem (G2-G6)"
+    needs: [prepare, convergence, g1-repos]
+    if: always() && !cancelled() && (needs.g1-repos.result == 'success' || inputs.resume_from != '')
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.email "github-actions@github.com"
+          git config user.name "GitHub Actions"
+
+      - name: Update submodules
+        run: |
+          if [ "${{ inputs.submodule_update }}" = "all" ]; then
+            git submodule update --remote parent
+            git submodule update --remote
+          elif [ "${{ inputs.submodule_update }}" = "list" ]; then
+            git submodule update --remote parent
+            IFS=',' read -ra REPOS <<< "${{ inputs.submodule_list }}"
+            for repo in "${REPOS[@]}"; do
+              repo=$(echo "$repo" | xargs)
+              [ -d "$repo" ] && git submodule update --remote "$repo"
+            done
+          fi
+        timeout-minutes: 5
+
+      - name: Record SHA manifest
+        run: |
+          echo "::group::SHA manifest"
+          git submodule status | sort
+          echo "::endgroup::"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
@@ -432,13 +617,11 @@ jobs:
           echo "mosaic=$(git -C casehub-mosaic rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "drafthouse=$(git -C drafthouse rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Cache frontend builds (keyed by submodule SHA)
+      - name: Cache frontend builds
         id: frontend-cache
         uses: actions/cache@v4
         with:
           path: |
-            pages/node_modules
-            pages/backend/*/target/quinoa
             casehub-mosaic/node_modules
             casehub-mosaic/.yarn/cache
             casehub-mosaic/packages/*/dist
@@ -446,7 +629,14 @@ jobs:
             casehub-mosaic/**/tsconfig.tsbuildinfo
             drafthouse/server/runtime/src/main/webui/node_modules
             drafthouse/server/runtime/target/quinoa
-          key: frontend-${{ runner.os }}-${{ steps.frontend-shas.outputs.pages }}-${{ steps.frontend-shas.outputs.mosaic }}-${{ steps.frontend-shas.outputs.drafthouse }}
+          key: frontend-${{ runner.os }}-${{ steps.frontend-shas.outputs.mosaic }}-${{ steps.frontend-shas.outputs.drafthouse }}
+
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
 
       - name: Configure Maven flags
         run: |
@@ -462,9 +652,8 @@ jobs:
           fi
           echo "MVN_COMMON=$FLAGS" >> "$GITHUB_ENV"
           echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
-          echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
-      - name: Purge all casehub snapshots from cache
+      - name: Purge casehub snapshots
         run: rm -rf ~/.m2/repository/io/casehub
 
       - name: Install parent POMs
@@ -472,101 +661,43 @@ jobs:
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
 
-      # Download all platform artifacts from slice jobs
-      - name: Download platform .m2 artifacts
+      - name: Download convergence artifacts
         if: inputs.resume_from == ''
         uses: actions/download-artifact@v4
         with:
-          pattern: m2-platform-*
+          name: m2-ecosystem-base
+          path: ~/.m2/repository/io/casehub
+
+      - name: Download G1 artifacts
+        if: inputs.resume_from == ''
+        uses: actions/download-artifact@v4
+        with:
+          pattern: m2-g1-*
           path: ~/.m2/repository/io/casehub
           merge-multiple: true
 
-      - name: Download platform Jandex indexes
-        if: inputs.resume_from == ''
-        uses: actions/download-artifact@v4
-        with:
-          pattern: jandex-platform-*
-          path: platform
-          merge-multiple: true
-
-      - name: Verify downloaded platform modules
-        if: inputs.resume_from == ''
-        run: |
-          echo "::group::Platform modules in .m2 after download"
-          ls ~/.m2/repository/io/casehub/ | grep casehub-platform | sort
-          COUNT=$(ls -d ~/.m2/repository/io/casehub/casehub-platform*/ 2>/dev/null | wc -l)
-          echo "::notice::$COUNT platform module directories found"
-          echo "::endgroup::"
-
-      - name: Validate downloaded artifacts
-        if: inputs.resume_from == ''
-        run: |
-          echo "::group::Validating JARs"
-          CORRUPT=0
-          while IFS= read -r -d '' jar; do
-            if ! jar tf "$jar" > /dev/null 2>&1; then
-              echo "::warning::Corrupt JAR (deleted): $jar"
-              rm -f "$jar"
-              CORRUPT=$((CORRUPT + 1))
-            fi
-          done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
-          echo "::endgroup::"
-          echo "::group::Validating Jandex indexes"
-          while IFS= read -r -d '' idx; do
-            if [ ! -s "$idx" ] || ! python3 -c "f=open('$idx','rb');m=f.read(2);f.close();exit(0 if m==b'\\xca\\xfe' else 1)" 2>/dev/null; then
-              echo "::warning::Corrupt Jandex index (deleted): $idx"
-              rm -f "$idx"
-              CORRUPT=$((CORRUPT + 1))
-            fi
-          done < <(find platform -name 'jandex.idx' -print0)
-          echo "::endgroup::"
-          if [ "$CORRUPT" -gt 0 ]; then
-            echo "::warning::$CORRUPT corrupt artifact(s) deleted — Maven will rebuild from source"
-          else
-            echo "All artifacts validated"
-          fi
-
-      # ── Phase 2: Platform convergence ─────────────────────────────────
-      - name: "Platform: convergence (full rebuild, tests already ran in slices)"
-        id: platform-convergence
-        if: inputs.resume_from == '' && needs.platform-slices.result == 'success'
-        run: |
-          bash docs/run-with-progress.sh "Platform convergence" mvn install -T 1C -DskipTests -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 20
-
-      # ── Phase 3: G1 Core libs ─────────────────────────────────────────
-      - name: "G1: Core libraries (worker, ledger, connectors, neocortex, pages)"
-        id: g1
-        if: inputs.resume_from == '' || inputs.resume_from == 'g1'
-        run: |
-          bash docs/run-with-progress.sh "G1: Core libs" mvn install -fae -T 1C -f parent/aggregator-g1-core-libs.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 25
-
-      # ── Phase 4: G2 Domain ────────────────────────────────────────────
+      # ── G2: Domain ───────────────────────────────────────────────────
       - name: "G2: Domain (eidos, qhorus)"
         id: g2
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
-        run: |
-          bash docs/run-with-progress.sh "G2: Domain" mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS
+        run: bash docs/run-with-progress.sh "G2: Domain" mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
 
-      # ── Phase 5: G3 Middleware ────────────────────────────────────────
+      # ── G3: Middleware ───────────────────────────────────────────────
       - name: "G3: Middleware (work, engine, drafthouse)"
         id: g3
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3'
-        run: |
-          bash docs/run-with-progress.sh "G3: Middleware" mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
+        run: bash docs/run-with-progress.sh "G3: Middleware" mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 60
 
-      # ── Phase 6: G4 Extensions ───────────────────────────────────────
+      # ── G4: Extensions ──────────────────────────────────────────────
       - name: "G4: Extensions (ras, agency, langchain4j, mosaic, workers)"
         id: g4
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4'
-        run: |
-          bash docs/run-with-progress.sh "G4: Extensions" mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS
+        run: bash docs/run-with-progress.sh "G4: Extensions" mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 90
 
-      # ── Phase 7+8: G5+G6 Apps ────────────────────────────────────────
+      # ── G5+G6: Apps ─────────────────────────────────────────────────
       - name: "G5+G6: Apps (independent, then chain)"
         id: g5g6
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4' || inputs.resume_from == 'g5'
@@ -574,7 +705,7 @@ jobs:
           bash docs/run-with-progress.sh "G5+G6: Apps" bash -c "mvn install -fae -T 1C -f parent/aggregator-g5-apps-independent.xml $MVN_COMMON $MAVEN_ARGS && mvn install -fae -T 1C -f parent/aggregator-g6-apps-chain.xml $MVN_COMMON $MAVEN_ARGS"
         timeout-minutes: 90
 
-      # ── Finalize dashboard ───────────────────────────────────────────
+      # ── Finalize dashboard ──────────────────────────────────────────
       - name: Finalize CI dashboard
         if: always()
         run: |
@@ -584,7 +715,7 @@ jobs:
             bash docs/update-progress.sh finish failure || true
           fi
 
-      # ── Advance pointers ─────────────────────────────────────────────
+      # ── Advance pointers ────────────────────────────────────────────
       - name: Advance submodule pointers
         if: success()
         run: |
@@ -601,7 +732,7 @@ jobs:
           {
             echo "# Maven All"
             echo ""
-            echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Tests: \`${{ inputs.test_mode }}\` | Quarkus build: \`${{ inputs.quarkus_build }}\` | Enforcer: \`${{ inputs.enforcer }}\` | Args: \`$MAVEN_ARGS\` | Resume: \`${{ inputs.resume_from || 'none' }}\`_"
+            echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Tests: \`${{ inputs.test_mode }}\` | Resume: \`${{ inputs.resume_from || 'none' }}\`_"
             echo ""
             if [ "${{ job.status }}" = "success" ]; then
               echo "✅ **Reactor build passed — pointers advanced.**"
@@ -609,36 +740,20 @@ jobs:
               echo "❌ **Reactor build failed — pointers unchanged.**"
             fi
             echo ""
-            echo "## Frontend Cache"
-            echo ""
-            if [ "${{ steps.frontend-cache.outputs.cache-hit }}" = "true" ]; then
-              echo "✅ **Cache HIT** — yarn install + tsc build skipped for unchanged modules"
-            else
-              echo "⬜ **Cache MISS** — full frontend rebuild (first run or SHA changed)"
-            fi
-            echo ""
-            echo "| Module | SHA |"
-            echo "|--------|-----|"
-            echo "| pages | \`${{ steps.frontend-shas.outputs.pages }}\` |"
-            echo "| mosaic | \`${{ steps.frontend-shas.outputs.mosaic }}\` |"
-            echo "| drafthouse | \`${{ steps.frontend-shas.outputs.drafthouse }}\` |"
-            echo ""
             echo "## SHA Manifest"
             echo '```'
             git submodule status | sort
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # ── Auto-retry on transient failure ──────────────────────────────
+      # ── Auto-retry on transient failure ─────────────────────────────
       - name: Auto-retry on transient failure
         if: failure() && inputs.retry_count < 2
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           RESUME=""
-          if [ "${{ steps.platform-convergence.outcome }}" = "failure" ]; then
-            RESUME=""
-          elif [ "${{ steps.g1.outcome }}" = "failure" ]; then
+          if [ "${{ steps.g2.outcome }}" = "failure" ]; then
             RESUME="g1"
           elif [ "${{ steps.g3.outcome }}" = "failure" ]; then
             RESUME="g3"
@@ -648,7 +763,7 @@ jobs:
             RESUME="g5"
           fi
           RETRY=$(( ${{ inputs.retry_count }} + 1 ))
-          echo "::warning::Build failed at ${RESUME:-platform-convergence}. Auto-retrying (attempt $RETRY/2) with resume_from=${RESUME:-empty}"
+          echo "::warning::Build failed. Auto-retrying (attempt $RETRY/2) with resume_from=${RESUME:-empty}"
           gh workflow run mvn-all.yml \
             -f test_mode=${{ inputs.test_mode }} \
             -f submodule_update=${{ inputs.submodule_update }} \
