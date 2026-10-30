@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       test_mode:
-        description: "skip = no compile/run, compile = compile only, run = compile + run"
+        description: "skip = compile only (no run), compile = compile only (no run), run = compile + run"
         type: choice
         options:
           - skip
@@ -130,9 +130,7 @@ jobs:
         id: flags
         run: |
           FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
-          if [ "${{ inputs.test_mode }}" = "skip" ]; then
-            FLAGS="$FLAGS -Dmaven.test.skip=true"
-          elif [ "${{ inputs.test_mode }}" = "compile" ]; then
+          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
             FLAGS="$FLAGS -DskipTests"
           fi
           if [ "${{ inputs.quarkus_build }}" != "true" ]; then
@@ -380,9 +378,7 @@ jobs:
       - name: Configure Maven flags
         run: |
           FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
-          if [ "${{ inputs.test_mode }}" = "skip" ]; then
-            FLAGS="$FLAGS -Dmaven.test.skip=true"
-          elif [ "${{ inputs.test_mode }}" = "compile" ]; then
+          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
             FLAGS="$FLAGS -DskipTests"
           fi
           if [ "${{ inputs.quarkus_build }}" != "true" ]; then
