@@ -362,12 +362,12 @@ async function refresh(){
       const phaseKeys=[
         'prepare---platform-base','platform-a','platform-b','platform-c','platform-d',
         'g1--worker','g1--ledger','g1--connectors','g1--neocortex','g1--pages',
-        'g3--work','g3--drafthouse',
-        'g4--ras','g4--casehub-langchain4j','g4--workers',
+        'g3--work','g3--drafthouse','g3--engine',
+        'g4--ras','g4--langchain4j','g4--workers','g4--agency-mosaic',
         'app--claudony','app--openclaw','app--soc','app--desiredstate',
         'app--life',
         'app--devtown','app--aml','app--clinical','app--quarkmind','app--scaffold','app--iot','app--chat-app',
-        'app--ops'
+        'app--ops','app--fsitrading'
       ];
       await Promise.all(phaseKeys.map(async k=>{
         try{
