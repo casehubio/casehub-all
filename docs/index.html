@@ -121,8 +121,8 @@ a:hover { text-decoration: underline; }
 </div>
 
 <script>
-const GIST_API='https://api.github.com/gists/2858101a4be664207373bf9491005f7d';
-const POLL_MS=60000;
+const WORKER_URL='https://casehub-ci-dashboard.casehub.workers.dev';
+const POLL_MS=10000;
 function fmt(s){if(!s&&s!==0)return'—';if(s<60)return s+'s';const m=Math.floor(s/60),r=s%60;if(m<60)return r>0?m+'m'+r+'s':m+'m';return Math.floor(m/60)+'h'+(m%60)+'m';}
 function ago(t){return t?fmt(Math.floor((Date.now()-new Date(t).getTime())/1000)):'';}
 function shortDate(iso){if(!iso)return'?';const d=new Date(iso);return d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');}
@@ -325,21 +325,20 @@ function toggleHist(i){
 // ── Refresh ────────────────────────────────────────────────────────
 async function refresh(){
   try{
-    const r=await fetch(GIST_API);if(!r.ok)throw new Error('HTTP '+r.status);
-    const gist=await r.json();const raw=gist.files['progress.json'].content;
-    const data=JSON.parse(raw);
-    // Merge phase-*.json files into current build phases
+    const r=await fetch(WORKER_URL+'/progress');if(!r.ok)throw new Error('HTTP '+r.status);
+    const data=await r.json();
+    // Merge phase files from parallel jobs
     if(data.current){
       const runId=data.current.run_id;
-      Object.entries(gist.files).forEach(([name,file])=>{
-        if(name.startsWith('phase-')&&name.endsWith('.json')){
-          try{
-            const pd=JSON.parse(file.content);
-            const ph=data.current.phases.find(p=>p.name===pd.name);
-            if(ph)Object.assign(ph,{...pd,name:ph.name});
-          }catch(e){}
-        }
-      });
+      const phaseKeys=['prepare---platform-base','slice-a','slice-b','slice-c','slice-d'];
+      await Promise.all(phaseKeys.map(async k=>{
+        try{
+          const pr=await fetch(`${WORKER_URL}/phase-${runId}-${k}`);
+          if(!pr.ok)return;
+          const pd=await pr.json();
+          if(pd.name){const ph=data.current.phases.find(p=>p.name===pd.name);if(ph)Object.assign(ph,{...pd,name:ph.name});}
+        }catch(e){}
+      }));
     }
     window._data=data;
     renderCurrent(data.current,data.history);renderStats(data.history);renderCharts(data.history);renderHistory(data.history);

@@ -70,6 +70,8 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
     outputs:
@@ -80,32 +82,31 @@ jobs:
         run: |
           NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          GIST_ID="2858101a4be664207373bf9491005f7d"
-          python3 - "$GIST_ID" "$RUN_URL" "$NOW" "${{ inputs.resume_from }}" "${{ inputs.retry_count || 0 }}" "${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" <<'PYEOF'
-          import json, sys, subprocess
-          gist_id, run_url, now, resume, retry, run_id, sha = sys.argv[1:8]
-          try:
-            r = subprocess.run(['gh','api',f'gists/{gist_id}','--jq','.files["progress.json"].content'], capture_output=True, text=True)
-            old = json.loads(r.stdout) if r.returncode == 0 else {}
-          except: old = {}
-          phases = ['Prepare + Platform base','Slice A','Slice B','Slice C','Slice D',
-                    'Platform convergence','G1: Core libs','G2: Domain',
-                    'G3: Middleware','G4: Extensions','G5+G6: Apps']
+          WORKER="${CI_DASHBOARD_URL}"
+          OLD=$(curl -sf "$WORKER/progress" 2>/dev/null || echo '{}')
+          python3 -c "
+          import json, sys
+          old = json.loads(sys.argv[1])
           data = {
-            'current': {'run_id': int(run_id), 'run_url': run_url, 'commit': sha,
-                        'started': now, 'resume_from': resume or None,
-                        'retry_count': int(retry),
-                        'phases': [{'name': p, 'status': 'pending'} for p in phases]},
+            'current': {'run_id': ${GITHUB_RUN_ID}, 'run_url': '$RUN_URL',
+                        'commit': '${GITHUB_SHA:0:7}', 'started': '$NOW',
+                        'resume_from': '${{ inputs.resume_from }}' or None,
+                        'retry_count': ${{ inputs.retry_count || 0 }},
+                        'phases': [{'name': p, 'status': 'pending'} for p in [
+                          'Prepare + Platform base','Slice A','Slice B','Slice C','Slice D',
+                          'Platform convergence','G1: Core libs','G2: Domain',
+                          'G3: Middleware','G4: Extensions','G5+G6: Apps']]},
             'history': old.get('history', []),
             '_archives': old.get('_archives', [])
           }
-          content = json.dumps(data, indent=2)
-          escaped = json.dumps(content)
-          payload = f'{{"files":{{"progress.json":{{"content":{escaped}}}}}}}'
-          subprocess.run(['gh','api',f'gists/{gist_id}','-X','PATCH','--input','-'],
-                         input=payload, text=True, capture_output=True)
-          PYEOF
+          print(json.dumps(data, indent=2))
+          " "$OLD" | curl -sf -X PUT "$WORKER/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" -d @- > /dev/null
           echo "::notice::Dashboard: https://casehub.org/casehub-all/"
+        env:
+          CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+          CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
         continue-on-error: true
 
       - uses: actions/checkout@v4
@@ -231,6 +232,8 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       MVN_COMMON: ${{ needs.prepare.outputs.mvn-common }}
@@ -323,6 +326,8 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
     steps:

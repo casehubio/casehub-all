@@ -14,28 +14,28 @@
 
 set -euo pipefail
 
-GIST_ID="2858101a4be664207373bf9491005f7d"
+WORKER_URL="${CI_DASHBOARD_URL:-https://casehub-ci-dashboard.casehub.workers.dev}"
+WORKER_TOKEN="${CI_DASHBOARD_TOKEN:-}"
 
 fetch_progress() {
-  gh api "gists/$GIST_ID" --jq '.files["progress.json"].content' 2>/dev/null || echo '{}'
+  curl -sf "$WORKER_URL/progress" 2>/dev/null || echo '{}'
 }
 
 update_progress() {
   local content="$1"
-  local escaped
-  escaped=$(python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' <<< "$content")
-  gh api "gists/$GIST_ID" -X PATCH \
-    --input <(printf '{"files":{"progress.json":{"content":%s}}}' "$escaped") > /dev/null
+  curl -sf -X PUT "$WORKER_URL/progress" \
+    -H "Authorization: Bearer $WORKER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$content" > /dev/null
 }
 
 update_phase_file() {
   local safe_name="$1"
   local content="$2"
-  local filename="phase-${safe_name}.json"
-  local escaped
-  escaped=$(python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' <<< "$content")
-  gh api "gists/$GIST_ID" -X PATCH \
-    --input <(printf '{"files":{"%s":{"content":%s}}}' "$filename" "$escaped") > /dev/null
+  curl -sf -X PUT "$WORKER_URL/phase-$safe_name" \
+    -H "Authorization: Bearer $WORKER_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "$content" > /dev/null
 }
 
 parse_maven_stats() {
@@ -198,28 +198,43 @@ print(json.dumps(data, indent=2))
     CONCLUSION="${2:?conclusion required}"
     NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-    # Read ALL gist files in one call
-    GIST_FULL=$(gh api "gists/$GIST_ID" --jq '.files | to_entries | map({key: .key, value: .value.content}) | from_entries')
+    # Read progress + all phase files for this run
+    PROGRESS=$(fetch_progress)
+    RUN_ID=$(echo "$PROGRESS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('current',{}).get('run_id',''))" 2>/dev/null || echo "")
+
+    # Fetch each phase file that exists for this run
+    PHASE_FILES='{}'
+    if [ -n "$RUN_ID" ]; then
+      for phase_name in "prepare---platform-base" "slice-a" "slice-b" "slice-c" "slice-d"; do
+        KEY="phase-${RUN_ID}-${phase_name}"
+        CONTENT=$(curl -sf "$WORKER_URL/$KEY" 2>/dev/null || echo "")
+        if [ -n "$CONTENT" ] && [ "$CONTENT" != "{}" ]; then
+          PHASE_FILES=$(echo "$PHASE_FILES" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+d['$KEY']='''$CONTENT'''
+print(json.dumps(d))
+" 2>/dev/null || echo "$PHASE_FILES")
+        fi
+      done
+    fi
 
     UPDATED=$(python3 -c "
 import json, sys
 from datetime import datetime, timedelta, timezone
 
-files = json.loads(sys.stdin.read())
-data = json.loads(files.get('progress.json', '{}'))
+data = json.loads('''$(echo "$PROGRESS" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)))")''')
+phase_files = json.loads('''$(echo "$PHASE_FILES" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)))")''')
 cur = data.get('current')
 if cur:
-    # Merge phase files for THIS run only
-    run_prefix = 'phase-' + str(cur.get('run_id', '')) + '-'
-    for key, content in files.items():
-        if key.startswith(run_prefix) and key.endswith('.json'):
-            try:
-                pd = json.loads(content)
-                for p in cur.get('phases', []):
-                    if p['name'] == pd.get('name'):
-                        p.update({k:v for k,v in pd.items() if k not in ('name','updated')})
-                        break
-            except: pass
+    for key, content in phase_files.items():
+        try:
+            pd = json.loads(content)
+            for p in cur.get('phases', []):
+                if p['name'] == pd.get('name'):
+                    p.update({k:v for k,v in pd.items() if k not in ('name','updated')})
+                    break
+        except: pass
 
     started = cur.get('started', '$NOW')
     s = datetime.fromisoformat(started.replace('Z','+00:00'))
@@ -254,17 +269,16 @@ if cur:
     data['current'] = None
 
 print(json.dumps(data, indent=2))
-" <<< "$GIST_FULL")
+")
     update_progress "$UPDATED"
 
     # Clean up phase files
-    CLEANUP=$(python3 -c "
-import json, sys
-files = json.loads(sys.stdin.read())
-nulls = {k: None for k in files if k.startswith('phase-') and k.endswith('.json')}
-print(json.dumps({'files': nulls}))
-" <<< "$GIST_FULL")
-    gh api "gists/$GIST_ID" -X PATCH --input - <<< "$CLEANUP" > /dev/null 2>&1 || true
+    if [ -n "$RUN_ID" ]; then
+      for phase_name in "prepare---platform-base" "slice-a" "slice-b" "slice-c" "slice-d"; do
+        curl -sf -X DELETE "$WORKER_URL/phase-${RUN_ID}-${phase_name}" \
+          -H "Authorization: Bearer $WORKER_TOKEN" > /dev/null 2>&1 || true
+      done
+    fi
 
     echo "::notice::Dashboard archived run as $CONCLUSION"
     ;;

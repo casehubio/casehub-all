@@ -1,0 +1,7 @@
+name = "casehub-ci-dashboard"
+main = "src/index.js"
+compatibility_date = "2026-10-30"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "ba83c3cf658549d59563a6afde08eedf"
