@@ -220,41 +220,41 @@ Every cross-repo dependency is declared in `parent/build/modules-core.csv` and
 | Repo | Depends on |
 |------|-----------|
 | parent | — |
-| platform | parent |
-| pages | — |
-| worker | parent, platform |
-| ledger | parent, platform |
-| connectors | parent, platform |
-| neocortex | platform |
-| eidos | platform, ledger |
-| qhorus | platform, ledger, connectors, eidos |
-| drafthouse | parent, qhorus |
-| work | platform, ledger, engine, qhorus |
-| engine | platform, ledger, connectors, eidos, neocortex, qhorus, work, worker |
-| ras | platform, engine |
-| agency | platform, ledger, neocortex, eidos, engine, qhorus, work, worker |
-| casehub-langchain4j | platform, ledger, neocortex, engine |
-| casehub-mosaic | pages, engine, work, qhorus, ledger, agency |
-| workers | platform, engine, worker |
-| claudony | platform, ledger, engine, qhorus, work, worker |
-| desiredstate | platform, eidos, engine, neocortex, ras, work, worker |
-| iot | platform, ledger, connectors, engine, life, neocortex, ras, work, worker |
-| ops | platform, ledger, desiredstate, eidos, engine, iot, qhorus, ras, work, agency |
-| chat-app | platform, qhorus, life |
+| platform | — |
+| worker | platform |
+| ledger | platform |
+| connectors | platform |
+| neocortex | connectors, eidos, platform |
+| eidos | ledger, platform |
+| desiredstate | eidos, engine, neocortex, platform, ras, work, worker |
+| ras | engine, platform |
+| qhorus | connectors, eidos, ledger, pages, platform |
+| work | ledger, platform, qhorus |
+| engine | connectors, eidos, ledger, neocortex, platform, qhorus, work, worker |
+| pages | platform |
+| agency | eidos, engine, ledger, neocortex, platform, qhorus, work, worker |
+| casehub-langchain4j | engine, ledger, neocortex, platform |
+| casehub-mosaic | agency, neocortex, pages, platform |
+| workers | engine, platform, worker |
+| claudony | eidos, engine, ledger, platform, qhorus, work, worker |
+| ops | agency, desiredstate, eidos, engine, ledger, platform, qhorus, ras, work |
+| iot | casehub-mosaic, connectors, desiredstate, engine, ledger, neocortex, pages, platform, ras, work, worker |
+| chat-app | casehub-mosaic, pages, platform, qhorus |
+| drafthouse | agency, eidos, pages, platform, qhorus, work |
 
 ### Application Modules
 
 | Repo | Depends on |
 |------|-----------|
-| openclaw | platform, ledger, engine, pages, casehub-mosaic, qhorus |
-| life | platform, ledger, connectors, engine, neocortex, openclaw, qhorus, work |
-| devtown | platform, ledger, connectors, engine, agency, life, neocortex, qhorus, work, worker |
-| aml | platform, ledger, engine, agency, eidos, life, neocortex, qhorus, work |
-| clinical | platform, ledger, connectors, engine, agency, eidos, life, neocortex, qhorus, work, worker |
-| soc | platform, ledger, desiredstate, eidos, engine, neocortex, qhorus, ras, work, worker |
-| fsitrading | platform, ledger, desiredstate, engine, agency, eidos, neocortex, ops, qhorus, ras, work, worker |
-| quarkmind | platform, ledger, connectors, engine, agency, eidos, life, neocortex, qhorus |
-| scaffold | platform, engine, life, work |
+| openclaw | casehub-mosaic, engine, ledger, pages, platform, qhorus |
+| devtown | agency, casehub-mosaic, connectors, eidos, engine, ledger, neocortex, pages, platform, qhorus, work, worker |
+| aml | agency, casehub-mosaic, eidos, engine, ledger, neocortex, pages, platform, qhorus, work |
+| clinical | agency, casehub-mosaic, connectors, eidos, engine, ledger, neocortex, pages, platform, qhorus, work, worker |
+| life | connectors, engine, ledger, neocortex, platform, qhorus, work |
+| soc | desiredstate, eidos, engine, ledger, neocortex, pages, platform, qhorus, ras, work, worker |
+| fsitrading | agency, casehub-mosaic, desiredstate, eidos, engine, ledger, neocortex, ops, pages, platform, qhorus, ras, work, worker |
+| quarkmind | agency, casehub-mosaic, connectors, eidos, engine, ledger, neocortex, pages, platform, qhorus |
+| scaffold | casehub-mosaic, engine, ops, pages, platform, work |
 
 ## Build Grouping and Parallelism
 
