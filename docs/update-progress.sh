@@ -253,6 +253,7 @@ if cur:
             for p in cur.get('phases', []):
                 if p['name'] == pd.get('name'):
                     p.update({k:v for k,v in pd.items() if k not in ('name','updated')})
+                    p['_aggregated_at'] = '$NOW'
                     break
         except: pass
 
