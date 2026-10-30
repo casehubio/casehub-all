@@ -3,304 +3,180 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>casehub-all CI</title>
+<title>CaseHub CI Dashboard</title>
 <style>
   :root {
     --bg: #0d1117; --surface: #161b22; --border: #30363d;
-    --text: #c9d1d9; --text-dim: #8b949e; --text-bright: #f0f6fc;
-    --green: #22c55e; --yellow: #f59e0b; --red: #ef4444; --grey: #6b7280;
-    --green-bg: #22c55e18; --yellow-bg: #f59e0b18; --red-bg: #ef444418;
+    --text: #e6edf3; --muted: #7d8590;
+    --green: #22c55e; --yellow: #f59e0b; --red: #ef4444; --grey: #6b7280; --blue: #3b82f6;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-    background: var(--bg); color: var(--text);
-    padding: 24px; max-width: 960px; margin: 0 auto;
-  }
-  h1 { color: var(--text-bright); font-size: 18px; font-weight: 600; margin-bottom: 4px; }
-  .subtitle { color: var(--text-dim); font-size: 12px; margin-bottom: 24px; }
-  .subtitle a { color: var(--text-dim); }
-
-  /* Current build */
-  .current { margin-bottom: 32px; }
-  .current-header {
-    display: flex; align-items: center; gap: 12px;
-    margin-bottom: 16px; font-size: 13px;
-  }
-  .current-header .run-link { color: var(--text-dim); text-decoration: none; }
-  .current-header .run-link:hover { color: var(--text); }
-  .current-header .commit { color: var(--yellow); }
-  .current-header .elapsed { color: var(--text-dim); }
-
-  .no-build { color: var(--text-dim); font-size: 13px; padding: 20px 0; }
-
-  /* Pipeline */
-  .pipeline { display: flex; flex-direction: column; gap: 4px; }
-  .phase {
-    display: grid; grid-template-columns: 200px 1fr 80px;
-    align-items: center; gap: 8px;
-    padding: 8px 12px; border-radius: 6px;
-    background: var(--surface); border: 1px solid var(--border);
-    font-size: 13px; transition: border-color 0.3s;
-  }
-  .phase.success { border-left: 3px solid var(--green); }
-  .phase.failure { border-left: 3px solid var(--red); }
-  .phase.in_progress { border-left: 3px solid var(--yellow); }
-  .phase.pending { border-left: 3px solid var(--grey); opacity: 0.5; }
-  .phase.skipped { border-left: 3px solid var(--grey); opacity: 0.35; }
-
-  .phase-name { color: var(--text-bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .phase-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
-  .phase-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
-  .phase-bar-fill.success { background: var(--green); }
-  .phase-bar-fill.failure { background: var(--red); }
-  .phase-bar-fill.in_progress { background: var(--yellow); animation: pulse 1.5s ease-in-out infinite; }
-  .phase-duration { text-align: right; color: var(--text-dim); font-size: 12px; }
-
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
-
-  /* Connector lines */
-  .connector { height: 12px; display: flex; justify-content: center; }
-  .connector::before {
-    content: ''; display: block; width: 1px; height: 100%;
-    background: var(--border);
-  }
-
-  /* Parallel group */
-  .parallel-group {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 4px;
-  }
-  .parallel-group .phase { grid-template-columns: 1fr 60px; }
-  .parallel-group .phase-bar { display: none; }
-
-  /* History */
-  .history { margin-top: 32px; }
-  .history h2 { font-size: 14px; color: var(--text-bright); margin-bottom: 12px; }
-  .history-grid {
-    display: flex; gap: 4px; flex-wrap: wrap; align-items: flex-end;
-    min-height: 60px;
-  }
-  .history-bar {
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    cursor: pointer; position: relative;
-  }
-  .history-bar .bar {
-    width: 20px; border-radius: 3px 3px 0 0; min-height: 4px;
-    transition: opacity 0.2s;
-  }
-  .history-bar:hover .bar { opacity: 0.7; }
-  .history-bar .bar.success { background: var(--green); }
-  .history-bar .bar.failure { background: var(--red); }
-  .history-bar .dot {
-    width: 6px; height: 6px; border-radius: 50%;
-  }
-  .history-bar .dot.success { background: var(--green); }
-  .history-bar .dot.failure { background: var(--red); }
-  .history-bar .tooltip {
-    display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
-    transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border);
-    border-radius: 6px; padding: 8px 10px; font-size: 11px; white-space: nowrap;
-    z-index: 10; color: var(--text);
-  }
-  .history-bar:hover .tooltip { display: block; }
-
-  /* Footer */
-  .footer { margin-top: 24px; font-size: 11px; color: var(--text-dim); text-align: center; }
-
-  /* Responsive */
-  @media (max-width: 600px) {
-    body { padding: 12px; }
-    .phase { grid-template-columns: 140px 1fr 60px; font-size: 12px; }
-    .parallel-group { grid-template-columns: 1fr 1fr; }
-  }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 14px; padding: 24px; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); font-size: 12px; margin-bottom: 24px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .run-meta { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+  .run-meta a { color: var(--blue); text-decoration: none; }
+  .run-meta a:hover { text-decoration: underline; }
+  .run-meta .commit { color: var(--muted); font-family: monospace; }
+  .pipeline { display: flex; gap: 4px; flex-wrap: wrap; }
+  .phase { flex: 1; min-width: 80px; padding: 8px; border-radius: 6px; text-align: center; font-size: 11px; position: relative; }
+  .phase .name { font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .phase .dur { color: var(--muted); font-size: 10px; }
+  .phase.success { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3); }
+  .phase.failure { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); }
+  .phase.in_progress { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); animation: pulse 2s ease-in-out infinite; }
+  .phase.pending { background: rgba(107,114,128,0.1); border: 1px solid rgba(107,114,128,0.2); color: var(--muted); }
+  .phase.skipped { background: rgba(107,114,128,0.05); border: 1px solid rgba(107,114,128,0.15); color: var(--grey); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+  .history { display: flex; gap: 3px; align-items: end; height: 60px; margin-top: 8px; }
+  .history .bar { flex: 1; min-width: 8px; max-width: 20px; border-radius: 2px 2px 0 0; cursor: pointer; position: relative; }
+  .history .bar.success { background: var(--green); }
+  .history .bar.failure { background: var(--red); }
+  .history .bar:hover { opacity: 0.8; }
+  .tooltip { display: none; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; font-size: 10px; white-space: nowrap; z-index: 10; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  .history .bar:hover .tooltip { display: block; }
+  .no-data { color: var(--muted); text-align: center; padding: 24px; }
+  .refresh { color: var(--muted); font-size: 11px; text-align: right; margin-top: 8px; }
+  .stats { display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap; }
+  .stat { text-align: center; }
+  .stat .value { font-size: 24px; font-weight: 700; }
+  .stat .label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+  .stat .value.green { color: var(--green); }
+  .stat .value.red { color: var(--red); }
+  .stat .value.yellow { color: var(--yellow); }
 </style>
 </head>
 <body>
+<h1>CaseHub CI</h1>
+<div class="subtitle">casehub-all reactor build dashboard</div>
 
-<h1>casehub-all CI</h1>
-<div class="subtitle" id="subtitle">Loading...</div>
-
-<div class="current" id="current"></div>
-
-<div class="history" id="history-section" style="display:none">
-  <h2>Recent builds</h2>
-  <div class="history-grid" id="history"></div>
+<div id="current-card" class="card" style="display:none">
+  <h2>Current Build</h2>
+  <div id="run-meta" class="run-meta"></div>
+  <div id="pipeline" class="pipeline"></div>
 </div>
 
-<div class="footer" id="footer"></div>
+<div id="no-build" class="card" style="display:none">
+  <div class="no-data">No build in progress</div>
+</div>
+
+<div class="card">
+  <h2>History (last 90 days)</h2>
+  <div id="stats" class="stats"></div>
+  <div id="history" class="history"></div>
+  <div id="no-history" class="no-data" style="display:none">No build history yet</div>
+</div>
+
+<div class="refresh" id="refresh-info"></div>
 
 <script>
-const REFRESH_MS = 30000;
-const MAX_PHASE_DURATION = 5400; // 90 min cap for bar scaling
+const GIST_RAW = 'https://gist.githubusercontent.com/mdproctor/2858101a4be664207373bf9491005f7d/raw/progress.json';
+const CACHE_BUST = () => `${GIST_RAW}?t=${Date.now()}`;
 
-function fmt(s) {
-  if (s == null) return '--';
-  const m = Math.floor(s / 60), sec = Math.floor(s % 60);
-  return m > 0 ? m + 'm ' + sec + 's' : sec + 's';
+function formatDuration(s) {
+  if (!s && s !== 0) return '';
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return sec > 0 ? `${m}m ${sec}s` : `${m}m`;
 }
 
 function elapsed(started) {
-  if (!started) return null;
-  return Math.floor((Date.now() - new Date(started).getTime()) / 1000);
+  if (!started) return '';
+  const s = Math.floor((Date.now() - new Date(started).getTime()) / 1000);
+  return formatDuration(s);
 }
 
-function relTime(iso) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-  return Math.floor(diff / 86400) + 'd ago';
-}
-
-function barWidth(duration) {
-  if (!duration || duration <= 0) return '0%';
-  return Math.min(100, (duration / MAX_PHASE_DURATION) * 100).toFixed(1) + '%';
-}
-
-function renderPhase(p) {
-  const dur = p.status === 'in_progress' ? elapsed(p.started) : p.duration_s;
-  const durText = p.status === 'pending' || p.status === 'skipped' ? '' : fmt(dur);
-  return `
-    <div class="phase ${p.status}">
-      <div class="phase-name">${p.name}</div>
-      <div class="phase-bar">
-        <div class="phase-bar-fill ${p.status}" style="width:${barWidth(dur)}"></div>
-      </div>
-      <div class="phase-duration">${durText}</div>
-    </div>`;
-}
-
-function renderParallelGroup(phases) {
-  const items = phases.map(p => {
-    const dur = p.status === 'in_progress' ? elapsed(p.started) : p.duration_s;
-    const durText = p.status === 'pending' || p.status === 'skipped' ? '' : fmt(dur);
-    return `
-      <div class="phase ${p.status}">
-        <div class="phase-name">${p.name}</div>
-        <div class="phase-duration">${durText}</div>
-      </div>`;
-  }).join('');
-  return `<div class="parallel-group">${items}</div>`;
-}
-
-function connector() {
-  return '<div class="connector"></div>';
-}
-
-function renderCurrent(cur) {
-  const el = document.getElementById('current');
-  if (!cur) {
-    el.innerHTML = '<div class="no-build">No build in progress</div>';
+function renderCurrent(current) {
+  const card = document.getElementById('current-card');
+  const noCard = document.getElementById('no-build');
+  if (!current) {
+    card.style.display = 'none';
+    noCard.style.display = 'block';
     return;
   }
+  card.style.display = 'block';
+  noCard.style.display = 'none';
 
-  const totalElapsed = elapsed(cur.started);
-  const runLink = cur.run_url
-    ? `<a class="run-link" href="${cur.run_url}" target="_blank">#${cur.run_id}</a>`
-    : `#${cur.run_id}`;
+  const meta = document.getElementById('run-meta');
+  meta.innerHTML = `
+    <a href="${current.run_url}" target="_blank">Run #${current.run_id}</a>
+    <span class="commit">${current.commit || ''}</span>
+    <span style="color:var(--muted)">started ${elapsed(current.started)} ago</span>
+  `;
 
-  let header = `
-    <div class="current-header">
-      ${runLink}
-      <span class="commit">${(cur.commit || '').substring(0, 7)}</span>
-      <span class="elapsed">${fmt(totalElapsed)} elapsed</span>
+  const pipeline = document.getElementById('pipeline');
+  pipeline.innerHTML = current.phases.map(p => {
+    const dur = p.status === 'in_progress' ? elapsed(p.started)
+              : p.duration_s != null ? formatDuration(p.duration_s)
+              : '';
+    return `<div class="phase ${p.status}">
+      <div class="name">${p.name}</div>
+      <div class="dur">${dur || '—'}</div>
     </div>`;
-
-  // Group phases into pipeline stages
-  const phases = cur.phases || [];
-  const prepare = phases.find(p => p.name.startsWith('Prepare'));
-  const slices = phases.filter(p => p.name.startsWith('Slice'));
-  const convergence = phases.find(p => p.name.startsWith('Convergence'));
-  const groups = phases.filter(p => p.name.startsWith('G'));
-  const other = phases.filter(p =>
-    !p.name.startsWith('Prepare') && !p.name.startsWith('Slice') &&
-    !p.name.startsWith('Convergence') && !p.name.startsWith('G'));
-
-  let pipeline = '<div class="pipeline">';
-  if (prepare) pipeline += renderPhase(prepare);
-  if (slices.length > 0) {
-    pipeline += connector();
-    pipeline += renderParallelGroup(slices);
-  }
-  if (convergence) {
-    pipeline += connector();
-    pipeline += renderPhase(convergence);
-  }
-  groups.forEach(g => {
-    pipeline += connector();
-    pipeline += renderPhase(g);
-  });
-  other.forEach(o => {
-    pipeline += connector();
-    pipeline += renderPhase(o);
-  });
-  pipeline += '</div>';
-
-  el.innerHTML = header + pipeline;
+  }).join('');
 }
 
 function renderHistory(history) {
-  const section = document.getElementById('history-section');
-  const el = document.getElementById('history');
+  const container = document.getElementById('history');
+  const noHistory = document.getElementById('no-history');
+  const statsEl = document.getElementById('stats');
+
   if (!history || history.length === 0) {
-    section.style.display = 'none';
+    container.style.display = 'none';
+    noHistory.style.display = 'block';
+    statsEl.innerHTML = '';
     return;
   }
-  section.style.display = 'block';
+  container.style.display = 'flex';
+  noHistory.style.display = 'none';
 
   const maxDur = Math.max(...history.map(h => h.duration_s || 0), 1);
+  const recent = history.slice(0, 50);
 
-  el.innerHTML = history.slice(-20).map(h => {
-    const height = Math.max(4, Math.floor((h.duration_s || 0) / maxDur * 50));
-    const cls = h.conclusion === 'success' ? 'success' : 'failure';
-    const when = relTime(h.started);
-    return `
-      <div class="history-bar">
-        <div class="tooltip">
-          ${cls === 'success' ? 'GREEN' : 'FAIL'} &middot; ${fmt(h.duration_s)} &middot; ${when}<br>
-          ${(h.commit || '').substring(0, 7)} &middot; #${h.run_id}
-        </div>
-        <div class="bar ${cls}" style="height:${height}px"></div>
-        <div class="dot ${cls}"></div>
-      </div>`;
+  container.innerHTML = recent.map(h => {
+    const height = Math.max(4, ((h.duration_s || 0) / maxDur) * 56);
+    const date = h.started ? new Date(h.started).toLocaleDateString() : '?';
+    const dur = formatDuration(h.duration_s);
+    return `<div class="bar ${h.conclusion}" style="height:${height}px" title="${h.conclusion}">
+      <div class="tooltip">
+        ${date}<br>${h.conclusion} · ${dur}<br>${h.commit || ''}
+      </div>
+    </div>`;
   }).join('');
+
+  const total = history.length;
+  const passed = history.filter(h => h.conclusion === 'success').length;
+  const rate = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const avgDur = total > 0 ? Math.round(history.reduce((a, h) => a + (h.duration_s || 0), 0) / total) : 0;
+  const rateClass = rate >= 80 ? 'green' : rate >= 50 ? 'yellow' : 'red';
+
+  statsEl.innerHTML = `
+    <div class="stat"><div class="value ${rateClass}">${rate}%</div><div class="label">Pass rate</div></div>
+    <div class="stat"><div class="value">${formatDuration(avgDur)}</div><div class="label">Avg duration</div></div>
+    <div class="stat"><div class="value">${total}</div><div class="label">Runs</div></div>
+    <div class="stat"><div class="value green">${passed}</div><div class="label">Passed</div></div>
+    <div class="stat"><div class="value red">${total - passed}</div><div class="label">Failed</div></div>
+  `;
 }
 
 async function refresh() {
   try {
-    const resp = await fetch('https://raw.githubusercontent.com/casehubio/casehub-all/main/docs/progress.json?t=' + Date.now());
-    if (!resp.ok) throw new Error('fetch failed');
+    const resp = await fetch(CACHE_BUST());
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-
     renderCurrent(data.current);
     renderHistory(data.history);
-
-    const sub = document.getElementById('subtitle');
-    if (data.current) {
-      const overall = data.current.phases || [];
-      const done = overall.filter(p => p.status === 'success').length;
-      const fail = overall.filter(p => p.status === 'failure').length;
-      sub.textContent = `${done}/${overall.length} phases complete` +
-        (fail > 0 ? ` (${fail} failed)` : '') +
-        ` · refreshing every 30s`;
-    } else {
-      sub.textContent = data.history && data.history.length > 0
-        ? `Last build: ${relTime(data.history[data.history.length - 1].started)} · refreshing every 30s`
-        : 'No builds recorded yet · refreshing every 30s';
-    }
-
-    document.getElementById('footer').textContent =
-      'Last refreshed: ' + new Date().toLocaleTimeString();
+    document.getElementById('refresh-info').textContent = `Last refresh: ${new Date().toLocaleTimeString()} · auto-refresh 30s`;
   } catch (e) {
-    document.getElementById('subtitle').textContent = 'Failed to load progress.json · retrying...';
+    document.getElementById('refresh-info').textContent = `Refresh failed: ${e.message}`;
   }
 }
 
 refresh();
-setInterval(refresh, REFRESH_MS);
+setInterval(refresh, 30000);
 </script>
 </body>
 </html>
