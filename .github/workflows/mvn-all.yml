@@ -69,7 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GIST_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
     outputs:
@@ -204,7 +204,7 @@ jobs:
         slice: [a, b, c, d]
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GIST_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       MVN_COMMON: ${{ needs.prepare.outputs.mvn-common }}
@@ -296,7 +296,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GIST_TOKEN || secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
     steps:
