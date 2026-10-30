@@ -202,7 +202,7 @@ Every cross-repo dependency is declared in `parent/build/modules-core.csv` and
 | soc | desiredstate, eidos, engine, ledger, neocortex, pages, platform, qhorus, ras, work, worker |
 | fsitrading | agency, casehub-mosaic, desiredstate, eidos, engine, ledger, neocortex, ops, pages, platform, qhorus, ras, work, worker |
 | quarkmind | agency, casehub-mosaic, connectors, eidos, engine, ledger, neocortex, pages, platform, qhorus |
-| scaffold | casehub-mosaic, engine, ops, pages, platform, work |
+| scaffold | casehub-mosaic, engine, neocortex, ops, pages, platform, work |
 
 ### Keeping CSVs in sync
 
