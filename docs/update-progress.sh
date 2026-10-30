@@ -149,7 +149,7 @@ case "${1:-}" in
 import json
 existing = json.loads('''$EXISTING''')
 stats = json.loads('''$STATS''')
-data = {'name': '$NAME', 'status': '$STATUS', 'updated': '$NOW'}
+data = {'name': '$NAME', 'status': '$STATUS', 'updated': '$NOW', '_written_at': '$NOW'}
 if '$STATUS' == 'in_progress':
     data['started'] = existing.get('started', '$NOW')
 elif '$STATUS' in ('success', 'failure', 'skipped'):
@@ -195,6 +195,7 @@ if data.get('current'):
     for p in data['current']['phases']:
         if p['name'] == '$NAME':
             p['status'] = '$STATUS'
+            p['_written_at'] = '$NOW'
             if '$STATUS' == 'in_progress':
                 p.setdefault('started', '$NOW')
             elif '$STATUS' in ('success', 'failure', 'skipped'):
@@ -207,6 +208,7 @@ if data.get('current'):
                 if stats:
                     p.update(stats)
             break
+    data['current']['_written_at'] = '$NOW'
 print(json.dumps(data, indent=2))
 " <<< "$CURRENT")
     update_progress "$UPDATED"
