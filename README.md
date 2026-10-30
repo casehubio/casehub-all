@@ -669,6 +669,183 @@ gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f res
 flags" step. `maven_args` is set as the `MAVEN_ARGS` environment variable
 (not interpolated directly) and logged via `::notice::`.
 
+## CI Dashboard
+
+### Architecture
+
+A live build progress dashboard at **https://casehub.org/casehub-all/**
+(GitHub Pages from `docs/`). Build data is stored in a GitHub Gist — no
+git history pollution in the main repo.
+
+| Component | Location |
+|-----------|----------|
+| Dashboard HTML | `docs/index.html` (single-file HTML+CSS+JS, no frameworks) |
+| Data store | [Gist `2858101a`](https://gist.github.com/mdproctor/2858101a4be664207373bf9491005f7d) |
+| Update script | `docs/update-progress.sh` (init, phase, finish commands) |
+| Maven wrapper | `docs/run-with-progress.sh` (90s incremental updates) |
+| Auth | `GIST_TOKEN` repo secret (fine-grained PAT with gist scope) |
+
+The workflow updates the gist via `GH_TOKEN` (set to `GIST_TOKEN`). The
+dashboard JS fetches from the gist raw URL — instant updates, no Pages
+deploy delay. Auto-refreshes every 30 seconds.
+
+### Live Build Progress
+
+The dashboard shows progress from the very first step:
+
+1. **Prepare job starts** → `init` creates the gist entry, all 11 phases shown as pending
+2. **Platform base builds** → background updater pushes stats every 90 seconds
+3. **4 slices run in parallel** → 4 phase boxes pulse simultaneously, module/test counts tick up
+4. **Convergence + G1–G6** → sequential phases with incremental stats
+5. **Build completes** → `finish` archives the run to history
+
+The `run-with-progress.sh` wrapper starts a background process alongside
+Maven that re-parses the growing log file every 90 seconds and pushes the
+latest counts to the gist. Module counts, test counts, and warnings tick
+up in real time as Maven progresses through a phase.
+
+### Stats Captured Per Phase
+
+All stats are parsed from Maven's own output — reactor summary, surefire
+aggregate lines, and Quarkus startup logs. Each parser section is wrapped
+in `try/except` so a parse failure in one stat never blocks the others.
+
+| Stat | Source | Example |
+|------|--------|---------|
+| `modules` | Reactor summary `SUCCESS/FAILURE/SKIPPED` lines | `87` |
+| `tests_run` | Surefire `Tests run: N` | `1514` |
+| `tests_failed` | Surefire `Failures: N, Errors: N` | `2` |
+| `tests_skipped` | Surefire `Skipped: N` | `3` |
+| `tests_flaky` | Surefire `Flakes: N` (failed then passed on retry) | `1` |
+| `timeouts` | `TimeoutException` / `forkedProcessTimeout` grep | `0` |
+| `compilation_warnings` | `[WARNING]` lines (noise filtered) | `45` |
+| `deprecation_warnings` | `deprecated` / `Xlint:deprecation` lines | `12` |
+| `slowest_modules` | Top 5 by time from reactor summary | `[{name, seconds}]` |
+| `slowest_tests` | Top 5 by time from surefire output | `[{test, seconds}]` |
+| `quarkus_boots` | `started in X.XXXs` lines (count, avg, max) | `{count: 35, avg: 2.1}` |
+| `self_healing` | Validation log events | `{corrupt_jars: 3, retries: 1}` |
+| `failed_modules` | Reactor `FAILURE` lines | `["casehub-engine"]` |
+| `artifact_size_mb` | Upload/download size lines | `12.5` |
+| `maven_time_s` | `Total time:` line | `2700` |
+
+### Per-Build Context
+
+Captured at `init` time:
+
+| Field | Source |
+|-------|--------|
+| `resume_from` | Workflow input — which group the build resumed from |
+| `retry_count` | Auto-retry attempt number |
+| `changed_repos` | `git diff` of submodule pointers since last commit |
+
+### Gist Data Model
+
+```json
+{
+  "current": {
+    "run_id": 41018829651,
+    "run_url": "https://github.com/casehubio/casehub-all/actions/runs/...",
+    "commit": "abc1234",
+    "started": "2026-10-30T14:00:00Z",
+    "resume_from": null,
+    "retry_count": 0,
+    "changed_repos": ["claudony", "platform"],
+    "phases": [
+      {"name": "Prepare + Platform base", "status": "success", "duration_s": 120,
+       "modules": 3, "tests_run": 16, "compilation_warnings": 0},
+      {"name": "Slice A", "status": "in_progress", "started": "...",
+       "modules": 22, "tests_run": 150},
+      {"name": "G3: Middleware", "status": "pending"},
+      ...
+    ]
+  },
+  "history": [
+    {"run_id": 41012076639, "conclusion": "success", "duration_s": 5400,
+     "total_tests": 4500, "total_modules": 247, "phases": [...]},
+    ...
+  ],
+  "_archives": [
+    {"gist_id": "abc123def456", "from": "2026-07-01", "to": "2026-09-30",
+     "runs": 150, "summary": {
+       "pass_rate": 78, "avg_duration_s": 5200, "avg_tests": 4500,
+       "total_flakes": 23, "most_failed_phases": ["G3: Middleware", "Slice D"]
+     }}
+  ]
+}
+```
+
+### Gist Rotation
+
+The head gist keeps `current` + the last 50 runs with full detail. When
+history exceeds 50 entries:
+
+1. Older entries are moved to a new **archive gist**
+2. **Summary stats** (pass rate, avg duration, avg tests, flakes, most-failed
+   phases) are computed and stored in the head gist's `_archives` array
+3. The archive gist ID is linked — dashboard loads it **on demand** for
+   drill-down into specific old runs
+4. Entries older than 90 days are trimmed on every write
+
+This gives the dashboard three tiers of resolution:
+
+- **Recent** (50 runs): full per-run, per-phase detail — in the head gist
+- **Archived summaries**: one aggregated data point per archive period — also
+  in the head gist, zero extra fetches needed for trend charts
+- **Archive drill-down**: load the linked gist on demand when clicking into
+  a specific old period
+
+Trend charts use recent + archived summaries together. The head gist is
+always self-sufficient for all charts.
+
+### Dashboard UI
+
+**Pipeline visualization:**
+- Prepare as full-width row → 4 slices side-by-side (CSS grid) →
+  Convergence → G1–G6 as sequential full-width rows
+- Visual connecting lines between stages
+- Each phase box: status colour, duration/elapsed, modules, tests, flaky
+  count, timeouts, self-healing indicator
+- Pulsing animation on `in_progress` phases, red FAILED badge on failures
+
+**Phase detail (click to expand):**
+- Top 5 slowest modules with times
+- Top 5 slowest tests with times
+- Compilation/deprecation warning counts
+- Quarkus boot times (count, avg, max)
+- Self-healing breakdown (corrupt JARs, Jandex, retries)
+- Failed module names
+
+**Failure emphasis:**
+- Red card border and background tint on failed builds
+- FAILED badge in header, failed modules shown inline (not hidden)
+- "Last build FAILED" banner when no build is in progress and the most
+  recent history entry is a failure
+
+**History (expandable rows):**
+- Summary line: status dot, run ID, commit, duration, tests, modules,
+  flakes, self-heals, resume-from
+- Click expands to full parallel pipeline view + detail tables for that run
+
+**Trend charts (inline SVG, no libraries):**
+- Build duration over last 50 runs (green/red dots for pass/fail)
+- Test count area chart
+- Phase failure heatmap (phases × runs grid, coloured by pass/fail)
+- Self-healing frequency
+
+**Stats cards:**
+Pass rate, avg duration, total runs, passed, failed, avg tests/run,
+avg flakes, total self-heals.
+
+### Setup
+
+1. **GitHub Pages:** Settings → Pages → Source: "Deploy from a branch" →
+   Branch: `main`, folder: `/docs`
+2. **GIST_TOKEN:** Create a fine-grained PAT with `Gists` permission
+   (read+write). Add as repo secret `GIST_TOKEN` in
+   Settings → Secrets → Actions
+3. **Gist:** Already created at
+   https://gist.github.com/mdproctor/2858101a4be664207373bf9491005f7d
+
 ## Known Limitations
 
 ### resume_from is fragile
@@ -801,5 +978,9 @@ platform/
 
 casehub-all/
   .github/workflows/mvn-all.yml   — 3-job, 9-phase build (parameterised)
+  docs/
+    index.html                    — CI dashboard (single-file HTML+CSS+JS)
+    update-progress.sh            — gist updater (init, phase, finish commands)
+    run-with-progress.sh          — Maven wrapper with 90s incremental updates
   scripts/reconcile-submodules.py — syncs submodules from CSVs
 ```
