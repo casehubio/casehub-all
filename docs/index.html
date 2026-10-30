@@ -13,484 +13,324 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: var(--bg); color: var(--text); font-family: 'SF Mono','Cascadia Code','Fira Code',monospace; font-size: 13px; padding: 20px; max-width: 1400px; margin: 0 auto; }
 h1 { font-size: 18px; font-weight: 700; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .subtitle { color: var(--muted); font-size: 11px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 12px; }
 .card h2 { font-size: 11px; font-weight: 600; margin-bottom: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
 a { color: var(--blue); text-decoration: none; }
 a:hover { text-decoration: underline; }
-
-/* ── Run meta ── */
-.run-meta { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; font-size: 12px; }
-.badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+.badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; display: inline-block; }
 .badge.resume { background: rgba(245,158,11,0.2); color: var(--yellow); }
 .badge.retry { background: rgba(239,68,68,0.2); color: var(--red); }
+.badge.failed { background: rgba(239,68,68,0.3); color: var(--red); font-size: 11px; padding: 3px 10px; }
+.run-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; font-size: 12px; }
+.failure-banner { background: rgba(239,68,68,0.1); border: 2px solid var(--red); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; display: none; }
+.failure-banner .msg { font-size: 14px; font-weight: 700; color: var(--red); margin-bottom: 4px; }
+.failure-banner .detail { font-size: 11px; color: var(--muted); }
+.card.failed-build { border-color: var(--red); background: rgba(239,68,68,0.04); }
 
-/* ── Pipeline ── */
-.pipeline { display: flex; gap: 3px; flex-wrap: wrap; }
-.phase { flex: 1; min-width: 70px; padding: 6px; border-radius: 6px; text-align: center; font-size: 10px; cursor: pointer; transition: transform 0.1s; }
-.phase:hover { transform: scale(1.03); }
-.phase .name { font-weight: 600; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.phase .info { color: var(--muted); font-size: 9px; line-height: 1.4; }
+/* ── Pipeline layout ── */
+.pipe { margin: 8px 0; }
+.pipe-row { margin-bottom: 2px; }
+.pipe-full { display: flex; }
+.pipe-full .phase { flex: 1; }
+.pipe-parallel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+.pipe-connector { display: flex; justify-content: center; padding: 2px 0; }
+.pipe-connector::after { content: ''; display: block; width: 1px; height: 6px; background: var(--dim); }
+.pipe-fan { position: relative; height: 10px; margin: 0 12%; }
+.pipe-fan::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; border-top: 1px solid var(--dim); }
+.pipe-fan::after { content: ''; position: absolute; top: 0; left: 50%; width: 1px; height: 100%; background: var(--dim); }
+
+.phase { padding: 5px 4px; border-radius: 5px; text-align: center; font-size: 10px; cursor: pointer; transition: transform 0.1s; }
+.phase:hover { transform: scale(1.02); }
+.phase .name { font-weight: 600; margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 9px; }
+.phase .info { color: var(--muted); font-size: 9px; line-height: 1.3; }
 .phase.success { background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.25); }
-.phase.failure { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); }
+.phase.failure { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35); }
+.phase.failure .name { color: var(--red); }
 .phase.in_progress { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25); animation: pulse 2s ease-in-out infinite; }
-.phase.pending { background: rgba(107,114,128,0.08); border: 1px solid rgba(107,114,128,0.15); color: var(--muted); }
-.phase.skipped { background: rgba(107,114,128,0.04); border: 1px solid rgba(107,114,128,0.1); color: var(--dim); }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+.phase.pending { background: rgba(107,114,128,0.06); border: 1px solid rgba(107,114,128,0.12); color: var(--muted); }
+.phase.skipped { background: rgba(107,114,128,0.03); border: 1px solid rgba(107,114,128,0.08); color: var(--dim); }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.5} }
+.fail-detail { color: var(--red); font-size: 8px; font-weight: 600; margin-top: 1px; }
 
-/* ── Phase detail ── */
 .detail-panel { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-top: 8px; display: none; }
 .detail-panel.open { display: block; }
 .detail-panel h3 { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
-.detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 6px; }
 .detail-item { font-size: 11px; }
-.detail-item .label { color: var(--muted); font-size: 9px; text-transform: uppercase; margin-bottom: 2px; }
+.detail-item .dlabel { color: var(--muted); font-size: 9px; text-transform: uppercase; margin-bottom: 1px; }
 .detail-list { list-style: none; font-size: 11px; }
-.detail-list li { padding: 2px 0; display: flex; justify-content: space-between; }
-.detail-list li .val { color: var(--muted); }
+.detail-list li { padding: 1px 0; display: flex; justify-content: space-between; gap: 8px; }
+.detail-list .val { color: var(--muted); white-space: nowrap; }
 
-/* ── Stats cards ── */
-.stats { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-.stat { text-align: center; min-width: 80px; }
-.stat .value { font-size: 22px; font-weight: 700; line-height: 1.2; }
+.stats { display: flex; gap: 16px; flex-wrap: wrap; }
+.stat { text-align: center; min-width: 70px; }
+.stat .value { font-size: 20px; font-weight: 700; line-height: 1.2; }
 .stat .label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
 .stat .value.green { color: var(--green); }
 .stat .value.red { color: var(--red); }
 .stat .value.yellow { color: var(--yellow); }
 
-/* ── Failure emphasis ── */
-.card.failed-build { border-color: var(--red); background: rgba(239,68,68,0.06); }
-.card.failed-build h2 { color: var(--red); }
-.badge.failed { background: rgba(239,68,68,0.3); color: var(--red); font-size: 11px; padding: 3px 10px; }
-.last-failure-banner { background: rgba(239,68,68,0.12); border: 2px solid var(--red); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; display: flex; align-items: center; gap: 12px; }
-.last-failure-banner .icon { font-size: 24px; }
-.last-failure-banner .msg { font-size: 13px; font-weight: 600; }
-.last-failure-banner .detail { font-size: 11px; color: var(--muted); }
-.phase.failure .name { color: var(--red); }
-.phase.failure .fail-detail { color: var(--red); font-size: 9px; margin-top: 2px; font-weight: 600; }
-.history .bar.failure { background: var(--red); position: relative; }
-.history .bar.failure::after { content: '✕'; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); font-size: 8px; color: var(--red); font-weight: 700; }
-
-/* ── Charts ── */
-.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.chart-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; }
-.chart-card h3 { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 12px; }
+.chart-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+.chart-card h3 { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
 .chart-card svg { width: 100%; display: block; }
 
-/* ── History table ── */
-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-th { text-align: left; color: var(--muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-td { padding: 5px 8px; border-bottom: 1px solid rgba(48,54,61,0.5); }
-tr:hover td { background: rgba(255,255,255,0.02); }
-.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
-.dot.success { background: var(--green); }
-.dot.failure { background: var(--red); }
-
-.no-data { color: var(--muted); text-align: center; padding: 20px; font-size: 12px; }
-.refresh { color: var(--dim); font-size: 10px; text-align: right; margin-top: 6px; }
+.history-item { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 3px; overflow: hidden; }
+.history-summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; font-size: 11px; transition: background 0.1s; flex-wrap: wrap; }
+.history-summary:hover { background: rgba(255,255,255,0.02); }
+.hdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.hdot.success { background: var(--green); }
+.hdot.failure { background: var(--red); }
+.htag { font-size: 9px; color: var(--muted); }
+.htag.warn { color: var(--yellow); }
+.hexpand { color: var(--dim); font-size: 10px; margin-left: auto; transition: transform 0.2s; }
+.hexpand.open { transform: rotate(90deg); }
+.history-detail { display: none; padding: 12px; background: var(--surface2); border-top: 1px solid var(--border); }
+.history-detail.open { display: block; }
+.no-data { color: var(--muted); text-align: center; padding: 16px; font-size: 12px; }
 
 @media (max-width: 768px) {
   body { padding: 12px; }
-  .pipeline { flex-direction: column; }
-  .phase { min-width: 100%; }
+  .pipe-parallel { grid-template-columns: repeat(2, 1fr); }
+  .pipe-fan { display: none; }
   .charts { grid-template-columns: 1fr; }
-  .stats { gap: 8px; }
 }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <div>
-    <h1>CaseHub CI</h1>
-    <div class="subtitle">casehub-all reactor build dashboard</div>
-  </div>
+  <div><h1>CaseHub CI</h1><div class="subtitle">casehub-all reactor build</div></div>
   <div class="subtitle" id="refresh-info"></div>
 </div>
 
-<!-- Last failure banner (shown when idle + last build failed) -->
-<div id="last-failure-banner" class="last-failure-banner" style="display:none">
-  <div class="icon">✕</div>
-  <div>
-    <div class="msg" id="failure-msg">Last build FAILED</div>
-    <div class="detail" id="failure-detail"></div>
-  </div>
-</div>
+<div id="failure-banner" class="failure-banner"></div>
+<div id="current-section"></div>
 
-<!-- Current Build -->
-<div id="current-card" class="card" style="display:none">
-  <h2>Current Build</h2>
-  <div id="run-meta" class="run-meta"></div>
-  <div id="pipeline" class="pipeline"></div>
-  <div id="phase-detail" class="detail-panel"></div>
-</div>
-<div id="no-build" class="card" style="display:none">
-  <div class="no-data">No build in progress</div>
-</div>
-
-<!-- Stats Overview -->
 <div class="card">
-  <h2>Overview (last 90 days)</h2>
-  <div id="stats" class="stats"></div>
+  <h2>Trends</h2>
+  <div class="stats" id="stats"></div>
+  <div class="charts" id="charts"></div>
 </div>
 
-<!-- Trend Charts -->
-<div id="charts-section" class="charts"></div>
-
-<!-- History Table -->
 <div class="card">
   <h2>Build History</h2>
-  <div id="history-table"></div>
+  <div id="history"></div>
 </div>
 
 <script>
-const GIST_RAW = 'https://gist.githubusercontent.com/mdproctor/2858101a4be664207373bf9491005f7d/raw/progress.json';
-const BUST = () => `${GIST_RAW}?t=${Date.now()}`;
+const GIST_RAW='https://gist.githubusercontent.com/mdproctor/2858101a4be664207373bf9491005f7d/raw/progress.json';
+const BUST=()=>`${GIST_RAW}?t=${Date.now()}`;
+function fmt(s){if(!s&&s!==0)return'—';if(s<60)return s+'s';const m=Math.floor(s/60),r=s%60;if(m<60)return r>0?m+'m'+r+'s':m+'m';return Math.floor(m/60)+'h'+(m%60)+'m';}
+function ago(t){return t?fmt(Math.floor((Date.now()-new Date(t).getTime())/1000)):'';}
+function shortDate(iso){if(!iso)return'?';const d=new Date(iso);return d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');}
 
-function fmt(s) {
-  if (!s && s !== 0) return '—';
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60), r = s % 60;
-  if (m < 60) return r > 0 ? `${m}m${r}s` : `${m}m`;
-  const h = Math.floor(m / 60);
-  return `${h}h${m % 60}m`;
+// ── SVG ────────────────────────────────────────────────────────────
+function svgEl(tag,a={}){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e;}
+
+function lineChart(el,data,opts={}){
+  const{w=300,h=70,color='#3b82f6',fill=false,dotColors=false,yLabel=''}=opts;
+  if(!data.length)return;
+  const p={t:6,r:6,b:14,l:6},cw=w-p.l-p.r,ch=h-p.t-p.b;
+  const maxY=Math.max(...data.map(d=>d.y),1);
+  const sx=i=>p.l+(i/Math.max(data.length-1,1))*cw;
+  const sy=d=>p.t+ch-(d.y/maxY)*ch;
+  const svg=svgEl('svg',{viewBox:`0 0 ${w} ${h}`});
+  [0,1,2,3].forEach(i=>svg.appendChild(svgEl('line',{x1:p.l,y1:p.t+(ch/3)*i,x2:w-p.r,y2:p.t+(ch/3)*i,stroke:'#21262d','stroke-width':'0.5'})));
+  const pts=data.map((d,i)=>`${sx(i)},${sy(d)}`);
+  if(fill)svg.appendChild(svgEl('polygon',{points:`${sx(0)},${p.t+ch} ${pts.join(' ')} ${sx(data.length-1)},${p.t+ch}`,fill:color,opacity:'0.12'}));
+  svg.appendChild(svgEl('polyline',{points:pts.join(' '),fill:'none',stroke:color,'stroke-width':'1.5','stroke-linejoin':'round'}));
+  data.forEach((d,i)=>svg.appendChild(svgEl('circle',{cx:sx(i),cy:sy(d),r:'2',fill:dotColors?(d.color||color):color})));
+  if(yLabel){const t=svgEl('text',{x:p.l,y:h-1,fill:'#484f58','font-size':'7','font-family':'monospace'});t.textContent=yLabel;svg.appendChild(t);}
+  el.innerHTML='';el.appendChild(svg);
 }
 
-function ago(started) {
-  if (!started) return '';
-  return fmt(Math.floor((Date.now() - new Date(started).getTime()) / 1000));
-}
-
-function shortDate(iso) {
-  if (!iso) return '?';
-  const d = new Date(iso);
-  return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
-}
-
-// ── SVG Chart Helpers ──────────────────────────────────────────────
-
-function svgEl(tag, attrs = {}) {
-  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-  return el;
-}
-
-function lineChart(container, data, opts = {}) {
-  const { width = 300, height = 80, color = '#22c55e', label = '', showDots = true, dotColors = null, fill = false } = opts;
-  if (!data.length) { container.innerHTML = '<div class="no-data">No data</div>'; return; }
-  const pad = { t: 8, r: 8, b: 16, l: 8 };
-  const w = width - pad.l - pad.r, h = height - pad.t - pad.b;
-  const maxY = Math.max(...data.map(d => d.y), 1);
-  const minY = Math.min(...data.map(d => d.y), 0);
-  const rangeY = maxY - minY || 1;
-  const sx = i => pad.l + (i / Math.max(data.length - 1, 1)) * w;
-  const sy = d => pad.t + h - ((d.y - minY) / rangeY) * h;
-
-  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, preserveAspectRatio: 'none' });
-
-  // Grid lines
-  for (let i = 0; i <= 3; i++) {
-    const y = pad.t + (h / 3) * i;
-    svg.appendChild(svgEl('line', { x1: pad.l, y1: y, x2: width - pad.r, y2: y, stroke: '#30363d', 'stroke-width': '0.5' }));
-  }
-
-  // Path
-  const pts = data.map((d, i) => `${sx(i)},${sy(d)}`);
-  if (fill) {
-    const fillPts = [`${sx(0)},${pad.t + h}`, ...pts, `${sx(data.length - 1)},${pad.t + h}`];
-    svg.appendChild(svgEl('polygon', { points: fillPts.join(' '), fill: color, opacity: '0.15' }));
-  }
-  svg.appendChild(svgEl('polyline', { points: pts.join(' '), fill: 'none', stroke: color, 'stroke-width': '1.5', 'stroke-linejoin': 'round' }));
-
-  // Dots
-  if (showDots) {
-    data.forEach((d, i) => {
-      const c = dotColors ? (d.color || color) : color;
-      svg.appendChild(svgEl('circle', { cx: sx(i), cy: sy(d), r: '2.5', fill: c }));
+function heatmap(el,phases,runs){
+  if(!runs.length||!phases.length)return;
+  const w=300,cellW=Math.min(8,(w-70)/runs.length),cellH=9,padL=70;
+  const h=phases.length*(cellH+1)+4;
+  const svg=svgEl('svg',{viewBox:`0 0 ${w} ${h}`});
+  const colors={success:'#22c55e',failure:'#ef4444',skipped:'#21262d',pending:'#21262d',in_progress:'#f59e0b'};
+  phases.forEach((pn,pi)=>{
+    const t=svgEl('text',{x:padL-3,y:pi*(cellH+1)+cellH-1,fill:'#7d8590','font-size':'6','font-family':'monospace','text-anchor':'end'});
+    t.textContent=pn.length>10?pn.slice(0,10):pn;svg.appendChild(t);
+    runs.forEach((run,ri)=>{
+      const ph=(run.phases||[]).find(p=>p.name===pn);
+      const st=ph?ph.status:'skipped';
+      svg.appendChild(svgEl('rect',{x:padL+ri*(cellW+1),y:pi*(cellH+1),width:cellW,height:cellH,fill:colors[st]||'#21262d',rx:'1',opacity:st==='skipped'?'0.2':'0.7'}));
     });
-  }
-
-  // Label
-  if (label) {
-    const txt = svgEl('text', { x: pad.l, y: height - 2, fill: '#7d8590', 'font-size': '8', 'font-family': 'monospace' });
-    txt.textContent = label;
-    svg.appendChild(txt);
-  }
-
-  container.innerHTML = '';
-  container.appendChild(svg);
+  });
+  el.innerHTML='';el.appendChild(svg);
 }
 
-function barChart(container, data, opts = {}) {
-  const { width = 300, height = 80, color = '#22c55e', stacked = false } = opts;
-  if (!data.length) { container.innerHTML = '<div class="no-data">No data</div>'; return; }
-  const pad = { t: 8, r: 8, b: 16, l: 8 };
-  const w = width - pad.l - pad.r, h = height - pad.t - pad.b;
-  const maxY = Math.max(...data.map(d => stacked ? Object.values(d.values || {}).reduce((a, b) => a + b, 0) : d.y), 1);
-  const barW = Math.max(2, w / data.length - 2);
-
-  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}` });
-  for (let i = 0; i <= 3; i++) {
-    const y = pad.t + (h / 3) * i;
-    svg.appendChild(svgEl('line', { x1: pad.l, y1: y, x2: width - pad.r, y2: y, stroke: '#30363d', 'stroke-width': '0.5' }));
-  }
-
-  if (stacked) {
-    const colors = { corrupt_jars_deleted: '#ef4444', corrupt_jandex_deleted: '#f59e0b', retries: '#a855f7' };
-    data.forEach((d, i) => {
-      const x = pad.l + (i / data.length) * w;
-      let accum = 0;
-      for (const [key, val] of Object.entries(d.values || {})) {
-        const barH = (val / maxY) * h;
-        svg.appendChild(svgEl('rect', { x, y: pad.t + h - accum - barH, width: barW, height: barH, fill: colors[key] || '#6b7280', rx: '1' }));
-        accum += barH;
-      }
-    });
-  } else {
-    data.forEach((d, i) => {
-      const x = pad.l + (i / data.length) * w;
-      const barH = (d.y / maxY) * h;
-      svg.appendChild(svgEl('rect', { x, y: pad.t + h - barH, width: barW, height: barH, fill: d.color || color, rx: '1' }));
-    });
-  }
-
-  container.innerHTML = '';
-  container.appendChild(svg);
+// ── Pipeline renderer ──────────────────────────────────────────────
+function phaseBox(p,clickFn){
+  if(!p)return'<div class="phase pending"><div class="name">?</div></div>';
+  const dur=p.status==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
+  const parts=[];
+  if(p.modules)parts.push(p.modules+' mod');
+  if(p.tests_run)parts.push(p.tests_run+' tests');
+  if(p.tests_failed)parts.push(`<span style="color:var(--red)">${p.tests_failed} fail</span>`);
+  if(p.tests_flaky)parts.push(`<span style="color:var(--yellow)">${p.tests_flaky} flaky</span>`);
+  const sh=p.self_healing,healed=sh&&(sh.corrupt_jars_deleted||sh.corrupt_jandex_deleted||sh.retries);
+  return`<div class="phase ${p.status}" ${clickFn?`onclick="${clickFn}('${p.name}')"`:''}>`+
+    `<div class="name">${p.name}</div>`+
+    `<div class="info">${dur||'—'}</div>`+
+    (parts.length?`<div class="info">${parts.join(' · ')}</div>`:'')+
+    (p.status==='failure'&&p.failed_modules?`<div class="fail-detail">${p.failed_modules.slice(0,2).join(', ')}</div>`:'')+
+    (p.status==='failure'&&p.tests_failed?`<div class="fail-detail">${p.tests_failed} test failure${p.tests_failed>1?'s':''}</div>`:'')+
+    (p.status==='failure'&&p.timeouts?`<div class="fail-detail">⏱ timeout</div>`:'')+
+    (healed?`<div class="info" style="color:var(--yellow)">🔧</div>`:'')+
+    `</div>`;
 }
 
-// ── Render Functions ───────────────────────────────────────────────
-
-let selectedPhase = null;
-
-function renderLastFailureBanner(history) {
-  const banner = document.getElementById('last-failure-banner');
-  if (history && history.length > 0 && history[0].conclusion === 'failure') {
-    const last = history[0];
-    const failedPhases = (last.phases || []).filter(p => p.status === 'failure');
-    const failedNames = failedPhases.map(p => p.name).join(', ') || 'unknown phase';
-    banner.style.display = 'flex';
-    document.getElementById('failure-msg').textContent = `Last build FAILED — ${failedNames}`;
-    document.getElementById('failure-detail').innerHTML = `
-      <a href="${last.run_url || '#'}" target="_blank">Run #${last.run_id}</a> · ${last.commit || ''} · ${shortDate(last.started)}
-      ${last.total_flaky ? ` · <span style="color:var(--yellow)">${last.total_flaky} flaky</span>` : ''}
-    `;
-  } else {
-    banner.style.display = 'none';
-  }
+function renderPipe(phases,id,clickFn){
+  const el=document.getElementById(id);if(!el)return;
+  const m={};(phases||[]).forEach(p=>m[p.name]=p);
+  const prep=m['Prepare + Platform base'];
+  const slices=['Slice A','Slice B','Slice C','Slice D'].map(n=>m[n]);
+  const seq=['Platform convergence','G1: Core libs','G2: Domain','G3: Middleware','G4: Extensions','G5+G6: Apps'].map(n=>m[n]);
+  el.innerHTML=`<div class="pipe">`+
+    `<div class="pipe-row pipe-full">${phaseBox(prep,clickFn)}</div>`+
+    `<div class="pipe-connector"></div>`+
+    `<div class="pipe-fan"></div>`+
+    `<div class="pipe-row pipe-parallel">${slices.map(s=>phaseBox(s,clickFn)).join('')}</div>`+
+    `<div class="pipe-fan"></div>`+
+    `<div class="pipe-connector"></div>`+
+    seq.map(p=>`<div class="pipe-row pipe-full">${phaseBox(p,clickFn)}</div>`).join('')+
+    `</div>`;
 }
 
-function renderCurrent(current) {
-  const card = document.getElementById('current-card');
-  const noCard = document.getElementById('no-build');
-  if (!current) { card.style.display = 'none'; noCard.style.display = 'block'; return; }
-  card.style.display = 'block'; noCard.style.display = 'none';
-  const hasFailure = current.phases.some(p => p.status === 'failure');
-  card.className = hasFailure ? 'card failed-build' : 'card';
-
-  document.getElementById('run-meta').innerHTML = `
-    <a href="${current.run_url}" target="_blank">Run #${current.run_id}</a>
-    <span style="color:var(--muted)">${current.commit || ''}</span>
-    <span style="color:var(--muted)">${ago(current.started)} ago</span>
-    ${hasFailure ? `<span class="badge failed">FAILED</span>` : ''}
-    ${current.resume_from ? `<span class="badge resume">resumed from ${current.resume_from}</span>` : ''}
-    ${current.retry_count > 0 ? `<span class="badge retry">retry #${current.retry_count}</span>` : ''}
-  `;
-
-  const pipeline = document.getElementById('pipeline');
-  pipeline.innerHTML = current.phases.map((p, i) => {
-    const dur = p.status === 'in_progress' ? ago(p.started) : p.duration_s != null ? fmt(p.duration_s) : '';
-    const parts = [];
-    if (p.modules) parts.push(`${p.modules} mod`);
-    if (p.tests_run) parts.push(`${p.tests_run} tests`);
-    if (p.tests_failed) parts.push(`<span style="color:var(--red)">${p.tests_failed} fail</span>`);
-    if (p.tests_flaky) parts.push(`<span style="color:var(--yellow)">${p.tests_flaky} flaky</span>`);
-    if (p.timeouts) parts.push(`<span style="color:var(--red)">${p.timeouts} hang</span>`);
-    const sh = p.self_healing;
-    const healed = sh && (sh.corrupt_jars_deleted || sh.corrupt_jandex_deleted || sh.retries);
-    return `<div class="phase ${p.status}" onclick="toggleDetail(${i})" data-idx="${i}">
-      <div class="name">${p.name}</div>
-      <div class="info">${dur || '—'}</div>
-      ${parts.length ? `<div class="info">${parts.join(' · ')}</div>` : ''}
-      ${healed ? `<div class="info" style="color:var(--yellow)">🔧 healed</div>` : ''}
-      ${p.status === 'failure' && p.failed_modules ? `<div class="fail-detail">${p.failed_modules.join(', ')}</div>` : ''}
-      ${p.status === 'failure' && p.tests_failed ? `<div class="fail-detail">${p.tests_failed} test${p.tests_failed > 1 ? 's' : ''} failed</div>` : ''}
-      ${p.status === 'failure' && p.timeouts ? `<div class="fail-detail">⏱ timeout</div>` : ''}
-      ${p.status === 'failure' && healed ? `<div class="fail-detail">healed transients → still failed</div>` : ''}
-    </div>`;
-  }).join('');
+// ── Detail panel ───────────────────────────────────────────────────
+let _detailName=null;
+function showDetail(name){
+  const panel=document.getElementById('active-detail');if(!panel)return;
+  if(_detailName===name){panel.classList.remove('open');_detailName=null;return;}
+  _detailName=name;
+  const phases=window._data?.current?.phases||window._data?.history?.[0]?.phases||[];
+  const p=phases.find(ph=>ph.name===name);if(!p)return;
+  let h=`<h3>${p.name}</h3><div class="detail-grid">`;
+  h+=`<div class="detail-item"><div class="dlabel">Duration</div>${p.duration_s!=null?fmt(p.duration_s):'—'}${p.maven_time_s?' (Maven: '+fmt(p.maven_time_s)+')':''}</div>`;
+  h+=`<div class="detail-item"><div class="dlabel">Modules</div>${p.modules||'—'}</div>`;
+  h+=`<div class="detail-item"><div class="dlabel">Tests</div>${p.tests_run||0} run · ${p.tests_failed||0} fail · ${p.tests_skipped||0} skip</div>`;
+  if(p.tests_flaky)h+=`<div class="detail-item"><div class="dlabel">Flaky</div><span style="color:var(--yellow)">${p.tests_flaky}</span></div>`;
+  if(p.timeouts)h+=`<div class="detail-item"><div class="dlabel">Timeouts</div><span style="color:var(--red)">${p.timeouts}</span></div>`;
+  if(p.compilation_warnings)h+=`<div class="detail-item"><div class="dlabel">Warnings</div>${p.compilation_warnings}</div>`;
+  if(p.deprecation_warnings)h+=`<div class="detail-item"><div class="dlabel">Deprecations</div>${p.deprecation_warnings}</div>`;
+  if(p.quarkus_boots)h+=`<div class="detail-item"><div class="dlabel">Quarkus boots</div>${p.quarkus_boots.count}× avg ${p.quarkus_boots.avg_s}s (max ${p.quarkus_boots.max_s}s)</div>`;
+  if(p.artifact_size_mb)h+=`<div class="detail-item"><div class="dlabel">Artifacts</div>${p.artifact_size_mb} MB</div>`;
+  const sh=p.self_healing;
+  if(sh)h+=`<div class="detail-item"><div class="dlabel">Self-healing</div>🔧 ${sh.corrupt_jars_deleted||0} JARs · ${sh.corrupt_jandex_deleted||0} Jandex · ${sh.retries||0} retries</div>`;
+  h+=`</div>`;
+  if(p.slowest_modules?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Slowest modules</div></div><ul class="detail-list">${p.slowest_modules.map(m=>`<li><span>${m.name}</span><span class="val">${m.seconds}s</span></li>`).join('')}</ul></div>`;
+  if(p.slowest_tests?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Slowest tests</div></div><ul class="detail-list">${p.slowest_tests.map(t=>`<li><span>${t.test}</span><span class="val">${t.seconds}s</span></li>`).join('')}</ul></div>`;
+  if(p.failed_modules?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Failed modules</div></div><ul class="detail-list">${p.failed_modules.map(m=>`<li style="color:var(--red)">${m}</li>`).join('')}</ul></div>`;
+  panel.innerHTML=h;panel.classList.add('open');
 }
 
-function toggleDetail(idx) {
-  const panel = document.getElementById('phase-detail');
-  if (selectedPhase === idx) { panel.classList.remove('open'); selectedPhase = null; return; }
-  selectedPhase = idx;
-
-  const data = window._currentData;
-  if (!data || !data.current) return;
-  const p = data.current.phases[idx];
-  if (!p) return;
-
-  let html = `<h3>${p.name}</h3><div class="detail-grid">`;
-  html += `<div class="detail-item"><div class="label">Status</div>${p.status}</div>`;
-  html += `<div class="detail-item"><div class="label">Duration</div>${p.duration_s != null ? fmt(p.duration_s) : '—'}</div>`;
-  html += `<div class="detail-item"><div class="label">Modules</div>${p.modules || '—'}</div>`;
-  html += `<div class="detail-item"><div class="label">Tests</div>${p.tests_run || 0} run · ${p.tests_failed || 0} failed · ${p.tests_skipped || 0} skipped</div>`;
-  if (p.tests_flaky) html += `<div class="detail-item"><div class="label">Flaky</div><span style="color:var(--yellow)">${p.tests_flaky}</span></div>`;
-  if (p.timeouts) html += `<div class="detail-item"><div class="label">Timeouts</div><span style="color:var(--red)">${p.timeouts}</span></div>`;
-  if (p.compilation_warnings) html += `<div class="detail-item"><div class="label">Warnings</div>${p.compilation_warnings}</div>`;
-  if (p.deprecation_warnings) html += `<div class="detail-item"><div class="label">Deprecations</div>${p.deprecation_warnings}</div>`;
-  if (p.quarkus_boots) html += `<div class="detail-item"><div class="label">Quarkus boots</div>${p.quarkus_boots.count} × avg ${p.quarkus_boots.avg_s}s (max ${p.quarkus_boots.max_s}s)</div>`;
-  if (p.artifact_size_mb) html += `<div class="detail-item"><div class="label">Artifact size</div>${p.artifact_size_mb} MB</div>`;
-  const sh = p.self_healing;
-  if (sh) html += `<div class="detail-item"><div class="label">Self-healing</div>🔧 ${sh.corrupt_jars_deleted || 0} JARs · ${sh.corrupt_jandex_deleted || 0} Jandex · ${sh.retries || 0} retries</div>`;
-  html += `</div>`;
-
-  if (p.slowest_modules && p.slowest_modules.length) {
-    html += `<div style="margin-top:10px"><div class="detail-item"><div class="label">Slowest modules</div></div><ul class="detail-list">`;
-    p.slowest_modules.forEach(m => html += `<li><span>${m.name}</span><span class="val">${m.seconds}s</span></li>`);
-    html += `</ul></div>`;
+// ── Render current ─────────────────────────────────────────────────
+function renderCurrent(cur,hist){
+  const sec=document.getElementById('current-section');
+  const banner=document.getElementById('failure-banner');
+  if(!cur){
+    if(hist?.length&&hist[0].conclusion==='failure'){
+      const l=hist[0],fp=(l.phases||[]).filter(p=>p.status==='failure').map(p=>p.name);
+      banner.style.display='block';
+      banner.innerHTML=`<div class="msg">✕ Last build FAILED${fp.length?' — '+fp.join(', '):''}</div><div class="detail"><a href="${l.run_url||'#'}" target="_blank">Run #${l.run_id}</a> · ${l.commit||''} · ${shortDate(l.started)} · ${fmt(l.duration_s)}</div>`;
+    }else banner.style.display='none';
+    sec.innerHTML=`<div class="card"><div class="no-data">No build in progress</div></div>`;
+    return;
   }
-  if (p.slowest_tests && p.slowest_tests.length) {
-    html += `<div style="margin-top:10px"><div class="detail-item"><div class="label">Slowest tests</div></div><ul class="detail-list">`;
-    p.slowest_tests.forEach(t => html += `<li><span>${t.test}</span><span class="val">${t.seconds}s</span></li>`);
-    html += `</ul></div>`;
-  }
-  if (p.failed_modules && p.failed_modules.length) {
-    html += `<div style="margin-top:10px"><div class="detail-item"><div class="label">Failed modules</div></div><ul class="detail-list">`;
-    p.failed_modules.forEach(m => html += `<li style="color:var(--red)">${m}</li>`);
-    html += `</ul></div>`;
-  }
-
-  panel.innerHTML = html;
-  panel.classList.add('open');
+  banner.style.display='none';
+  const fail=cur.phases.some(p=>p.status==='failure');
+  sec.innerHTML=`<div class="card${fail?' failed-build':''}"><h2>Current Build</h2>`+
+    `<div class="run-meta"><a href="${cur.run_url}" target="_blank">Run #${cur.run_id}</a>`+
+    `<span style="color:var(--muted)">${cur.commit||''}</span>`+
+    `<span style="color:var(--muted)">${ago(cur.started)} ago</span>`+
+    (fail?'<span class="badge failed">FAILED</span>':'')+
+    (cur.resume_from?`<span class="badge resume">resumed from ${cur.resume_from}</span>`:'')+
+    (cur.retry_count>0?`<span class="badge retry">retry #${cur.retry_count}</span>`:'')+
+    `</div><div id="cur-pipe"></div><div id="active-detail" class="detail-panel"></div></div>`;
+  renderPipe(cur.phases,'cur-pipe','showDetail');
 }
 
-function renderStats(history) {
-  const el = document.getElementById('stats');
-  if (!history || !history.length) { el.innerHTML = ''; return; }
-
-  const n = history.length;
-  const passed = history.filter(h => h.conclusion === 'success').length;
-  const rate = Math.round((passed / n) * 100);
-  const avgDur = Math.round(history.reduce((a, h) => a + (h.duration_s || 0), 0) / n);
-  const avgTests = Math.round(history.reduce((a, h) => a + (h.total_tests || 0), 0) / n);
-  const avgMod = Math.round(history.reduce((a, h) => a + (h.total_modules || 0), 0) / n);
-  const totalFlaky = history.reduce((a, h) => a + (h.total_flaky || 0), 0);
-  const totalWarnings = history.reduce((a, h) => a + (h.total_warnings || 0), 0);
-  const totalHealing = history.reduce((a, h) => {
-    const sh = h.self_healing || {};
-    return a + (sh.corrupt_jars_deleted || 0) + (sh.corrupt_jandex_deleted || 0) + (sh.retries || 0);
-  }, 0);
-  const rc = rate >= 80 ? 'green' : rate >= 50 ? 'yellow' : 'red';
-
-  el.innerHTML = `
+// ── Render stats ───────────────────────────────────────────────────
+function renderStats(hist){
+  const el=document.getElementById('stats');if(!hist?.length){el.innerHTML='';return;}
+  const n=hist.length,passed=hist.filter(h=>h.conclusion==='success').length;
+  const rate=Math.round(passed/n*100),rc=rate>=80?'green':rate>=50?'yellow':'red';
+  const avg=s=>Math.round(hist.reduce((a,h)=>a+(h[s]||0),0)/n);
+  const totalH=hist.reduce((a,h)=>{const s=h.self_healing||{};return a+(s.corrupt_jars_deleted||0)+(s.corrupt_jandex_deleted||0)+(s.retries||0);},0);
+  const totalF=hist.reduce((a,h)=>a+(h.total_flaky||0),0);
+  el.innerHTML=`
     <div class="stat"><div class="value ${rc}">${rate}%</div><div class="label">Pass rate</div></div>
-    <div class="stat"><div class="value">${fmt(avgDur)}</div><div class="label">Avg duration</div></div>
+    <div class="stat"><div class="value">${fmt(avg('duration_s'))}</div><div class="label">Avg duration</div></div>
     <div class="stat"><div class="value">${n}</div><div class="label">Runs</div></div>
     <div class="stat"><div class="value green">${passed}</div><div class="label">Passed</div></div>
-    <div class="stat"><div class="value red">${n - passed}</div><div class="label">Failed</div></div>
-    <div class="stat"><div class="value">${avgTests.toLocaleString()}</div><div class="label">Avg tests</div></div>
-    <div class="stat"><div class="value">${avgMod}</div><div class="label">Avg modules</div></div>
-    ${totalFlaky ? `<div class="stat"><div class="value yellow">${totalFlaky}</div><div class="label">Total flakes</div></div>` : ''}
-    ${totalWarnings ? `<div class="stat"><div class="value">${totalWarnings}</div><div class="label">Total warns</div></div>` : ''}
-    ${totalHealing ? `<div class="stat"><div class="value yellow">${totalHealing}</div><div class="label">Self-heals</div></div>` : ''}
-  `;
+    <div class="stat"><div class="value red">${n-passed}</div><div class="label">Failed</div></div>
+    <div class="stat"><div class="value">${avg('total_tests').toLocaleString()}</div><div class="label">Avg tests</div></div>
+    ${totalF?`<div class="stat"><div class="value yellow">${totalF}</div><div class="label">Flakes</div></div>`:''}
+    ${totalH?`<div class="stat"><div class="value yellow">${totalH}</div><div class="label">Self-heals</div></div>`:''}`;
 }
 
-function renderCharts(history) {
-  const el = document.getElementById('charts-section');
-  if (!history || history.length < 2) { el.innerHTML = ''; return; }
-
-  const runs = history.slice(0, 50).reverse();
-  el.innerHTML = `
-    <div class="chart-card"><h3>Build Duration</h3><div id="ch-dur"></div></div>
-    <div class="chart-card"><h3>Test Count</h3><div id="ch-tests"></div></div>
-    <div class="chart-card"><h3>Pass Rate (10-run rolling)</h3><div id="ch-rate"></div></div>
-    <div class="chart-card"><h3>Flaky Tests</h3><div id="ch-flaky"></div></div>
-    <div class="chart-card"><h3>Self-Healing Events</h3><div id="ch-heal"></div></div>
-    <div class="chart-card"><h3>Warnings</h3><div id="ch-warn"></div></div>
-  `;
-
-  lineChart(document.getElementById('ch-dur'),
-    runs.map((r, i) => ({ x: i, y: Math.round((r.duration_s || 0) / 60), color: r.conclusion === 'success' ? '#22c55e' : '#ef4444' })),
-    { color: '#3b82f6', dotColors: true, label: 'minutes' });
-
-  lineChart(document.getElementById('ch-tests'),
-    runs.map((r, i) => ({ x: i, y: r.total_tests || 0 })),
-    { color: '#a855f7', fill: true, showDots: false, label: 'tests' });
-
-  // Rolling 10-run pass rate
-  const rateData = [];
-  for (let i = 0; i < runs.length; i++) {
-    const window = runs.slice(Math.max(0, i - 9), i + 1);
-    const p = window.filter(r => r.conclusion === 'success').length;
-    rateData.push({ x: i, y: Math.round((p / window.length) * 100), color: p / window.length >= 0.8 ? '#22c55e' : p / window.length >= 0.5 ? '#f59e0b' : '#ef4444' });
-  }
-  barChart(document.getElementById('ch-rate'), rateData, { color: '#22c55e' });
-
-  lineChart(document.getElementById('ch-flaky'),
-    runs.map((r, i) => ({ x: i, y: r.total_flaky || 0 })),
-    { color: '#f59e0b', label: 'flakes per run' });
-
-  barChart(document.getElementById('ch-heal'),
-    runs.map((r, i) => {
-      const sh = r.self_healing || {};
-      return { x: i, values: { corrupt_jars_deleted: sh.corrupt_jars_deleted || 0, corrupt_jandex_deleted: sh.corrupt_jandex_deleted || 0, retries: sh.retries || 0 } };
-    }),
-    { stacked: true });
-
-  lineChart(document.getElementById('ch-warn'),
-    runs.map((r, i) => ({ x: i, y: r.total_warnings || 0 })),
-    { color: '#6b7280', fill: true, showDots: false, label: 'warnings' });
+// ── Render charts ──────────────────────────────────────────────────
+function renderCharts(hist){
+  const el=document.getElementById('charts');if(!hist||hist.length<2){el.innerHTML='';return;}
+  const runs=hist.slice(0,50).reverse();
+  const pn=['Prepare + P…','Slice A','Slice B','Slice C','Slice D','Convergence','G1','G2','G3','G4','G5+G6'];
+  const pfull=['Prepare + Platform base','Slice A','Slice B','Slice C','Slice D','Platform convergence','G1: Core libs','G2: Domain','G3: Middleware','G4: Extensions','G5+G6: Apps'];
+  el.innerHTML=`<div class="chart-card"><h3>Build Duration</h3><div id="ch-dur"></div></div>`+
+    `<div class="chart-card"><h3>Test Count</h3><div id="ch-tests"></div></div>`+
+    `<div class="chart-card"><h3>Phase Failure Heatmap</h3><div id="ch-heat"></div></div>`+
+    `<div class="chart-card"><h3>Self-Healing</h3><div id="ch-heal"></div></div>`;
+  lineChart(document.getElementById('ch-dur'),runs.map((r,i)=>({x:i,y:Math.round((r.duration_s||0)/60),color:r.conclusion==='success'?'#22c55e':'#ef4444'})),{color:'#3b82f6',dotColors:true,yLabel:'minutes'});
+  lineChart(document.getElementById('ch-tests'),runs.map((r,i)=>({x:i,y:r.total_tests||0})),{color:'#a855f7',fill:true,yLabel:'tests'});
+  heatmap(document.getElementById('ch-heat'),pfull,runs);
+  lineChart(document.getElementById('ch-heal'),runs.map((r,i)=>{const s=r.self_healing||{};return{x:i,y:(s.corrupt_jars_deleted||0)+(s.corrupt_jandex_deleted||0)+(s.retries||0)};}),{color:'#f59e0b',fill:true,yLabel:'events'});
 }
 
-function renderHistoryTable(history) {
-  const el = document.getElementById('history-table');
-  if (!history || !history.length) { el.innerHTML = '<div class="no-data">No build history yet</div>'; return; }
-
-  const rows = history.slice(0, 20).map(h => {
-    const sh = h.self_healing || {};
-    const healCount = (sh.corrupt_jars_deleted || 0) + (sh.corrupt_jandex_deleted || 0) + (sh.retries || 0);
-    return `<tr>
-      <td><span class="dot ${h.conclusion}"></span>${shortDate(h.started)}</td>
-      <td><a href="${h.run_url || '#'}" target="_blank">${h.commit || '—'}</a></td>
-      <td>${h.conclusion}</td>
-      <td>${fmt(h.duration_s)}</td>
-      <td>${(h.total_tests || 0).toLocaleString()}</td>
-      <td>${h.total_modules || '—'}</td>
-      <td>${h.total_flaky ? `<span style="color:var(--yellow)">${h.total_flaky}</span>` : '—'}</td>
-      <td>${healCount ? `<span style="color:var(--yellow)">${healCount}</span>` : '—'}</td>
-      <td>${h.resume_from ? `<span style="color:var(--yellow)">${h.resume_from}</span>` : '—'}</td>
-    </tr>`;
+// ── Render history (expandable rows) ───────────────────────────────
+function renderHistory(hist){
+  const el=document.getElementById('history');
+  if(!hist?.length){el.innerHTML='<div class="no-data">No build history</div>';return;}
+  el.innerHTML=hist.slice(0,30).map((h,i)=>{
+    const sh=h.self_healing||{},hc=(sh.corrupt_jars_deleted||0)+(sh.corrupt_jandex_deleted||0)+(sh.retries||0);
+    return`<div class="history-item">`+
+      `<div class="history-summary" onclick="toggleHist(${i})">`+
+      `<span class="hdot ${h.conclusion}"></span>`+
+      `<span>Run #${h.run_id||'?'}</span>`+
+      `<span style="color:var(--muted)">${h.commit||''}</span>`+
+      `<span>${fmt(h.duration_s)}</span>`+
+      `<span class="htag">${(h.total_tests||0).toLocaleString()} tests</span>`+
+      `<span class="htag">${h.total_modules||'?'} mod</span>`+
+      (h.total_flaky?`<span class="htag warn">${h.total_flaky} flaky</span>`:'')+
+      (hc?`<span class="htag warn">🔧${hc}</span>`:'')+
+      (h.resume_from?`<span class="htag warn">↩${h.resume_from}</span>`:'')+
+      `<span class="htag">${shortDate(h.started)}</span>`+
+      `<span class="hexpand" id="hx-${i}">▸</span>`+
+      `</div><div class="history-detail" id="hd-${i}"><div id="hp-${i}"></div></div></div>`;
   }).join('');
-
-  el.innerHTML = `<table>
-    <thead><tr><th>Date</th><th>Commit</th><th>Result</th><th>Duration</th><th>Tests</th><th>Modules</th><th>Flakes</th><th>Heals</th><th>Resumed</th></tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
+}
+function toggleHist(i){
+  const d=document.getElementById('hd-'+i),a=document.getElementById('hx-'+i);
+  const open=d.classList.contains('open');
+  document.querySelectorAll('.history-detail.open').forEach(x=>x.classList.remove('open'));
+  document.querySelectorAll('.hexpand.open').forEach(x=>x.classList.remove('open'));
+  if(!open){d.classList.add('open');a.classList.add('open');const h=window._data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i);}
 }
 
-async function refresh() {
-  try {
-    const resp = await fetch(BUST());
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    window._currentData = data;
-    renderCurrent(data.current);
-    if (!data.current) renderLastFailureBanner(data.history);
-    else document.getElementById('last-failure-banner').style.display = 'none';
-    renderStats(data.history);
-    renderCharts(data.history);
-    renderHistoryTable(data.history);
-    document.getElementById('refresh-info').textContent = `${new Date().toLocaleTimeString()} · 30s`;
-  } catch (e) {
-    document.getElementById('refresh-info').textContent = `Error: ${e.message}`;
-  }
+// ── Refresh ────────────────────────────────────────────────────────
+async function refresh(){
+  try{
+    const r=await fetch(BUST());if(!r.ok)throw new Error('HTTP '+r.status);
+    const data=await r.json();window._data=data;
+    renderCurrent(data.current,data.history);renderStats(data.history);renderCharts(data.history);renderHistory(data.history);
+    document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · 30s';
+  }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
 }
-
-refresh();
-setInterval(refresh, 30000);
+refresh();setInterval(refresh,30000);
 </script>
 </body>
 </html>
