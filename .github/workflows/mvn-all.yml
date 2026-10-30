@@ -803,11 +803,11 @@ jobs:
             repos: "iot"
           - name: quarkmind
             repos: "quarkmind"
-          - name: bundle-a
+          - name: soc, claudony, clinical
             repos: "soc claudony clinical"
-          - name: bundle-b
+          - name: devtown, aml, chat-app
             repos: "devtown aml chat-app"
-          - name: bundle-c
+          - name: life, openclaw, desiredstate
             repos: "life openclaw desiredstate"
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
