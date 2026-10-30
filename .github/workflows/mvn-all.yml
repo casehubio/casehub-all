@@ -32,7 +32,7 @@ on:
           - L2
           - L3
           - L5
-          - L7
+          - L8
         default: ''
       submodule_update:
         description: "pinned = use committed SHAs, all = pull latest main for all repos, list = pull latest only for named repos"
@@ -64,10 +64,11 @@ permissions:
 # L2:   neocortex | qhorus
 # L3:   work
 # L4:   engine
-# L5:   [ras+workers+life] | [claudony+agency] | langchain4j
-# L6:   [desiredstate+drafthouse] | mosaic
-# L7:   iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw+ops]
-# L8:   [scaffold+fsitrading]
+# L5:   [ras→desiredstate] | [claudony+agency] | [langchain4j+workers]
+# L6:   ops | mosaic  (foundational for apps)
+# L7:   drafthouse  (uses mosaic UI)
+# L8:   life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]  (apps)
+# L9:   [scaffold+fsitrading]  (need ops)
 # fin:  dashboard finish + pointer advance
 # ════════════════════════════════════════════════════════════════════
 
@@ -115,8 +116,9 @@ jobs:
                           'work',
                           'engine',
                           'ras','desiredstate','claudony','agency','casehub-langchain4j','workers',
+                          'ops','casehub-mosaic',
                           'drafthouse',
-                          'casehub-mosaic','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','ops',
+                          'life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw',
                           'scaffold','fsitrading']]},
             'history': old.get('history', []),
             '_archives': old.get('_archives', [])
@@ -729,10 +731,10 @@ jobs:
         with: { name: "m2-L5-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
-  # Level 6: drafthouse (solo — needs agency from L5)
+  # Level 6: ops | casehub-mosaic (foundational — ops for infra, mosaic for UI)
   # ════════════════════════════════════════════════════════════════════
   level6:
-    name: "L6: drafthouse"
+    name: "L6: ${{ matrix.name }}"
     needs: [convergence, level5]
     if: always() && !cancelled() && needs.level5.result == 'success'
     runs-on: ubuntu-latest
@@ -740,8 +742,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: drafthouse
-            repos: drafthouse
+          - name: ops
+            repos: ops
+          - name: casehub-mosaic
+            repos: casehub-mosaic
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -791,29 +795,13 @@ jobs:
         with: { name: "m2-L6-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
-  # Level 7: mosaic | life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw+ops]
+  # Level 7: drafthouse (needs mosaic from L6)
   # ════════════════════════════════════════════════════════════════════
   level7:
-    name: "L7: ${{ matrix.name }}"
+    name: "L7: drafthouse"
     needs: [convergence, level6]
     if: always() && !cancelled() && needs.level6.result == 'success'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: casehub-mosaic
-            repos: casehub-mosaic
-          - name: life
-            repos: life
-          - name: iot
-            repos: iot
-          - name: quarkmind
-            repos: quarkmind
-          - name: "devtown, aml, soc"
-            repos: "devtown aml soc"
-          - name: "chat-app, clinical, openclaw, ops"
-            repos: "chat-app clinical openclaw ops"
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -825,6 +813,72 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
     steps:
       - name: Dashboard — L7 started
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-drafthouse" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
+            -d "{\"name\":\"drafthouse\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null || true
+        continue-on-error: true
+      - uses: actions/checkout@v4
+        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: actions/setup-java@v4
+        with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: corepack enable
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
+      - run: rm -rf ~/.m2/repository/io/casehub
+      - run: |
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+      - uses: actions/download-artifact@v4
+        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
+      - name: Build
+        run: |
+          bash docs/run-with-progress.sh --parallel "drafthouse" mvn install -fae -T 1C -f drafthouse/pom.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 25
+      - uses: actions/upload-artifact@v4
+        with: { name: m2-L7-drafthouse, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+
+  # ════════════════════════════════════════════════════════════════════
+  # Level 8: Apps — life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]
+  # ════════════════════════════════════════════════════════════════════
+  level8:
+    name: "L8: ${{ matrix.name }}"
+    needs: [convergence, level7]
+    if: always() && !cancelled() && needs.level7.result == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: life
+            repos: life
+          - name: iot
+            repos: iot
+          - name: quarkmind
+            repos: quarkmind
+          - name: "devtown, aml, soc"
+            repos: "devtown aml soc"
+          - name: "chat-app, clinical, openclaw"
+            repos: "chat-app clinical openclaw"
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+    steps:
+      - name: Dashboard — L8 started
         run: |
           NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           for repo in ${{ matrix.repos }}; do
@@ -860,15 +914,15 @@ jobs:
           done
         timeout-minutes: 30
       - uses: actions/upload-artifact@v4
-        with: { name: "m2-L7-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+        with: { name: "m2-L8-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
-  # Level 8: scaffold + fsitrading (both need ops from L7)
+  # Level 9: scaffold + fsitrading (both need ops from L6)
   # ════════════════════════════════════════════════════════════════════
-  level8:
-    name: "L8: scaffold, fsitrading"
-    needs: [convergence, level7]
-    if: always() && !cancelled() && needs.level7.result == 'success'
+  level9:
+    name: "L9: scaffold, fsitrading"
+    needs: [convergence, level8]
+    if: always() && !cancelled() && needs.level8.result == 'success'
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -880,7 +934,7 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
     steps:
-      - name: Dashboard — L8 started
+      - name: Dashboard — L9 started
         run: |
           NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           for repo in scaffold fsitrading; do
@@ -918,7 +972,7 @@ jobs:
   # ════════════════════════════════════════════════════════════════════
   finalize:
     name: "Finalize"
-    needs: [prepare, convergence, level1, level2, level3, level4, level5, level6, level7, level8]
+    needs: [prepare, convergence, level1, level2, level3, level4, level5, level6, level7, level8, level9]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     env:
@@ -950,7 +1004,7 @@ jobs:
       - name: Finalize CI dashboard
         if: always()
         run: |
-          ALL_OK="${{ needs.level8.result }}"
+          ALL_OK="${{ needs.level9.result }}"
           if [ "$ALL_OK" = "success" ]; then
             bash docs/update-progress.sh finish success || true
           else

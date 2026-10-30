@@ -223,12 +223,14 @@ function renderPipe(phases,id,clickFn){
   const L3=m['work'], L4=m['engine'];
   // L5: [ras+desiredstate] | [claudony+agency] | [langchain4j+workers]
   const L5=[[m['ras'],m['desiredstate']],[m['claudony'],m['agency']],[m['casehub-langchain4j'],m['workers']]];
-  // L6: drafthouse
-  const L6=[[m['drafthouse']]];
-  // L7: mosaic | life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw+ops]
-  const L7=[[m['casehub-mosaic']],[m['life']],[m['iot']],[m['quarkmind']],[m['devtown'],m['aml'],m['soc']],[m['chat-app'],m['clinical'],m['openclaw'],m['ops']]];
-  // L8: scaffold+fsitrading
-  const L8=[[m['scaffold'],m['fsitrading']]];
+  // L6: ops | casehub-mosaic (foundational)
+  const L6=[[m['ops']],[m['casehub-mosaic']]];
+  // L7: drafthouse
+  const L7=[[m['drafthouse']]];
+  // L8: life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]
+  const L8=[[m['life']],[m['iot']],[m['quarkmind']],[m['devtown'],m['aml'],m['soc']],[m['chat-app'],m['clinical'],m['openclaw']]];
+  // L9: scaffold+fsitrading
+  const L9=[[m['scaffold'],m['fsitrading']]];
 
   const row=(content,cls='pipe-full')=>`<div class="pipe-row ${cls}">${content}</div>`;
   const conn='<div class="pipe-connector"></div>';
@@ -246,7 +248,8 @@ function renderPipe(phases,id,clickFn){
     fan+row(L5.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
     fan+row(L6.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
     fan+row(L7.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    row(grp(L8[0]))+
+    fan+row(L8.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    row(grp(L9[0]))+
     `</div>`;
 }
 
@@ -365,8 +368,9 @@ async function refresh(){
         'ledger','eidos','connectors','worker',
         'neocortex','qhorus',
         'ras','desiredstate','claudony','agency','casehub-langchain4j','workers',
+        'ops','casehub-mosaic',
         'drafthouse',
-        'casehub-mosaic','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','ops',
+        'life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw',
         'scaffold','fsitrading'
       ];
       await Promise.all(phaseKeys.map(async k=>{
