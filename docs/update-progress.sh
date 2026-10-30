@@ -221,7 +221,7 @@ print(json.dumps(data, indent=2))
     # Fetch each phase file that exists for this run
     PHASE_FILES='{}'
     if [ -n "$RUN_ID" ]; then
-      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "g1--worker" "g1--ledger" "g1--connectors" "g1--neocortex" "g1--pages" "g3--work" "g3--drafthouse" "g4--ras" "g4--langchain4j" "g4--workers" "g3--engine" "g4--agency-mosaic" "app--claudony" "app--openclaw" "app--soc" "app--desiredstate" "app--life" "app--devtown" "app--aml" "app--clinical" "app--quarkmind" "app--scaffold" "app--iot" "app--chat-app" "app--ops" "app--fsitrading"; do
+      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "ledger" "eidos" "connectors" "worker" "neocortex" "qhorus" "ras" "workers" "life" "claudony" "agency" "casehub-langchain4j" "desiredstate" "drafthouse" "casehub-mosaic" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "ops" "scaffold" "fsitrading"; do
         KEY="phase-${RUN_ID}-${phase_name}"
         CONTENT=$(curl -sf "$WORKER_URL/$KEY" 2>/dev/null || echo "")
         if [ -n "$CONTENT" ] && [ "$CONTENT" != "{}" ]; then
@@ -291,7 +291,7 @@ print(json.dumps(data, indent=2))
 
     # Clean up phase files
     if [ -n "$RUN_ID" ]; then
-      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "g1--worker" "g1--ledger" "g1--connectors" "g1--neocortex" "g1--pages" "g3--work" "g3--drafthouse" "g4--ras" "g4--langchain4j" "g4--workers" "g3--engine" "g4--agency-mosaic" "app--claudony" "app--openclaw" "app--soc" "app--desiredstate" "app--life" "app--devtown" "app--aml" "app--clinical" "app--quarkmind" "app--scaffold" "app--iot" "app--chat-app" "app--ops" "app--fsitrading"; do
+      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "ledger" "eidos" "connectors" "worker" "neocortex" "qhorus" "ras" "workers" "life" "claudony" "agency" "casehub-langchain4j" "desiredstate" "drafthouse" "casehub-mosaic" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "ops" "scaffold" "fsitrading"; do
         curl -sf -X DELETE "$WORKER_URL/phase-${RUN_ID}-${phase_name}" \
           -H "Authorization: Bearer $WORKER_TOKEN" > /dev/null 2>&1 || true
       done

@@ -215,39 +215,38 @@ function renderPipe(phases,id,clickFn){
   const prep=m['Prepare + Platform base'];
   const plat=['Platform A','Platform B','Platform C','Platform D'].map(n=>m[n]);
   const conv=m['Platform convergence'];
-  const g1=['G1: worker','G1: ledger','G1: connectors','G1: neocortex','G1: pages'].map(n=>m[n]);
-  const g2=m['G2: eidos, qhorus'];
-  const g3p=['G3: work','G3: drafthouse'].map(n=>m[n]);
-  const g3e=m['G3: engine'];
-  const g4p=['G4: ras','G4: langchain4j','G4: workers'].map(n=>m[n]);
-  const g4s=m['G4: agency-mosaic'];
-  const w1_groups=[
-    [m['App: iot']],
-    [m['App: quarkmind']],
-    [m['App: soc'],m['App: claudony'],m['App: clinical']],
-    [m['App: devtown'],m['App: aml'],m['App: chat-app']],
-    [m['App: life'],m['App: openclaw'],m['App: desiredstate']]
-  ];
-  const w2=m['App: ops'];
-  const w3=['App: scaffold','App: fsitrading'].map(n=>m[n]);
+  // L1: [ledger→eidos] | connectors | worker
+  const L1=[[m['ledger'],m['eidos']],[m['connectors']],[m['worker']]];
+  // L2: neocortex | qhorus
+  const L2=[m['neocortex'],m['qhorus']];
+  // L3: work, L4: engine
+  const L3=m['work'], L4=m['engine'];
+  // L5: [ras+desiredstate] | [claudony+agency] | [langchain4j+workers]
+  const L5=[[m['ras'],m['desiredstate']],[m['claudony'],m['agency']],[m['casehub-langchain4j'],m['workers']]];
+  // L6: drafthouse
+  const L6=[[m['drafthouse']]];
+  // L7: mosaic | life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw+ops]
+  const L7=[[m['casehub-mosaic']],[m['life']],[m['iot']],[m['quarkmind']],[m['devtown'],m['aml'],m['soc']],[m['chat-app'],m['clinical'],m['openclaw'],m['ops']]];
+  // L8: scaffold+fsitrading
+  const L8=[[m['scaffold'],m['fsitrading']]];
 
   const row=(content,cls='pipe-full')=>`<div class="pipe-row ${cls}">${content}</div>`;
   const conn='<div class="pipe-connector"></div>';
   const fan='<div class="pipe-fan"></div>';
+  const grp=(g)=>`<div style="flex:1;display:flex;flex-direction:column;gap:2px">${g.map(r=>phaseBox(r,clickFn)).join('')}</div>`;
 
   el.innerHTML=`<div class="pipe">`+
     row(phaseBox(prep,clickFn))+conn+
     fan+row(plat.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
     row(phaseBox(conv,clickFn))+conn+
-    fan+row(g1.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    row(phaseBox(g2,clickFn))+conn+
-    fan+row(g3p.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    row(phaseBox(g3e,clickFn))+conn+
-    fan+row(g4p.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    row(phaseBox(g4s,clickFn))+conn+
-    fan+row(w1_groups.map(g=>`<div style="flex:1;display:flex;flex-direction:column;gap:2px">${g.map(r=>phaseBox(r,clickFn)).join('')}</div>`).join(''),'pipe-parallel')+fan+conn+
-    row(phaseBox(w2,clickFn))+conn+
-    fan+row(w3.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+
+    fan+row(L1.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    fan+row(L2.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    row(phaseBox(L3,clickFn))+conn+
+    row(phaseBox(L4,clickFn))+conn+
+    fan+row(L5.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    fan+row(L6.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    fan+row(L7.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    row(grp(L8[0]))+
     `</div>`;
 }
 
@@ -363,13 +362,12 @@ async function refresh(){
       const runId=data.current.run_id;
       const phaseKeys=[
         'prepare---platform-base','platform-a','platform-b','platform-c','platform-d',
-        'g1--worker','g1--ledger','g1--connectors','g1--neocortex','g1--pages',
-        'g3--work','g3--drafthouse','g3--engine',
-        'g4--ras','g4--langchain4j','g4--workers','g4--agency-mosaic',
-        'app--claudony','app--openclaw','app--soc','app--desiredstate',
-        'app--life',
-        'app--devtown','app--aml','app--clinical','app--quarkmind','app--scaffold','app--iot','app--chat-app',
-        'app--ops','app--fsitrading'
+        'ledger','eidos','connectors','worker',
+        'neocortex','qhorus',
+        'ras','workers','life','claudony','agency','casehub-langchain4j',
+        'desiredstate','drafthouse','casehub-mosaic',
+        'iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','ops',
+        'scaffold','fsitrading'
       ];
       await Promise.all(phaseKeys.map(async k=>{
         try{
