@@ -175,6 +175,9 @@ case "${1:-}" in
     NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     RUN_URL="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-casehubio/casehub-all}/actions/runs/${GITHUB_RUN_ID:-0}"
 
+    # Capture which submodules changed since last committed pointer
+    CHANGED_REPOS=$(git diff HEAD~1 --name-only 2>/dev/null | grep -v '^\.' | head -20 | tr '\n' ',' | sed 's/,$//' || echo "")
+
     CURRENT=$(fetch_gist)
     UPDATED=$(python3 -c "
 import json, sys
@@ -188,6 +191,7 @@ data['current'] = {
     'started': '$NOW',
     'resume_from': resume_from or None,
     'retry_count': int(retry_count) if retry_count else 0,
+    'changed_repos': [r for r in '$CHANGED_REPOS'.split(',') if r] if '$CHANGED_REPOS' else [],
     'phases': [{'name': p, 'status': 'pending'} for p in [
         'Prepare + Platform base', 'Slice A', 'Slice B', 'Slice C', 'Slice D',
         'Platform convergence', 'G1: Core libs', 'G2: Domain',
