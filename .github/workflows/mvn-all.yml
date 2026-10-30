@@ -631,7 +631,9 @@ jobs:
           print(json.dumps(d))
           " | curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" -d @- > /dev/null
+            -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
+            -d @- > /dev/null
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
