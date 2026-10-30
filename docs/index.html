@@ -221,7 +221,11 @@ function renderPipe(phases,id,clickFn){
   const g3e=m['G3: engine'];
   const g4p=['G4: ras','G4: langchain4j','G4: workers'].map(n=>m[n]);
   const g4s=m['G4: agency-mosaic'];
-  const g56=m['G5+G6: Apps'];
+  const w1=['App: claudony','App: openclaw','App: soc','App: desiredstate'].map(n=>m[n]);
+  const w2=m['App: life'];
+  const w3=['App: devtown','App: aml','App: clinical','App: quarkmind','App: scaffold','App: iot','App: chat-app'].map(n=>m[n]);
+  const w4=m['App: ops'];
+  const w5=m['App: fsitrading'];
 
   const row=(content,cls='pipe-full')=>`<div class="pipe-row ${cls}">${content}</div>`;
   const conn='<div class="pipe-connector"></div>';
@@ -236,8 +240,12 @@ function renderPipe(phases,id,clickFn){
     fan+row(g3p.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
     row(phaseBox(g3e,clickFn))+conn+
     fan+row(g4p.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    row(phaseBox(g4s,clickFn))+
-    row(phaseBox(g56,clickFn))+
+    row(phaseBox(g4s,clickFn))+conn+
+    fan+row(w1.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    row(phaseBox(w2,clickFn))+conn+
+    fan+row(w3.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    row(phaseBox(w4,clickFn))+
+    row(phaseBox(w5,clickFn))+
     `</div>`;
 }
 
@@ -355,7 +363,11 @@ async function refresh(){
         'prepare---platform-base','platform-a','platform-b','platform-c','platform-d',
         'g1--worker','g1--ledger','g1--connectors','g1--neocortex','g1--pages',
         'g3--work','g3--drafthouse',
-        'g4--ras','g4--casehub-langchain4j','g4--workers'
+        'g4--ras','g4--casehub-langchain4j','g4--workers',
+        'app--claudony','app--openclaw','app--soc','app--desiredstate',
+        'app--life',
+        'app--devtown','app--aml','app--clinical','app--quarkmind','app--scaffold','app--iot','app--chat-app',
+        'app--ops'
       ];
       await Promise.all(phaseKeys.map(async k=>{
         try{
