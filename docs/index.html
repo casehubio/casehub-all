@@ -121,8 +121,7 @@ a:hover { text-decoration: underline; }
 </div>
 
 <script>
-const GIST_RAW='https://gist.githubusercontent.com/mdproctor/2858101a4be664207373bf9491005f7d/raw/progress.json';
-const BUST=()=>`${GIST_RAW}?t=${Date.now()}`;
+const GIST_API='https://api.github.com/gists/2858101a4be664207373bf9491005f7d';
 function fmt(s){if(!s&&s!==0)return'—';if(s<60)return s+'s';const m=Math.floor(s/60),r=s%60;if(m<60)return r>0?m+'m'+r+'s':m+'m';return Math.floor(m/60)+'h'+(m%60)+'m';}
 function ago(t){return t?fmt(Math.floor((Date.now()-new Date(t).getTime())/1000)):'';}
 function shortDate(iso){if(!iso)return'?';const d=new Date(iso);return d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');}
@@ -325,8 +324,9 @@ function toggleHist(i){
 // ── Refresh ────────────────────────────────────────────────────────
 async function refresh(){
   try{
-    const r=await fetch(BUST());if(!r.ok)throw new Error('HTTP '+r.status);
-    const data=await r.json();window._data=data;
+    const r=await fetch(GIST_API);if(!r.ok)throw new Error('HTTP '+r.status);
+    const gist=await r.json();const raw=gist.files['progress.json'].content;
+    const data=JSON.parse(raw);window._data=data;
     renderCurrent(data.current,data.history);renderStats(data.history);renderCharts(data.history);renderHistory(data.history);
     document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · 30s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
