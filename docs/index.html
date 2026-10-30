@@ -20,21 +20,20 @@ h1 { font-size: 18px; font-weight: 700; }
 a { color: var(--blue); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .badge { padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; display: inline-block; }
+.badge.failed { background: rgba(239,68,68,0.3); color: var(--red); font-size: 11px; padding: 3px 10px; }
 .badge.resume { background: rgba(245,158,11,0.2); color: var(--yellow); }
 .badge.retry { background: rgba(239,68,68,0.2); color: var(--red); }
-.badge.failed { background: rgba(239,68,68,0.3); color: var(--red); font-size: 11px; padding: 3px 10px; }
 .run-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; font-size: 12px; }
 .failure-banner { background: rgba(239,68,68,0.1); border: 2px solid var(--red); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; display: none; }
 .failure-banner .msg { font-size: 14px; font-weight: 700; color: var(--red); margin-bottom: 4px; }
 .failure-banner .detail { font-size: 11px; color: var(--muted); }
 .card.failed-build { border-color: var(--red); background: rgba(239,68,68,0.04); }
 
-/* ── Pipeline layout ── */
 .pipe { margin: 8px 0; }
 .pipe-row { margin-bottom: 2px; }
 .pipe-full { display: flex; }
 .pipe-full .phase { flex: 1; }
-.pipe-parallel { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+.pipe-parallel { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 3px; }
 .pipe-connector { display: flex; justify-content: center; padding: 2px 0; }
 .pipe-connector::after { content: ''; display: block; width: 1px; height: 6px; background: var(--dim); }
 .pipe-fan { position: relative; height: 10px; margin: 0 12%; }
@@ -91,6 +90,11 @@ a:hover { text-decoration: underline; }
 .history-detail.open { display: block; }
 .no-data { color: var(--muted); text-align: center; padding: 16px; font-size: 12px; }
 
+#event-log-entries { max-height: 200px; overflow-y: auto; font-size: 10px; color: var(--muted); line-height: 1.6; }
+#event-log-entries .ev-time { color: var(--dim); }
+#event-log-entries .ev-fetch { color: var(--blue); }
+#event-log-entries .ev-transition { color: var(--yellow); }
+
 @media (max-width: 768px) {
   body { padding: 12px; }
   .pipe-parallel { grid-template-columns: repeat(2, 1fr); }
@@ -120,6 +124,11 @@ a:hover { text-decoration: underline; }
   <div id="history"></div>
 </div>
 
+<div class="card">
+  <h2>Event Log</h2>
+  <div id="event-log-entries"></div>
+</div>
+
 <script>
 const WORKER_URL='https://casehub-ci-dashboard.casehub.workers.dev';
 const POLL_MS=10000;
@@ -127,7 +136,40 @@ function fmt(s){if(!s&&s!==0)return'—';if(s<60)return s+'s';const m=Math.floor
 function ago(t){return t?fmt(Math.floor((Date.now()-new Date(t).getTime())/1000)):'';}
 function shortDate(iso){if(!iso)return'?';const d=new Date(iso);return d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');}
 
-// ── SVG ────────────────────────────────────────────────────────────
+// ── Event log ─────────────────────────────────────────────────────
+const eventLog=[];
+function logEvent(msg,cls=''){
+  const now=new Date();
+  const time=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+  eventLog.unshift({time,msg,cls});
+  if(eventLog.length>100)eventLog.length=100;
+  const el=document.getElementById('event-log-entries');
+  if(el)el.innerHTML=eventLog.map(e=>`<div><span class="ev-time">${e.time}</span> <span class="${e.cls||''}">${e.msg}</span></div>`).join('');
+}
+
+async function timedFetch(url){
+  const start=performance.now();
+  const r=await fetch(url);
+  const ms=Math.round(performance.now()-start);
+  const name=url.split('/').pop();
+  logEvent(`FETCH ${name} ${r.ok?'ok':r.status} ${ms}ms`,'ev-fetch');
+  return r;
+}
+
+// ── Previous state for transition detection ───────────────────────
+let prevPhaseStates={};
+
+function detectTransitions(phases){
+  (phases||[]).forEach(p=>{
+    const old=prevPhaseStates[p.name];
+    if(old&&old!==p.status){
+      logEvent(`${p.name}: ${old} → ${p.status}`,'ev-transition');
+    }
+    prevPhaseStates[p.name]=p.status;
+  });
+}
+
+// ── SVG helpers ───────────────────────────────────────────────────
 function svgEl(tag,a={}){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e;}
 
 function lineChart(el,data,opts={}){
@@ -138,7 +180,6 @@ function lineChart(el,data,opts={}){
   const sx=i=>p.l+(i/Math.max(data.length-1,1))*cw;
   const sy=d=>p.t+ch-(d.y/maxY)*ch;
   const svg=svgEl('svg',{viewBox:`0 0 ${w} ${h}`});
-  [0,1,2,3].forEach(i=>svg.appendChild(svgEl('line',{x1:p.l,y1:p.t+(ch/3)*i,x2:w-p.r,y2:p.t+(ch/3)*i,stroke:'#21262d','stroke-width':'0.5'})));
   const pts=data.map((d,i)=>`${sx(i)},${sy(d)}`);
   if(fill)svg.appendChild(svgEl('polygon',{points:`${sx(0)},${p.t+ch} ${pts.join(' ')} ${sx(data.length-1)},${p.t+ch}`,fill:color,opacity:'0.12'}));
   svg.appendChild(svgEl('polyline',{points:pts.join(' '),fill:'none',stroke:color,'stroke-width':'1.5','stroke-linejoin':'round'}));
@@ -147,25 +188,7 @@ function lineChart(el,data,opts={}){
   el.innerHTML='';el.appendChild(svg);
 }
 
-function heatmap(el,phases,runs){
-  if(!runs.length||!phases.length)return;
-  const w=300,cellW=Math.min(8,(w-70)/runs.length),cellH=9,padL=70;
-  const h=phases.length*(cellH+1)+4;
-  const svg=svgEl('svg',{viewBox:`0 0 ${w} ${h}`});
-  const colors={success:'#22c55e',failure:'#ef4444',skipped:'#21262d',pending:'#21262d',in_progress:'#f59e0b'};
-  phases.forEach((pn,pi)=>{
-    const t=svgEl('text',{x:padL-3,y:pi*(cellH+1)+cellH-1,fill:'#7d8590','font-size':'6','font-family':'monospace','text-anchor':'end'});
-    t.textContent=pn.length>10?pn.slice(0,10):pn;svg.appendChild(t);
-    runs.forEach((run,ri)=>{
-      const ph=(run.phases||[]).find(p=>p.name===pn);
-      const st=ph?ph.status:'skipped';
-      svg.appendChild(svgEl('rect',{x:padL+ri*(cellW+1),y:pi*(cellH+1),width:cellW,height:cellH,fill:colors[st]||'#21262d',rx:'1',opacity:st==='skipped'?'0.2':'0.7'}));
-    });
-  });
-  el.innerHTML='';el.appendChild(svg);
-}
-
-// ── Pipeline renderer ──────────────────────────────────────────────
+// ── Pipeline renderer ─────────────────────────────────────────────
 function phaseBox(p,clickFn){
   if(!p)return'<div class="phase pending"><div class="name">?</div></div>';
   const dur=p.status==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
@@ -179,8 +202,7 @@ function phaseBox(p,clickFn){
     `<div class="name">${p.name}</div>`+
     `<div class="info">${dur||'—'}</div>`+
     (parts.length?`<div class="info">${parts.join(' · ')}</div>`:'')+
-    (p.status==='failure'&&p.failed_modules?`<div class="fail-detail">${p.failed_modules.slice(0,2).join(', ')}</div>`:'')+
-    (p.status==='failure'&&p.test_errors?p.test_errors.slice(0,2).map(e=>`<div class="fail-detail" title="${(e.error||'').replace(/"/g,'&quot;')}">${e.test}: ${(e.error||'').slice(0,60)}</div>`).join(''):
+    (p.status==='failure'&&p.test_errors?p.test_errors.slice(0,2).map(e=>`<div class="fail-detail" title="${(e.error||'').replace(/"/g,'&quot;')}">${e.test}: ${(e.error||'').slice(0,50)}</div>`).join(''):
      p.status==='failure'&&p.tests_failed?`<div class="fail-detail">${p.tests_failed} test failure${p.tests_failed>1?'s':''}</div>`:'')+
     (p.status==='failure'&&p.timeouts?`<div class="fail-detail">⏱ timeout</div>`:'')+
     (healed?`<div class="info" style="color:var(--yellow)">🔧</div>`:'')+
@@ -193,30 +215,33 @@ function renderPipe(phases,id,clickFn){
   const prep=m['Prepare + Platform base'];
   const plat=['Platform A','Platform B','Platform C','Platform D'].map(n=>m[n]);
   const conv=m['Platform convergence'];
-  const g1repos=['G1: worker','G1: ledger','G1: connectors','G1: neocortex','G1: pages'].map(n=>m[n]);
+  const g1=['G1: worker','G1: ledger','G1: connectors','G1: neocortex','G1: pages'].map(n=>m[n]);
   const g2=m['G2: Domain'];
-  const g3=m['G3: Middleware'], g4=m['G4: Extensions'], g56=m['G5+G6: Apps'];
+  const g3p=['G3: work','G3: drafthouse'].map(n=>m[n]);
+  const g3e=m['G3: engine'];
+  const g4p=['G4: ras','G4: langchain4j','G4: workers'].map(n=>m[n]);
+  const g4s=m['G4: agency-mosaic'];
+  const g56=m['G5+G6: Apps'];
+
+  const row=(content,cls='pipe-full')=>`<div class="pipe-row ${cls}">${content}</div>`;
+  const conn='<div class="pipe-connector"></div>';
+  const fan='<div class="pipe-fan"></div>';
+
   el.innerHTML=`<div class="pipe">`+
-    `<div class="pipe-row pipe-full">${phaseBox(prep,clickFn)}</div>`+
-    `<div class="pipe-connector"></div>`+
-    `<div class="pipe-fan"></div>`+
-    `<div class="pipe-row pipe-parallel">${plat.map(s=>phaseBox(s,clickFn)).join('')}</div>`+
-    `<div class="pipe-fan"></div>`+
-    `<div class="pipe-connector"></div>`+
-    `<div class="pipe-row pipe-full">${phaseBox(conv,clickFn)}</div>`+
-    `<div class="pipe-connector"></div>`+
-    `<div class="pipe-fan"></div>`+
-    `<div class="pipe-row pipe-parallel" style="grid-template-columns:repeat(5,1fr)">${g1repos.map(r=>phaseBox(r,clickFn)).join('')}</div>`+
-    `<div class="pipe-fan"></div>`+
-    `<div class="pipe-connector"></div>`+
-    `<div class="pipe-row pipe-full">${phaseBox(g2,clickFn)}</div>`+
-    `<div class="pipe-row pipe-full">${phaseBox(g3,clickFn)}</div>`+
-    `<div class="pipe-row pipe-full">${phaseBox(g4,clickFn)}</div>`+
-    `<div class="pipe-row pipe-full">${phaseBox(g56,clickFn)}</div>`+
+    row(phaseBox(prep,clickFn))+conn+
+    fan+row(plat.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    row(phaseBox(conv,clickFn))+conn+
+    fan+row(g1.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    row(phaseBox(g2,clickFn))+conn+
+    fan+row(g3p.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    row(phaseBox(g3e,clickFn))+conn+
+    fan+row(g4p.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    row(phaseBox(g4s,clickFn))+
+    row(phaseBox(g56,clickFn))+
     `</div>`;
 }
 
-// ── Detail panel ───────────────────────────────────────────────────
+// ── Detail panel ──────────────────────────────────────────────────
 let _detailName=null;
 function showDetail(name){
   const panel=document.getElementById('active-detail');if(!panel)return;
@@ -231,19 +256,17 @@ function showDetail(name){
   if(p.tests_flaky)h+=`<div class="detail-item"><div class="dlabel">Flaky</div><span style="color:var(--yellow)">${p.tests_flaky}</span></div>`;
   if(p.timeouts)h+=`<div class="detail-item"><div class="dlabel">Timeouts</div><span style="color:var(--red)">${p.timeouts}</span></div>`;
   if(p.compilation_warnings)h+=`<div class="detail-item"><div class="dlabel">Warnings</div>${p.compilation_warnings}</div>`;
-  if(p.deprecation_warnings)h+=`<div class="detail-item"><div class="dlabel">Deprecations</div>${p.deprecation_warnings}</div>`;
-  if(p.quarkus_boots)h+=`<div class="detail-item"><div class="dlabel">Quarkus boots</div>${p.quarkus_boots.count}× avg ${p.quarkus_boots.avg_s}s (max ${p.quarkus_boots.max_s}s)</div>`;
-  if(p.artifact_size_mb)h+=`<div class="detail-item"><div class="dlabel">Artifacts</div>${p.artifact_size_mb} MB</div>`;
   const sh=p.self_healing;
   if(sh)h+=`<div class="detail-item"><div class="dlabel">Self-healing</div>🔧 ${sh.corrupt_jars_deleted||0} JARs · ${sh.corrupt_jandex_deleted||0} Jandex · ${sh.retries||0} retries</div>`;
   h+=`</div>`;
   if(p.slowest_modules?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Slowest modules</div></div><ul class="detail-list">${p.slowest_modules.map(m=>`<li><span>${m.name}</span><span class="val">${m.seconds}s</span></li>`).join('')}</ul></div>`;
   if(p.slowest_tests?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Slowest tests</div></div><ul class="detail-list">${p.slowest_tests.map(t=>`<li><span>${t.test}</span><span class="val">${t.seconds}s</span></li>`).join('')}</ul></div>`;
   if(p.failed_modules?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Failed modules</div></div><ul class="detail-list">${p.failed_modules.map(m=>`<li style="color:var(--red)">${m}</li>`).join('')}</ul></div>`;
+  if(p.test_errors?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Test errors</div></div><ul class="detail-list">${p.test_errors.map(e=>`<li style="color:var(--red)"><span>${e.test}</span><span class="val" title="${(e.error||'').replace(/"/g,'&quot;')}">${(e.error||'').slice(0,80)}</span></li>`).join('')}</ul></div>`;
   panel.innerHTML=h;panel.classList.add('open');
 }
 
-// ── Render current ─────────────────────────────────────────────────
+// ── Render current ────────────────────────────────────────────────
 function renderCurrent(cur,hist){
   const sec=document.getElementById('current-section');
   const banner=document.getElementById('failure-banner');
@@ -269,42 +292,30 @@ function renderCurrent(cur,hist){
   renderPipe(cur.phases,'cur-pipe','showDetail');
 }
 
-// ── Render stats ───────────────────────────────────────────────────
+// ── Render stats + charts + history (unchanged logic) ─────────────
 function renderStats(hist){
   const el=document.getElementById('stats');if(!hist?.length){el.innerHTML='';return;}
   const n=hist.length,passed=hist.filter(h=>h.conclusion==='success').length;
   const rate=Math.round(passed/n*100),rc=rate>=80?'green':rate>=50?'yellow':'red';
   const avg=s=>Math.round(hist.reduce((a,h)=>a+(h[s]||0),0)/n);
-  const totalH=hist.reduce((a,h)=>{const s=h.self_healing||{};return a+(s.corrupt_jars_deleted||0)+(s.corrupt_jandex_deleted||0)+(s.retries||0);},0);
-  const totalF=hist.reduce((a,h)=>a+(h.total_flaky||0),0);
   el.innerHTML=`
     <div class="stat"><div class="value ${rc}">${rate}%</div><div class="label">Pass rate</div></div>
     <div class="stat"><div class="value">${fmt(avg('duration_s'))}</div><div class="label">Avg duration</div></div>
     <div class="stat"><div class="value">${n}</div><div class="label">Runs</div></div>
     <div class="stat"><div class="value green">${passed}</div><div class="label">Passed</div></div>
     <div class="stat"><div class="value red">${n-passed}</div><div class="label">Failed</div></div>
-    <div class="stat"><div class="value">${avg('total_tests').toLocaleString()}</div><div class="label">Avg tests</div></div>
-    ${totalF?`<div class="stat"><div class="value yellow">${totalF}</div><div class="label">Flakes</div></div>`:''}
-    ${totalH?`<div class="stat"><div class="value yellow">${totalH}</div><div class="label">Self-heals</div></div>`:''}`;
+    <div class="stat"><div class="value">${avg('total_tests').toLocaleString()}</div><div class="label">Avg tests</div></div>`;
 }
 
-// ── Render charts ──────────────────────────────────────────────────
 function renderCharts(hist){
   const el=document.getElementById('charts');if(!hist||hist.length<2){el.innerHTML='';return;}
   const runs=hist.slice(0,50).reverse();
-  const pn=['Prepare + P…','Platform A','Platform B','Platform C','Platform D','Convergence','G1','G2','G3','G4','G5+G6'];
-  const pfull=['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','G1: Core libs','G2: Domain','G3: Middleware','G4: Extensions','G5+G6: Apps'];
   el.innerHTML=`<div class="chart-card"><h3>Build Duration</h3><div id="ch-dur"></div></div>`+
-    `<div class="chart-card"><h3>Test Count</h3><div id="ch-tests"></div></div>`+
-    `<div class="chart-card"><h3>Phase Failure Heatmap</h3><div id="ch-heat"></div></div>`+
-    `<div class="chart-card"><h3>Self-Healing</h3><div id="ch-heal"></div></div>`;
+    `<div class="chart-card"><h3>Test Count</h3><div id="ch-tests"></div></div>`;
   lineChart(document.getElementById('ch-dur'),runs.map((r,i)=>({x:i,y:Math.round((r.duration_s||0)/60),color:r.conclusion==='success'?'#22c55e':'#ef4444'})),{color:'#3b82f6',dotColors:true,yLabel:'minutes'});
   lineChart(document.getElementById('ch-tests'),runs.map((r,i)=>({x:i,y:r.total_tests||0})),{color:'#a855f7',fill:true,yLabel:'tests'});
-  heatmap(document.getElementById('ch-heat'),pfull,runs);
-  lineChart(document.getElementById('ch-heal'),runs.map((r,i)=>{const s=r.self_healing||{};return{x:i,y:(s.corrupt_jars_deleted||0)+(s.corrupt_jandex_deleted||0)+(s.retries||0)};}),{color:'#f59e0b',fill:true,yLabel:'events'});
 }
 
-// ── Render history (expandable rows) ───────────────────────────────
 function renderHistory(hist){
   const el=document.getElementById('history');
   if(!hist?.length){el.innerHTML='<div class="no-data">No build history</div>';return;}
@@ -320,7 +331,6 @@ function renderHistory(hist){
       `<span class="htag">${h.total_modules||'?'} mod</span>`+
       (h.total_flaky?`<span class="htag warn">${h.total_flaky} flaky</span>`:'')+
       (hc?`<span class="htag warn">🔧${hc}</span>`:'')+
-      (h.resume_from?`<span class="htag warn">↩${h.resume_from}</span>`:'')+
       `<span class="htag">${shortDate(h.started)}</span>`+
       `<span class="hexpand" id="hx-${i}">▸</span>`+
       `</div><div class="history-detail" id="hd-${i}"><div id="hp-${i}"></div></div></div>`;
@@ -334,27 +344,32 @@ function toggleHist(i){
   if(!open){d.classList.add('open');a.classList.add('open');const h=window._data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i);}
 }
 
-// ── Refresh ────────────────────────────────────────────────────────
+// ── Refresh ───────────────────────────────────────────────────────
 async function refresh(){
   try{
-    const r=await fetch(WORKER_URL+'/progress');if(!r.ok)throw new Error('HTTP '+r.status);
+    const r=await timedFetch(WORKER_URL+'/progress');if(!r.ok)throw new Error('HTTP '+r.status);
     const data=await r.json();
-    // Merge phase files from parallel jobs
     if(data.current){
       const runId=data.current.run_id;
-      const phaseKeys=['prepare---platform-base','platform-a','platform-b','platform-c','platform-d','g1--worker','g1--ledger','g1--connectors','g1--neocortex','g1--pages'];
+      const phaseKeys=[
+        'prepare---platform-base','platform-a','platform-b','platform-c','platform-d',
+        'g1--worker','g1--ledger','g1--connectors','g1--neocortex','g1--pages',
+        'g3--work','g3--drafthouse',
+        'g4--ras','g4--casehub-langchain4j','g4--workers'
+      ];
       await Promise.all(phaseKeys.map(async k=>{
         try{
-          const pr=await fetch(`${WORKER_URL}/phase-${runId}-${k}`);
+          const pr=await timedFetch(`${WORKER_URL}/phase-${runId}-${k}`);
           if(!pr.ok)return;
           const pd=await pr.json();
           if(pd.name){const ph=data.current.phases.find(p=>p.name===pd.name);if(ph)Object.assign(ph,{...pd,name:ph.name});}
         }catch(e){}
       }));
+      detectTransitions(data.current.phases);
     }
     window._data=data;
     renderCurrent(data.current,data.history);renderStats(data.history);renderCharts(data.history);renderHistory(data.history);
-    document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · 30s';
+    document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · '+Math.round(POLL_MS/1000)+'s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
 }
 refresh();setInterval(refresh,POLL_MS);
