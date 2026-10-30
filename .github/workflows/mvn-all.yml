@@ -185,7 +185,7 @@ jobs:
           mvn install -N -f platform/pom.xml --batch-mode -q
 
       - name: "Platform: base (3 modules)"
-        run: bash docs/run-with-progress.sh "Prepare + Platform base" mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
+        run: bash docs/run-with-progress.sh --parallel "Prepare + Platform base" mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 5
 
       - name: Validate produced JARs
@@ -281,7 +281,7 @@ jobs:
       - name: "Build slice ${{ matrix.slice }}"
         run: |
           SLICE_NAME="Slice $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
-          bash docs/run-with-progress.sh "$SLICE_NAME" mvn install -T 1C -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
+          bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -T 1C -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
 
       - name: Validate produced JARs
