@@ -111,7 +111,7 @@ jobs:
                         ] + [{'name': p, 'status': 'pending'} for p in [
                           'Platform A','Platform B','Platform C','Platform D',
                           'Platform convergence',
-                          'ledger','eidos','connectors','worker',
+                          'ledger','eidos','connectors','worker','pages',
                           'neocortex','qhorus',
                           'work',
                           'engine',
@@ -436,8 +436,8 @@ jobs:
             repos: "ledger eidos"
           - name: connectors
             repos: connectors
-          - name: worker
-            repos: worker
+          - name: worker, pages
+            repos: worker pages
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
