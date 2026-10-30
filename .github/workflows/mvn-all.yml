@@ -145,13 +145,23 @@ jobs:
           echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
+      - name: Initialize CI dashboard
+        run: bash docs/update-progress.sh init
+        continue-on-error: true
+        env:
+          RESUME_FROM: ${{ inputs.resume_from }}
+          RETRY_COUNT: ${{ inputs.retry_count }}
+
       - name: Install parent POMs
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
 
       - name: "Platform: base (3 modules)"
-        run: mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
+        run: |
+          bash docs/update-progress.sh phase "Prepare + Platform base" in_progress || true
+          mvn install -T 1C -f platform/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/prepare.log
+          bash docs/update-progress.sh phase "Prepare + Platform base" success /tmp/prepare.log || true
         timeout-minutes: 5
 
       - name: Validate produced JARs
@@ -244,7 +254,11 @@ jobs:
           path: ~/.m2/repository/io/casehub
 
       - name: "Build slice ${{ matrix.slice }}"
-        run: mvn install -T 1C -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
+        run: |
+          SLICE_NAME="Slice $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
+          bash docs/update-progress.sh phase "$SLICE_NAME" in_progress || true
+          mvn install -T 1C -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/slice.log
+          bash docs/update-progress.sh phase "$SLICE_NAME" success /tmp/slice.log || true
         timeout-minutes: 45
 
       - name: Validate produced JARs
@@ -390,13 +404,6 @@ jobs:
           echo "MVN_COMMON=$FLAGS" >> "$GITHUB_ENV"
           echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
-
-      - name: Initialize CI dashboard
-        run: bash docs/update-progress.sh init
-        continue-on-error: true
-        env:
-          RESUME_FROM: ${{ inputs.resume_from }}
-          RETRY_COUNT: ${{ inputs.retry_count }}
 
       - name: Purge all casehub snapshots from cache
         run: rm -rf ~/.m2/repository/io/casehub
