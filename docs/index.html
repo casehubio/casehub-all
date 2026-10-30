@@ -221,7 +221,13 @@ function renderPipe(phases,id,clickFn){
   const g3e=m['G3: engine'];
   const g4p=['G4: ras','G4: langchain4j','G4: workers'].map(n=>m[n]);
   const g4s=m['G4: agency-mosaic'];
-  const w1=['App: iot','App: quarkmind','App: soc','App: claudony','App: clinical','App: devtown','App: aml','App: chat-app','App: life','App: openclaw','App: desiredstate'].map(n=>m[n]);
+  const w1_groups=[
+    [m['App: iot']],
+    [m['App: quarkmind']],
+    [m['App: soc'],m['App: claudony'],m['App: clinical']],
+    [m['App: devtown'],m['App: aml'],m['App: chat-app']],
+    [m['App: life'],m['App: openclaw'],m['App: desiredstate']]
+  ];
   const w2=m['App: ops'];
   const w3=['App: scaffold','App: fsitrading'].map(n=>m[n]);
 
@@ -239,7 +245,7 @@ function renderPipe(phases,id,clickFn){
     row(phaseBox(g3e,clickFn))+conn+
     fan+row(g4p.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
     row(phaseBox(g4s,clickFn))+conn+
-    fan+row(w1.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    fan+row(w1_groups.map(g=>`<div style="flex:1;display:flex;flex-direction:column;gap:2px">${g.map(r=>phaseBox(r,clickFn)).join('')}</div>`).join(''),'pipe-parallel')+fan+conn+
     row(phaseBox(w2,clickFn))+conn+
     fan+row(w3.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+
     `</div>`;
