@@ -112,9 +112,14 @@ function renderCurrent(current) {
     const dur = p.status === 'in_progress' ? elapsed(p.started)
               : p.duration_s != null ? formatDuration(p.duration_s)
               : '';
+    const stats = [];
+    if (p.modules) stats.push(`${p.modules} modules`);
+    if (p.tests_run) stats.push(`${p.tests_run} tests`);
+    if (p.tests_failed) stats.push(`<span style="color:var(--red)">${p.tests_failed} failed</span>`);
     return `<div class="phase ${p.status}">
       <div class="name">${p.name}</div>
       <div class="dur">${dur || '—'}</div>
+      ${stats.length ? `<div class="dur">${stats.join(' · ')}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -142,7 +147,9 @@ function renderHistory(history) {
     const dur = formatDuration(h.duration_s);
     return `<div class="bar ${h.conclusion}" style="height:${height}px" title="${h.conclusion}">
       <div class="tooltip">
-        ${date}<br>${h.conclusion} · ${dur}<br>${h.commit || ''}
+        ${date}<br>${h.conclusion} · ${dur}<br>
+        ${h.total_tests ? h.total_tests + ' tests · ' : ''}${h.total_modules ? h.total_modules + ' modules' : ''}<br>
+        ${h.commit || ''}
       </div>
     </div>`;
   }).join('');
@@ -151,6 +158,8 @@ function renderHistory(history) {
   const passed = history.filter(h => h.conclusion === 'success').length;
   const rate = total > 0 ? Math.round((passed / total) * 100) : 0;
   const avgDur = total > 0 ? Math.round(history.reduce((a, h) => a + (h.duration_s || 0), 0) / total) : 0;
+  const avgTests = total > 0 ? Math.round(history.reduce((a, h) => a + (h.total_tests || 0), 0) / total) : 0;
+  const avgModules = total > 0 ? Math.round(history.reduce((a, h) => a + (h.total_modules || 0), 0) / total) : 0;
   const rateClass = rate >= 80 ? 'green' : rate >= 50 ? 'yellow' : 'red';
 
   statsEl.innerHTML = `
@@ -159,6 +168,8 @@ function renderHistory(history) {
     <div class="stat"><div class="value">${total}</div><div class="label">Runs</div></div>
     <div class="stat"><div class="value green">${passed}</div><div class="label">Passed</div></div>
     <div class="stat"><div class="value red">${total - passed}</div><div class="label">Failed</div></div>
+    ${avgTests ? `<div class="stat"><div class="value">${avgTests.toLocaleString()}</div><div class="label">Avg tests/run</div></div>` : ''}
+    ${avgModules ? `<div class="stat"><div class="value">${avgModules}</div><div class="label">Avg modules/run</div></div>` : ''}
   `;
 }
 

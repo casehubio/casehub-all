@@ -463,8 +463,8 @@ jobs:
         if: inputs.resume_from == ''
         run: |
           bash docs/update-progress.sh phase "Platform convergence" in_progress || true
-          mvn install -T 1C -DskipTests -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
-          bash docs/update-progress.sh phase "Platform convergence" success || true
+          mvn install -T 1C -DskipTests -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/convergence.log
+          bash docs/update-progress.sh phase "Platform convergence" success /tmp/convergence.log || true
         timeout-minutes: 20
 
       # ── Phase 3: G1 Core libs ─────────────────────────────────────────
@@ -473,8 +473,8 @@ jobs:
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
         run: |
           bash docs/update-progress.sh phase "G1: Core libs" in_progress || true
-          mvn install -fae -T 1C -f parent/aggregator-g1-core-libs.xml $MVN_COMMON $MAVEN_ARGS
-          bash docs/update-progress.sh phase "G1: Core libs" success || true
+          mvn install -fae -T 1C -f parent/aggregator-g1-core-libs.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/g1.log
+          bash docs/update-progress.sh phase "G1: Core libs" success /tmp/g1.log || true
         timeout-minutes: 25
 
       # ── Phase 4: G2 Domain ────────────────────────────────────────────
@@ -483,8 +483,8 @@ jobs:
         if: inputs.resume_from == '' || inputs.resume_from == 'g1'
         run: |
           bash docs/update-progress.sh phase "G2: Domain" in_progress || true
-          mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS
-          bash docs/update-progress.sh phase "G2: Domain" success || true
+          mvn install -fae -T 1C -f parent/aggregator-g2-domain.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/g2.log
+          bash docs/update-progress.sh phase "G2: Domain" success /tmp/g2.log || true
         timeout-minutes: 20
 
       # ── Phase 5: G3 Middleware ────────────────────────────────────────
@@ -493,8 +493,8 @@ jobs:
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3'
         run: |
           bash docs/update-progress.sh phase "G3: Middleware" in_progress || true
-          mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS
-          bash docs/update-progress.sh phase "G3: Middleware" success || true
+          mvn install -fae -T 1C -f parent/aggregator-g3-middleware.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/g3.log
+          bash docs/update-progress.sh phase "G3: Middleware" success /tmp/g3.log || true
         timeout-minutes: 60
 
       # ── Phase 6: G4 Extensions ───────────────────────────────────────
@@ -503,8 +503,8 @@ jobs:
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4'
         run: |
           bash docs/update-progress.sh phase "G4: Extensions" in_progress || true
-          mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS
-          bash docs/update-progress.sh phase "G4: Extensions" success || true
+          mvn install -fae -T 1C -f parent/aggregator-g4-extensions.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/g4.log
+          bash docs/update-progress.sh phase "G4: Extensions" success /tmp/g4.log || true
         timeout-minutes: 90
 
       # ── Phase 7+8: G5+G6 Apps ────────────────────────────────────────
@@ -513,9 +513,10 @@ jobs:
         if: inputs.resume_from == '' || inputs.resume_from == 'g1' || inputs.resume_from == 'g3' || inputs.resume_from == 'g4' || inputs.resume_from == 'g5'
         run: |
           bash docs/update-progress.sh phase "G5+G6: Apps" in_progress || true
-          mvn install -fae -T 1C -f parent/aggregator-g5-apps-independent.xml $MVN_COMMON $MAVEN_ARGS
-          mvn install -fae -T 1C -f parent/aggregator-g6-apps-chain.xml $MVN_COMMON $MAVEN_ARGS
-          bash docs/update-progress.sh phase "G5+G6: Apps" success || true
+          mvn install -fae -T 1C -f parent/aggregator-g5-apps-independent.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/g5.log
+          mvn install -fae -T 1C -f parent/aggregator-g6-apps-chain.xml $MVN_COMMON $MAVEN_ARGS 2>&1 | tee /tmp/g6.log
+          cat /tmp/g5.log /tmp/g6.log > /tmp/g5g6.log
+          bash docs/update-progress.sh phase "G5+G6: Apps" success /tmp/g5g6.log || true
         timeout-minutes: 90
 
       # ── Finalize dashboard ───────────────────────────────────────────

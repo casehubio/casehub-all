@@ -4,6 +4,7 @@
 # Usage:
 #   update-progress.sh init                          Start a new build
 #   update-progress.sh phase <name> <status>         Update a phase
+#   update-progress.sh phase <name> <status> <log>   Update with stats parsed from Maven log
 #   update-progress.sh finish <conclusion>           Archive current run to history
 #
 # Environment:
@@ -26,6 +27,45 @@ update_gist() {
   escaped=$(python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))' <<< "$json_content")
   gh api "gists/$GIST_ID" -X PATCH \
     --input <(printf '{"files":{"progress.json":{"content":%s}}}' "$escaped") > /dev/null
+}
+
+parse_maven_stats() {
+  local logfile="$1"
+  python3 -c "
+import re, json, sys
+
+log = open('$logfile').read()
+
+# Module count from reactor summary
+modules = len(re.findall(r'^\[INFO\] [\w. -]+ \.+ (SUCCESS|FAILURE|SKIPPED)', log, re.MULTILINE))
+
+# Test summary — aggregate all 'Tests run:' lines
+tests_run = sum(int(m) for m in re.findall(r'Tests run: (\d+)', log))
+failures = sum(int(m) for m in re.findall(r'Failures: (\d+)', log))
+errors = sum(int(m) for m in re.findall(r'Errors: (\d+)', log))
+skipped = sum(int(m) for m in re.findall(r'Skipped: (\d+)', log))
+
+# Total time
+time_match = re.search(r'Total time:\s+([0-9:.]+)\s*(s|min)', log)
+total_time_s = 0
+if time_match:
+    t = time_match.group(1)
+    unit = time_match.group(2)
+    if unit == 'min':
+        parts = t.split(':')
+        total_time_s = int(float(parts[0])) * 60 + (int(float(parts[1])) if len(parts) > 1 else 0)
+    else:
+        total_time_s = int(float(t))
+
+stats = {
+    'modules': modules,
+    'tests_run': tests_run,
+    'tests_failed': failures + errors,
+    'tests_skipped': skipped,
+    'maven_time_s': total_time_s
+}
+print(json.dumps(stats))
+" 2>/dev/null || echo '{}'
 }
 
 case "${1:-}" in
@@ -57,13 +97,20 @@ print(json.dumps(data, indent=2))
   phase)
     NAME="${2:?phase name required}"
     STATUS="${3:?status required}"
+    LOGFILE="${4:-}"
     NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    STATS='{}'
+    if [ -n "$LOGFILE" ] && [ -f "$LOGFILE" ]; then
+      STATS=$(parse_maven_stats "$LOGFILE")
+    fi
 
     CURRENT=$(fetch_gist)
     UPDATED=$(python3 -c "
 import json, sys
 from datetime import datetime, timezone
 data = json.loads(sys.stdin.read())
+stats = json.loads('$STATS')
 if data.get('current'):
     for p in data['current']['phases']:
         if p['name'] == '$NAME':
@@ -77,6 +124,8 @@ if data.get('current'):
                     s = datetime.fromisoformat(p['started'].replace('Z','+00:00'))
                     e = datetime.fromisoformat('$NOW'.replace('Z','+00:00'))
                     p['duration_s'] = int((e - s).total_seconds())
+                if stats:
+                    p.update(stats)
             break
 print(json.dumps(data, indent=2))
 " <<< "$CURRENT")
@@ -97,6 +146,8 @@ if cur:
     started = cur.get('started', '$NOW')
     s = datetime.fromisoformat(started.replace('Z','+00:00'))
     e = datetime.fromisoformat('$NOW'.replace('Z','+00:00'))
+    total_tests = sum(p.get('tests_run', 0) for p in cur.get('phases', []))
+    total_modules = sum(p.get('modules', 0) for p in cur.get('phases', []))
     entry = {
         'run_id': cur.get('run_id'),
         'run_url': cur.get('run_url'),
@@ -105,6 +156,8 @@ if cur:
         'started': started,
         'ended': '$NOW',
         'duration_s': int((e - s).total_seconds()),
+        'total_tests': total_tests,
+        'total_modules': total_modules,
         'phases': cur.get('phases', [])
     }
     history = data.get('history', [])
@@ -120,7 +173,7 @@ print(json.dumps(data, indent=2))
     ;;
 
   *)
-    echo "Usage: $0 {init|phase <name> <status>|finish <conclusion>}" >&2
+    echo "Usage: $0 {init|phase <name> <status> [logfile]|finish <conclusion>}" >&2
     exit 1
     ;;
 esac
