@@ -180,7 +180,8 @@ function phaseBox(p,clickFn){
     `<div class="info">${dur||'—'}</div>`+
     (parts.length?`<div class="info">${parts.join(' · ')}</div>`:'')+
     (p.status==='failure'&&p.failed_modules?`<div class="fail-detail">${p.failed_modules.slice(0,2).join(', ')}</div>`:'')+
-    (p.status==='failure'&&p.tests_failed?`<div class="fail-detail">${p.tests_failed} test failure${p.tests_failed>1?'s':''}</div>`:'')+
+    (p.status==='failure'&&p.test_errors?p.test_errors.slice(0,2).map(e=>`<div class="fail-detail" title="${(e.error||'').replace(/"/g,'&quot;')}">${e.test}: ${(e.error||'').slice(0,60)}</div>`).join(''):
+     p.status==='failure'&&p.tests_failed?`<div class="fail-detail">${p.tests_failed} test failure${p.tests_failed>1?'s':''}</div>`:'')+
     (p.status==='failure'&&p.timeouts?`<div class="fail-detail">⏱ timeout</div>`:'')+
     (healed?`<div class="info" style="color:var(--yellow)">🔧</div>`:'')+
     `</div>`;

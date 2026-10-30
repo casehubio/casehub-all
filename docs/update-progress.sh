@@ -73,6 +73,29 @@ try:
 except Exception:
     pass
 
+# ── Test failure details (first 5 errors with one-line message) ────
+try:
+    errors = []
+    lines = log.split('\n')
+    for i, line in enumerate(lines):
+        if '<<< FAILURE!' in line or '<<< ERROR!' in line:
+            # Extract test name from "ClassName.method -- Time elapsed"
+            m = re.search(r'\]\s+([\w.]+)\s+--\s+Time elapsed', line)
+            if m:
+                test_name = m.group(1).split('.')[-2] + '.' + m.group(1).split('.')[-1] if '.' in m.group(1) else m.group(1)
+                # Next non-empty line is the exception
+                msg = ''
+                for j in range(i+1, min(i+3, len(lines))):
+                    stripped = lines[j].strip()
+                    if stripped and not stripped.startswith('[') and not stripped.startswith('at '):
+                        msg = stripped[:120]
+                        break
+                errors.append({'test': test_name, 'error': msg})
+    if errors:
+        stats['test_errors'] = errors[:5]
+except Exception:
+    pass
+
 # ── Slowest tests ───────────────────────────────────────────────────
 try:
     test_lines = re.findall(
