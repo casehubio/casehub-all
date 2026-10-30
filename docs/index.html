@@ -216,7 +216,7 @@ function renderPipe(phases,id,clickFn){
   const plat=['Platform A','Platform B','Platform C','Platform D'].map(n=>m[n]);
   const conv=m['Platform convergence'];
   // L1: [ledger→eidos] | connectors | worker
-  const L1=[[m['ledger'],m['eidos']],[m['connectors']],[m['worker']]];
+  const L1=[[m['ledger'],m['eidos']],[m['connectors']],[m['worker'],m['pages']]];
   // L2: neocortex | qhorus
   const L2=[m['neocortex'],m['qhorus']];
   // L3: work, L4: engine
@@ -365,7 +365,7 @@ async function refresh(){
       const runId=data.current.run_id;
       const phaseKeys=[
         'prepare---platform-base','platform-a','platform-b','platform-c','platform-d',
-        'ledger','eidos','connectors','worker',
+        'ledger','eidos','connectors','worker','pages',
         'neocortex','qhorus',
         'ras','desiredstate','claudony','agency','casehub-langchain4j','workers',
         'ops','casehub-mosaic',
