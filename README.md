@@ -10,7 +10,8 @@ two levels:
    tests, and publishes SNAPSHOT artifacts to GitHub Packages on push to main.
 2. **Cross-repo CI** (`casehub-all`) — verifies the entire ecosystem compiles
    together. Uses git submodules to pull all repos into one workspace and builds
-   them via dependency-grouped aggregator POMs across multiple GitHub Actions jobs.
+   them in a dependency-optimized parallel pipeline across multiple GitHub Actions
+   jobs.
 
 ### Why casehub-all exists
 
@@ -34,8 +35,8 @@ cannot detect cross-repo breakage:
 casehub-all solves these problems:
 
 - **Source-level, staged pipeline:** All repos build from source in a staged
-  pipeline. Each phase runs `mvn install`, populating `.m2` for subsequent
-  phases. This uses the same resolution mechanism as SNAPSHOTs, but is
+  pipeline. Each level runs `mvn install`, populating `.m2` for subsequent
+  levels. This uses the same resolution mechanism as SNAPSHOTs, but is
   deterministic within a single run because no external publishes can
   intervene. API drift is caught immediately.
 - **Reproducible SHA manifest:** Every build records the exact SHA of every
@@ -87,11 +88,12 @@ ecosystem.
 ```
 1. Checkout casehub-all (with submodule pointers from last green build)
 2. Update submodules (mode-dependent — see submodule_update input)
-3. Record SHA manifest                     ← log exact SHAs for reproducibility
-4. Build platform (base → slices → convergence)
-5. Build ecosystem (G1 → G2 → G3 → G4 → G5 → G6)
-6. If green: git add -u && git commit && git push  ← advance pointers
-7. If failed: auto-retry with resume_from at the failed group (max 2 retries)
+3. Check dependency graph for cycles (docs/check-cycles.py)
+4. Record SHA manifest                     ← log exact SHAs for reproducibility
+5. Build platform (base → 4 parallel slices → convergence)
+6. Build ecosystem (L1–L9 in dependency order, with parallelism within levels)
+7. If green: git add -u && git commit && git push  ← advance pointers
+8. If failed: auto-retry with resume_from at the failed level (max 2 retries)
 ```
 
 Step 2 depends on the `submodule_update` input:
@@ -99,19 +101,23 @@ Step 2 depends on the `submodule_update` input:
 - **`all`**: pull latest main for every repo (legacy behavior)
 - **`list`**: pull latest main only for named repos (comma-separated)
 
-If the build succeeds, step 6 commits the SHAs back to casehub-all. The
+Step 3 validates the dependency CSVs are acyclic using topological sort
+(Kahn's algorithm). This prevents circular dependency regressions that would
+make the pipeline impossible to schedule.
+
+If the build succeeds, step 7 commits the SHAs back to casehub-all. The
 committed submodule pointers always represent the **last known-good
 combination** of all repos.
 
-If the build fails, step 7 detects which group failed and triggers a new
-run with `resume_from` set to that group. This handles transient failures
+If the build fails, step 8 detects which level failed and triggers a new
+run with `resume_from` set to that level. This handles transient failures
 (corrupted artifact downloads, CI runner timeouts) automatically. The
 `retry_count` input caps retries at 2 to prevent infinite loops on
 deterministic failures.
 
-**Pointer advance is all-or-nothing.** A failure in any phase prevents
-advancing any pointers, even for phases that succeeded earlier. The `git push`
-only runs `if: success()` — meaning every phase must pass. The committed SHAs
+**Pointer advance is all-or-nothing.** A failure in any level prevents
+advancing any pointers, even for levels that succeeded earlier. The `git push`
+only runs `if: success()` — meaning every level must pass. The committed SHAs
 on main always represent a fully-verified combination, never a partial build.
 
 ### SHA Manifest
@@ -120,25 +126,25 @@ The SHA manifest is logged in the CI output for every run. This is the
 reproducibility record — given these exact SHAs, the build can be reproduced
 deterministically. Useful for bisecting cross-repo regressions.
 
-### Resuming from a Group
+### Resuming from a Level
 
-The `resume_from` input (choice type: `g1`, `g3`, `g4`, `g5`) skips earlier
-phases. For example, `resume_from=g3` skips platform, G1, and G2, jumping
-straight to G3 (middleware). This works because:
+The `resume_from` input (choice type: `L1`, `L2`, `L3`, `L5`, `L8`) skips
+earlier phases. For example, `resume_from=L3` skips platform, L1, and L2,
+jumping straight to L3 (work). This works because:
 
-1. Earlier phases installed their artifacts into `.m2/repository` during a
+1. Earlier levels installed their artifacts into `.m2/repository` during a
    prior run.
 2. GitHub Actions caches `.m2/repository` between runs (keyed on
    `parent/pom.xml` + `platform/pom.xml` hash).
-3. G3+ phases resolve their dependencies from `.m2` — they don't care whether
+3. L3+ levels resolve their dependencies from `.m2` — they don't care whether
    the artifacts were built in this run or restored from cache.
 
-When resuming, the prepare and platform-slices jobs are skipped entirely. The
-build job runs standalone using cached `.m2`.
+When resuming, the prepare, platform-slices, and convergence jobs are skipped
+entirely. Levels start from the `resume_from` point using cached `.m2`.
 
-**When resumption is safe:** Immediately after a failure in a later group, when
-the earlier groups haven't changed. You fix the failing repo, push, and
-re-trigger with `resume_from=g3` to skip rebuilding platform and core libs.
+**When resumption is safe:** Immediately after a failure in a later level, when
+the earlier levels haven't changed. You fix the failing repo, push, and
+re-trigger with `resume_from=L3` to skip rebuilding platform and core libs.
 
 **When resumption is unsafe:** If any earlier repo has published a new SNAPSHOT
 since the cached run. The cache holds stale artifacts, so downstream modules
@@ -147,73 +153,15 @@ compile against the old API.
 **Warning — resumed builds weaken the pointer guarantee:** The submodule
 update still pulls ALL repos to latest main regardless of `resume_from`.
 If the build passes, the pointer advance commits SHAs for *every* repo —
-including repos whose build phases were skipped. The SHAs are accurate (latest
-main), but the verification is partial: skipped phases were not rebuilt, so
-API compatibility between skipped and built phases is assumed, not proven.
-
-## Frontend Build Cache
-
-Three modules have heavy frontend builds (yarn install + TypeScript compilation):
-**pages**, **casehub-mosaic**, and **drafthouse**. These are cached between runs
-using the submodule commit SHA as the cache key.
-
-### How it works
-
-After `git submodule update --remote`, the workflow computes each submodule's
-HEAD SHA and uses it as the `actions/cache` key:
-
-```
-key: frontend-Linux-<pages-sha>-<mosaic-sha>-<drafthouse-sha>
-```
-
-The cache stores:
-- `node_modules/` — skips `yarn install` / `npm install` on hit
-- `dist/` directories — skips `tsc --build` on hit (TypeScript output)
-- `.tsbuildinfo` files — enables TypeScript incremental compilation
-- `target/quinoa/` — skips Quinoa build on hit (pages, drafthouse)
-
-### When the cache resets
-
-The cache key includes all three SHAs. A new commit to **any** of the three
-repos changes the key, causing a full cache miss and rebuild of **all** three.
-This is intentional — a single composite key is simpler than three separate
-caches, and frontend modules rarely all change independently in the same build.
-
-### When the cache hits
-
-If none of pages, mosaic, or drafthouse have new commits since the last build:
-- `yarn install` → no-op (node_modules already present)
-- `tsc --build` → no-op (incremental build sees nothing changed)
-- Quinoa → skips build (target/quinoa already has resources)
-
-Expected savings: **~15 min per unchanged module** (pages ~5 min, mosaic ~12 min,
-drafthouse ~3 min).
-
-### Observing cache behaviour
-
-Every build summary reports cache status:
-
-```
-## Frontend Cache
-✅ Cache HIT — yarn install + tsc build skipped for unchanged modules
-
-| Module | SHA |
-|--------|-----|
-| pages | abc1234 |
-| mosaic | def5678 |
-| drafthouse | ghi9012 |
-```
-
-Compare total run duration between a MISS run (first build after a frontend
-change) and a HIT run (no frontend changes) to measure the savings.
-
-The `actions/cache` step also logs `Cache restored from key: ...` or
-`Cache not found for input keys: ...` in the step output.
+including repos whose build levels were skipped. The SHAs are accurate (latest
+main), but the verification is partial: skipped levels were not rebuilt, so
+API compatibility between skipped and built levels is assumed, not proven.
 
 ## Dependency Graph
 
 Every cross-repo dependency is declared in `parent/build/modules-core.csv` and
-`modules-applications.csv`. These determine build order.
+`modules-applications.csv`. These are generated from actual POM files by
+`parent/build/sync-deps.py` and determine build order.
 
 ### Core Modules
 
@@ -256,131 +204,102 @@ Every cross-repo dependency is declared in `parent/build/modules-core.csv` and
 | quarkmind | agency, casehub-mosaic, connectors, eidos, engine, ledger, neocortex, pages, platform, qhorus |
 | scaffold | casehub-mosaic, engine, ops, pages, platform, work |
 
-## Build Grouping and Parallelism
+### Keeping CSVs in sync
 
-The workflow uses three GitHub Actions jobs. Each job runs on its own runner
-(2 CPUs, 7 GB RAM). Platform slices use a matrix strategy to spawn 4 parallel
-jobs, giving the slice phase 8 CPUs total.
+Run `python3 parent/build/sync-deps.py` from the casehub-all root to
+regenerate CSVs from actual POM dependencies. The script scans all submodule
+POMs, extracts `io.casehub` dependencies (excluding test and provided scope),
+maps artifact IDs to repo names, and writes the CSVs. Exit code 1 if changes
+were made. The workflow runs `docs/check-cycles.py` at the start of every
+build to catch cycle regressions.
 
-### Job Architecture
+## Build Architecture
 
-<svg viewBox="0 0 720 520" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">
-  <defs>
-    <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#555"/></marker>
-    <style>
-      .box { fill:#f8f9fa; stroke:#333; stroke-width:1.5; rx:6 }
-      .label { font-weight:600; font-size:13px; fill:#222 }
-      .detail { fill:#555; font-size:11px }
-      .artifact { fill:#e8f4e8; stroke:#4a4; stroke-width:1; rx:4 }
-      .validate { fill:#fff3cd; stroke:#d69e2e; stroke-width:1; rx:4 }
-      .arrow { stroke:#555; stroke-width:1.5; fill:none; marker-end:url(#ah) }
-      .arrowlabel { fill:#777; font-size:10px; font-style:italic }
-    </style>
-  </defs>
+### 10-Level Parallel Pipeline
 
-  <!-- Job 1: Prepare -->
-  <rect class="box" x="240" y="10" width="240" height="80"/>
-  <text class="label" x="280" y="35">Job 1: Prepare</text>
-  <text class="detail" x="255" y="52">1 runner (2 CPUs)</text>
-  <text class="detail" x="255" y="66">checkout + platform base (3 mods)</text>
-  <text class="detail" x="255" y="80">validate JARs + upload artifacts</text>
+The workflow uses **15+ GitHub Actions jobs** organized into 10 dependency
+levels. Repos at the same level build in parallel on separate runners.
+Artifacts are passed between levels via `actions/upload-artifact` /
+`actions/download-artifact`.
 
-  <!-- Arrow down -->
-  <path class="arrow" d="M360,90 L360,120"/>
-  <text class="arrowlabel" x="370" y="110">m2 JARs + Jandex</text>
+```
+L0:  prepare → platform-slices(×4) → convergence
+       │
+L1:  [ledger→eidos] | connectors | [worker+pages]       (3 parallel jobs)
+       │
+L2:  neocortex | qhorus                                   (2 parallel jobs)
+       │
+L3:  work                                                  (1 job)
+       │
+L4:  engine                                                (1 job)
+       │
+L5:  [ras+desiredstate] | [claudony+agency] | [langchain4j+workers]  (3 parallel)
+       │
+L6:  ops | casehub-mosaic                                  (2 parallel jobs)
+       │
+L7:  drafthouse                                            (1 job)
+       │
+L8:  life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]  (5 parallel)
+       │
+L9:  [scaffold+fsitrading]                                 (1 job)
+       │
+fin: dashboard finish + pointer advance
+```
 
-  <!-- Job 2: Slices -->
-  <rect class="box" x="40" y="120" width="640" height="90"/>
-  <text class="label" x="245" y="142">Job 2: Platform Slices</text>
-  <text class="detail" x="245" y="157">4 parallel runners (8 CPUs total)</text>
+Each level waits only for its immediate dependency level. Repos within a level
+run in parallel via `strategy.matrix`. Bundled repos (e.g., `[ledger→eidos]`)
+build sequentially within a single runner — the `→` indicates build order,
+`+` indicates no order constraint within the bundle.
 
-  <rect class="artifact" x="60" y="165" width="140" height="34"/>
-  <text class="detail" x="75" y="178">Slice A</text>
-  <text class="detail" x="75" y="191">Agent/AI (44)</text>
+### Level Assignment Rationale
 
-  <rect class="artifact" x="215" y="165" width="140" height="34"/>
-  <text class="detail" x="230" y="178">Slice B</text>
-  <text class="detail" x="230" y="191">Identity (57)</text>
+| Level | Repos | Why this level |
+|-------|-------|---------------|
+| L0 | platform (base, 4 slices, convergence) | Foundation for everything |
+| L1 | ledger, eidos, connectors, worker, pages | Depend only on platform |
+| L2 | neocortex, qhorus | Need eidos (L1), connectors (L1) |
+| L3 | work | Needs qhorus (L2) |
+| L4 | engine | Needs work (L3), neocortex (L2), qhorus (L2) |
+| L5 | ras, desiredstate, claudony, agency, casehub-langchain4j, workers | Need engine (L4) |
+| L6 | ops, casehub-mosaic | Foundational infra — ops needs desiredstate (L5), mosaic needs agency (L5) |
+| L7 | drafthouse | Needs mosaic (L6) for UI |
+| L8 | life, iot, quarkmind, devtown, aml, soc, chat-app, clinical, openclaw | Apps — need mosaic (L6) or drafthouse (L7) |
+| L9 | scaffold, fsitrading | Need ops (L6) — scaffold and fsitrading depend on ops |
 
-  <rect class="artifact" x="370" y="165" width="140" height="34"/>
-  <text class="detail" x="385" y="178">Slice C</text>
-  <text class="detail" x="385" y="191">Events (53)</text>
+### Bundling Strategy
 
-  <rect class="artifact" x="525" y="165" width="140" height="34"/>
-  <text class="detail" x="540" y="178">Slice D</text>
-  <text class="detail" x="540" y="191">YAML (15)</text>
+Repos are bundled into single jobs to avoid runner overhead (~1-2 min per job
+for checkout + cache restore + artifact download). The sweet spot is ~9 minutes
+per bundle — fast enough not to bottleneck, but long enough to amortize setup.
 
-  <!-- Arrow down -->
-  <path class="arrow" d="M360,210 L360,240"/>
-  <text class="arrowlabel" x="370" y="230">m2 JARs + Jandex (4 artifacts)</text>
+- **L1:** ledger+eidos bundled (eidos depends on ledger, ~15 min combined);
+  connectors alone (~15 min); worker+pages bundled (~11 min combined)
+- **L5:** ras+desiredstate (desiredstate depends on ras); claudony+agency
+  (similar CDI infra); langchain4j+workers (both small)
+- **L8:** Apps bundled by dependency similarity: devtown+aml+soc (all need
+  mosaic+agency); chat-app+clinical+openclaw (all need mosaic)
+- **L9:** scaffold+fsitrading bundled (both need ops, both small)
 
-  <!-- Job 3: Convergence + Ecosystem -->
-  <rect class="box" x="40" y="240" width="640" height="270"/>
-  <text class="label" x="170" y="262">Job 3: Convergence + Ecosystem</text>
-  <text class="detail" x="420" y="262">1 runner (2 CPUs)</text>
+### Platform Build (L0)
 
-  <!-- Purge + Download + Validate -->
-  <rect class="validate" x="60" y="272" width="210" height="28"/>
-  <text class="detail" x="72" y="291">Purge all casehub SNAPSHOTs</text>
+Platform (~220 modules) is split into 3 phases across separate jobs:
 
-  <rect class="artifact" x="285" y="272" width="180" height="28"/>
-  <text class="detail" x="297" y="291">Download slice artifacts</text>
+1. **Prepare (1 runner):** Checkout, submodule update, cycle check, platform
+   base (3 modules: platform-api, platform-core, playbook-catalog). Outputs
+   `MVN_COMMON` and `MAVEN_ARGS` for all downstream jobs.
 
-  <rect class="validate" x="480" y="272" width="185" height="28"/>
-  <text class="detail" x="492" y="291">Validate JARs + Jandex (0xCAFE)</text>
+2. **Platform slices (4 parallel runners):**
+   - Slice A — Agent/AI (44 modules): agents, simulation, mcp, llm-config
+   - Slice B — Identity/Auth (57 modules): authn, acl, persistence, subscriptions
+   - Slice C — Events/Comms (53 modules): streams, notifications, callback, graphql
+   - Slice D — YAML/Tooling (15 modules): yaml, observability, pdf, signing
 
-  <!-- Convergence -->
-  <rect x="60" y="310" width="605" height="28" fill="#e8e8f4" stroke="#66a" rx="4"/>
-  <text class="detail" x="72" y="329">Phase 2: Platform full rebuild (mvn install -DskipTests -f platform/pom.xml) — ~220 modules</text>
+3. **Convergence (1 runner):** Purges all `io.casehub` from `.m2`, downloads
+   slice artifacts, validates integrity, then does a full `mvn install
+   -DskipTests -f platform/pom.xml` rebuild. This eliminates Jandex corruption
+   from artifact downloads and ensures all ~220 modules are coherent.
 
-  <!-- Ecosystem phases -->
-  <rect x="60" y="348" width="115" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
-  <text class="detail" x="72" y="365">G1: Core libs</text>
-
-  <path class="arrow" d="M175,360 L185,360"/>
-
-  <rect x="190" y="348" width="95" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
-  <text class="detail" x="202" y="365">G2: Domain</text>
-
-  <path class="arrow" d="M285,360 L295,360"/>
-
-  <rect x="300" y="348" width="115" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
-  <text class="detail" x="312" y="365">G3: Middleware</text>
-
-  <path class="arrow" d="M415,360 L425,360"/>
-
-  <rect x="430" y="348" width="105" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
-  <text class="detail" x="442" y="365">G4: Extensions</text>
-
-  <path class="arrow" d="M535,360 L545,360"/>
-
-  <rect x="550" y="348" width="115" height="24" fill="#f0f0f0" stroke="#999" rx="3"/>
-  <text class="detail" x="562" y="365">G5+G6: Apps</text>
-
-  <!-- Advance pointers -->
-  <rect x="60" y="382" width="605" height="24" fill="#e8f4e8" stroke="#4a4" rx="3"/>
-  <text class="detail" x="220" y="399">If green: advance submodule pointers + push</text>
-
-  <!-- Legend -->
-  <text class="detail" x="60" y="435">Legend:</text>
-  <rect class="artifact" x="110" y="425" width="14" height="14"/>
-  <text class="detail" x="130" y="436">Build step</text>
-  <rect class="validate" x="220" y="425" width="14" height="14"/>
-  <text class="detail" x="240" y="436">Validation / purge</text>
-  <rect x="350" y="425" width="14" height="14" fill="#e8e8f4" stroke="#66a" rx="2"/>
-  <text class="detail" x="370" y="436">Platform convergence</text>
-  <rect x="520" y="425" width="14" height="14" fill="#f0f0f0" stroke="#999" rx="2"/>
-  <text class="detail" x="540" y="436">Ecosystem group</text>
-</svg>
-
-Artifacts passed between jobs:
-- **`.m2` artifacts** (`m2-platform-*`): installed JARs for Maven dependency
-  resolution. Downloaded into `~/.m2/repository/io/casehub/`.
-- **Jandex indexes** (`jandex-platform-*`): `target/classes/META-INF/jandex.idx`
-  files. Downloaded into `platform/` in the workspace. Required because the
-  Spring generators read Jandex from the filesystem, not `.m2`.
-
-#### Artifact Integrity Validation
+### Artifact Integrity Validation
 
 GitHub Actions artifact uploads/downloads occasionally produce corrupt files
 (`invalid CEN header` for JARs, `Not a jandex index` for Jandex). The pipeline
@@ -394,88 +313,57 @@ validates artifacts at two points:
   files are **deleted** — the convergence step recompiles everything from source
   via `platform/pom.xml`, so deleted files are regenerated fresh.
 
-### Phase Layout
+### Artifact Passing Between Levels
 
-```
-Job 1 (prepare):
-  Phase 0 ─── Platform base (3 modules)
+Each level uploads its built artifacts to `m2-L{N}-{name}`. The next level
+downloads all prior artifacts via `pattern: "m2-*"` with `merge-multiple: true`.
+Before downloading, each job purges `~/.m2/repository/io/casehub` to prevent
+stale cache artifacts from interfering.
 
-Job 2 (platform-slices, 4 parallel runners):
-  Phase 1 ─── Slice A (44 modules) — Agent/AI: agents, simulation, mcp, llm-config
-              Slice B (57 modules) — Identity/Auth: authn, acl, persistence, subscriptions
-              Slice C (53 modules) — Events/Comms: streams, notifications, callback, graphql
-              Slice D (15 modules) — YAML/Tooling: yaml, observability, pdf, signing
+Every job also installs the parent POMs (`mvn install -N -f parent/pom.xml`
+and `mvn install -N -f platform/pom.xml`) since these are needed for dependency
+resolution but aren't included in the uploaded artifacts.
 
-Job 3 (build):
-  Phase 2 ─── Platform convergence (full rebuild, tests skipped)
-                │
-  Phase 3 ─── G1: worker, ledger, connectors, neocortex, pages
-                │
-  Phase 4 ─── G2: eidos, qhorus
-                │
-  Phase 5 ─── G3: work, engine, drafthouse
-                │
-  Phase 6 ─── G4: ras, agency, langchain4j, mosaic, workers
-                │
-  Phase 7 ─── G5: claudony, openclaw, soc, desiredstate, life, iot, chat-app
-                │
-  Phase 8 ─── G6: devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading
-```
-
-**Note:** `engine` and `work` have a circular dependency (engine depends on
-work, work depends on engine). Both are in G3 — Maven resolves the cycle
-within a single reactor phase.
-
-### Grouping Table
-
-| Phase | Group | Repos | Runner | Rationale |
-|-------|-------|-------|--------|-----------|
-| 0 | Platform base | platform-api, platform-core, playbook-catalog | prepare | Required by all slices |
-| 1 | Platform slices | A (44), B (57), C (53), D (15 modules) | 4 separate runners | Zero cross-deps; each gets its own 2 CPUs |
-| 2 | Convergence | All ~220 platform modules (full rebuild) | build | Compiles all platform modules from source (`-DskipTests`). Full rebuild eliminates Jandex corruption from artifact downloads. Tests already ran in slices. |
-| 3 | G1 Core libs | worker, ledger, connectors, neocortex, pages | build | All depend only on platform |
-| 4 | G2 Domain | eidos, qhorus | build | eidos depends on ledger (G1), qhorus on ledger + connectors + eidos |
-| 5 | G3 Middleware | work, engine, drafthouse | build | Depend on G1+G2; engine↔work cycle resolved within reactor |
-| 6 | G4 Extensions | ras, agency, langchain4j, mosaic, workers | build | Depend on G3 outputs |
-| 7 | G5 Apps (independent) | claudony, openclaw, soc, desiredstate, life, iot, chat-app | build | Depend on G4 outputs |
-| 8 | G6 Apps (chain) | devtown, aml, clinical, quarkmind, scaffold, ops, fsitrading | build | Some depend on G5 outputs (life, iot) |
-
-Within each group, Maven's `-T 1C` parallelises compilation across modules
-(2 threads per runner).
+Platform slices additionally upload Jandex indexes (`target/classes/META-INF/
+jandex.idx` files) as separate artifacts. The Spring generators read Jandex from
+the filesystem (not `.m2`), so these must be restored into the `platform/`
+workspace directory.
 
 ### Per-Repo CI Status (as of 2026-10-30)
 
 All per-repo CIs are green. Full `mvn verify` times from latest successful runs.
 
-| Repo | CI Time | Group | Notes |
+| Repo | CI Time | Level | Notes |
 |------|---------|-------|-------|
-| platform | ~36m | Slices | ~220 modules, 61 @QuarkusTest. Extends casehub-parent. |
-| work | ~27m | G3 | MongoDB tests skip without Docker |
-| engine | ~22m | G3 | ~1500 tests. Extends casehub-parent. |
-| iot | ~18m | G5 | All tests enabled (dynamic ports) |
-| neocortex | ~16m | G1 | ONNX latency test skips on CI. Dynamic WireMock ports. |
-| quarkmind | ~16m | G6 | Dynamic test port for ReplayVisualizerIT |
-| connectors | ~15m | G1 | All tests enabled (gateway leak + event-driven assertions fixed) |
-| casehub-mosaic | ~12m | G4 | declaration emit disabled for agent-viewer |
-| fsitrading | ~13m | G6 | ops-service excluded from classpath |
-| qhorus | ~12m | G2 | Extends casehub-parent. |
-| casehub-langchain4j | ~10m | G4 | Extends casehub-parent. |
-| soc | ~8m | G5 | |
-| agency | ~8m | G4 | Extends casehub-parent. |
-| ledger | ~8m | G1 | Dynamic WireMock ports. Extends casehub-parent. |
-| eidos | ~7m | G2 | Extends casehub-parent. |
-| devtown | ~7m | G6 | |
-| aml | ~7m | G6 | |
-| scaffold | ~6m | G6 | Extends casehub-parent. |
-| claudony | ~6m | G5 | Extends casehub-parent. |
-| drafthouse | ~6m | G3 | E2E tests excluded (need Playwright) |
-| ops | ~5m | G5 | |
-| life | ~4m | G6 | |
-| chat-app | ~3m | G5 | |
-| workers | ~3m | G4 | All tests enabled (thread pool leak fixed) |
-| clinical | ~3m | G6 | Extends casehub-parent. |
-| openclaw | ~3m | G5 | |
-| pages | ~8m | G1 | Extends casehub-parent. Maven publish + frontend-artifacts. |
+| platform | ~36m | L0 (slices) | ~220 modules, 61 @QuarkusTest. Extends casehub-parent. |
+| work | ~27m | L3 | MongoDB tests skip without Docker |
+| engine | ~22m | L4 | ~1500 tests. Extends casehub-parent. |
+| iot | ~18m | L8 | All tests enabled (dynamic ports) |
+| neocortex | ~16m | L2 | ONNX latency test skips on CI. Dynamic WireMock ports. |
+| quarkmind | ~16m | L8 | Dynamic test port for ReplayVisualizerIT |
+| connectors | ~15m | L1 | All tests enabled (gateway leak + event-driven assertions fixed) |
+| casehub-mosaic | ~12m | L6 | declaration emit disabled for agent-viewer |
+| fsitrading | ~13m | L9 | ops-service excluded from classpath |
+| qhorus | ~12m | L2 | Extends casehub-parent. |
+| casehub-langchain4j | ~10m | L5 | Extends casehub-parent. |
+| soc | ~8m | L8 | |
+| agency | ~8m | L5 | Extends casehub-parent. |
+| ledger | ~8m | L1 | Dynamic WireMock ports. Extends casehub-parent. |
+| eidos | ~7m | L1 | Extends casehub-parent. |
+| devtown | ~7m | L8 | |
+| aml | ~7m | L8 | |
+| scaffold | ~6m | L9 | Extends casehub-parent. |
+| claudony | ~6m | L5 | Extends casehub-parent. |
+| drafthouse | ~6m | L7 | E2E tests excluded (need Playwright) |
+| ops | ~5m | L6 | |
+| life | ~4m | L8 | |
+| chat-app | ~3m | L8 | |
+| workers | ~3m | L5 | All tests enabled (thread pool leak fixed) |
+| clinical | ~3m | L8 | |
+| openclaw | ~3m | L8 | |
+| pages | ~8m | L1 | Extends casehub-parent. Maven publish + frontend-artifacts. |
+| desiredstate | — | L5 | |
+| ras | — | L5 | |
 
 ### Tests Skipped on CI
 
@@ -500,26 +388,190 @@ Previously skipped tests that have been **re-enabled** (root causes fixed):
 | `PlaybookOrchestratorTest` | pages | Thread.sleep(2000) → CountDownLatch + 5s timeout |
 | `RaceStepTests` / `SelectStepTests` | platform | Scope leak + submission/cancel race fixed with CountDownLatch gate |
 
-### casehub-all Build Times
+### Build Times (estimated)
 
-| Mode | Phases | Total |
-|------|--------|-------|
-| `test_mode=skip` (compile only) | prepare ~2m, slices ~2m, G1-G6 ~12m | **~16 min** |
-| `test_mode=run` (full tests) | prepare ~2m, slices ~15m, G1-G6 ~75m | **~90 min** |
+| Mode | Critical path | Total wall-clock |
+|------|--------------|-----------------|
+| `test_mode=skip` (compile only) | L0 ~5m → L1 ~3m → L2 ~2m → L3 ~2m → L4 ~2m → L5 ~2m → L6 ~2m → L7 ~1m → L8 ~2m → L9 ~1m | **~22 min** |
+| `test_mode=run` (full tests) | L0 ~17m → L1 ~15m → L2 ~16m → L3 ~27m → L4 ~22m → L5 ~8m → L6 ~12m → L7 ~6m → L8 ~18m → L9 ~13m | **~150 min** |
 
-Step timeouts (per-step, not per-job):
+Wall-clock time is determined by the critical path (longest chain of sequential
+levels), not the sum. Within each level, only the slowest parallel job matters.
 
-| Step | Timeout | Typical |
-|------|---------|---------|
-| Platform convergence (full rebuild) | 20m | ~10m |
-| G1: Core libs | 25m | ~15m |
-| G2: Domain | 20m | ~10m |
-| G3: Middleware | 60m | ~45m (engine tests) |
-| G4: Extensions | 90m | ~15m |
-| G5+G6: Apps | 90m | ~30m |
+Step timeouts per level:
+
+| Level | Timeout | Bottleneck |
+|-------|---------|-----------|
+| L0 prepare | 5m | 3 platform base modules |
+| L0 slices | 45m | Slice C (53 modules, 25 @QuarkusTest) |
+| L0 convergence | 20m | Full platform rebuild |
+| L1 | 25m | connectors (~15m with tests) |
+| L2 | 25m | neocortex (~16m) |
+| L3 | 35m | work (~27m) |
+| L4 | 45m | engine (~22m, ~1500 tests) |
+| L5 | 25m | claudony+agency bundle |
+| L6 | 25m | mosaic (~12m) |
+| L7 | 25m | drafthouse |
+| L8 | 30m | iot (~18m) or quarkmind (~16m) |
+| L9 | 30m | fsitrading (~13m) |
 
 Setup overhead per job (checkout, cache restore, artifact download) adds ~1-2
 minutes per job transition.
+
+## CI Dashboard
+
+### Architecture
+
+A live build progress dashboard at **https://casehub.org/casehub-all/**
+(GitHub Pages from `docs/`). Build data is stored in a Cloudflare Worker + KV
+store — no git history pollution, instant reads, server-side ownership
+enforcement.
+
+| Component | Location |
+|-----------|----------|
+| Dashboard HTML | `docs/index.html` (single-file HTML+CSS+JS, no frameworks) |
+| Data store | Cloudflare Worker + KV at `casehub-ci-dashboard.casehub.workers.dev` |
+| Worker source | `docs/worker/src/index.js` |
+| Update script | `docs/update-progress.sh` (phase-file, phase, finish commands) |
+| Maven wrapper | `docs/run-with-progress.sh` (start/end updates per phase) |
+| Auth | `CI_DASHBOARD_TOKEN` org secret (write token for Worker) |
+
+### How Updates Flow
+
+1. **Init (before checkout):** The prepare job's first step creates the
+   `current` object in KV with all phases set to `pending`. This uses
+   `X-Init: true` to establish run_id ownership.
+
+2. **Phase start (each job):** Parallel phases write to their own KV keys
+   (`phase-{runId}-{name}`) to avoid contention. Sequential phases update
+   `progress` directly.
+
+3. **During build:** `run-with-progress.sh` wraps each Maven build. At
+   completion, it calls `update-progress.sh` to write stats (modules, tests,
+   warnings, errors) parsed from Maven output.
+
+4. **Finish:** The finalize job merges all phase-file KV entries into the
+   main `progress` KV key, archives the run to `history`, and cleans up
+   the phase files.
+
+### Server-Side Run ID Ownership
+
+A key design constraint: when a new build starts, it cancels the previous
+build, but the cancelled build's in-flight curl requests can arrive *after*
+the new build's init — corrupting the new build's dashboard data.
+
+The Cloudflare Worker enforces ownership:
+- Init writes (`X-Init: true`) always succeed and establish a new owner
+- All other writes include `X-Run-Id` and are rejected with HTTP 409 if
+  the run_id doesn't match the current owner
+- This prevents cancelled/stale builds from corrupting current build data
+
+### Parallel-Safe Phase Updates
+
+Parallel jobs within a level (e.g., the 3 L1 jobs) can't safely
+read-modify-write the shared `progress` KV key. Instead:
+
+- **Parallel phases** use `run-with-progress.sh --parallel` which calls
+  `update-progress.sh phase-file` — writes to a separate KV key per phase
+  (`phase-{runId}-{name}`)
+- **Sequential phases** (work, engine) use `update-progress.sh phase` which
+  updates `progress` directly
+- **Finish command** merges all phase files into `progress` before archiving
+
+### Stats Captured Per Phase
+
+All stats are parsed from Maven's own output — reactor summary, surefire
+aggregate lines, and error messages. Each parser section is wrapped in
+`try/except` so a parse failure in one stat never blocks the others.
+
+| Stat | Source | Example |
+|------|--------|---------|
+| `modules` | Reactor summary `SUCCESS/FAILURE/SKIPPED` lines | `87` |
+| `tests_run` | Surefire `Tests run: N` | `1514` |
+| `tests_failed` | Surefire `Failures: N, Errors: N` | `2` |
+| `tests_skipped` | Surefire `Skipped: N` | `3` |
+| `tests_flaky` | Surefire `Flakes: N` (failed then passed on retry) | `1` |
+| `timeouts` | `TimeoutException` / `forkedProcessTimeout` grep | `0` |
+| `compilation_warnings` | `[WARNING]` lines (noise filtered) | `45` |
+| `slowest_modules` | Top 5 by time from reactor summary | `[{name, seconds}]` |
+| `slowest_tests` | Top 5 by time from surefire output | `[{test, seconds}]` |
+| `self_healing` | Corrupt JAR/Jandex deletions + retries | `{corrupt_jars: 3, retries: 1}` |
+| `failed_modules` | Reactor `FAILURE` lines | `["casehub-engine"]` |
+| `test_errors` | Top 5 test failures with error message (120 char) | `[{test, error}]` |
+| `maven_time_s` | `Total time:` line | `2700` |
+
+### Data Model
+
+```json
+{
+  "current": {
+    "run_id": 41018829651,
+    "run_url": "https://github.com/casehubio/casehub-all/actions/runs/...",
+    "commit": "abc1234",
+    "started": "2026-10-30T14:00:00Z",
+    "resume_from": null,
+    "retry_count": 0,
+    "phases": [
+      {"name": "Prepare + Platform base", "status": "success", "duration_s": 120,
+       "modules": 3, "tests_run": 16},
+      {"name": "Platform A", "status": "in_progress", "started": "...",
+       "modules": 22, "tests_run": 150},
+      {"name": "work", "status": "pending"},
+      ...
+    ]
+  },
+  "history": [
+    {"run_id": 41012076639, "conclusion": "success", "duration_s": 5400,
+     "total_tests": 4500, "total_modules": 247, "phases": [...]},
+    ...
+  ]
+}
+```
+
+History is capped at 200 entries. Entries older than 90 days are trimmed on
+every write.
+
+### Dashboard UI
+
+**Pipeline visualization:**
+- Parallel phases at the same level shown side-by-side (CSS columns)
+- Sequential levels stacked vertically
+- Each phase box: status colour, duration/elapsed, modules, tests, flaky
+  count, timeouts, self-healing indicator
+- Pulsing animation on `in_progress` phases, red styling on failures
+- Event log with timestamped fetch events for debugging
+
+**Phase detail (click to expand):**
+- Top 5 slowest modules with times
+- Top 5 slowest tests with times
+- Compilation warning counts
+- Self-healing breakdown (corrupt JARs, Jandex, retries)
+- Failed module names and test error messages
+
+**Failure emphasis:**
+- Red card border and background tint on failed builds
+- FAILED badge on failed phases
+- "Last build FAILED" banner when no build is in progress and the most
+  recent history entry is a failure
+
+**History (expandable rows):**
+- Summary line: status dot, run ID, commit, duration, tests, modules
+- Click expands to full pipeline view + detail tables for that run
+
+**Trend charts (inline SVG, no libraries):**
+- Build duration over recent runs (green/red dots for pass/fail)
+- Test count trends
+- Self-healing frequency
+
+### Setup
+
+1. **GitHub Pages:** Settings → Pages → Source: "Deploy from a branch" →
+   Branch: `main`, folder: `/docs`
+2. **Cloudflare Worker:** Deploy `docs/worker/` via `npx wrangler deploy`
+   from the worker directory. Set WRITE_TOKEN secret via `npx wrangler
+   secret put WRITE_TOKEN`.
+3. **CI_DASHBOARD_TOKEN:** Add the write token as an org secret
+   `CI_DASHBOARD_TOKEN` in GitHub Settings → Secrets → Actions.
 
 ## Surefire Configuration
 
@@ -580,11 +632,6 @@ a multiplicative boot tax:
 | work | 150 | 14 | ~2-5s |
 | platform | 61 | ~30 | ~2-5s |
 
-Boot points = distinct Quarkus configurations that trigger separate starts.
-Tests sharing the same profile share the same boot — so consolidating duplicate
-profiles reduces boot points. However, gains are modest (~20-40s per
-consolidation) because most remaining profiles genuinely differ in configuration.
-
 ### CDI / Jandex Discovery
 
 Quarkus uses Jandex (not classpath scanning) to discover CDI beans. A class on
@@ -608,8 +655,8 @@ reactor ordering without polluting the transitive dependency graph. Applied to
 engine (x5), platform (x1), work (x1).
 
 **Workaround (multi-job builds):** Slice jobs upload their
-`target/classes/META-INF/jandex.idx` files as artifacts. The build job
-downloads them into the `platform/` workspace before running convergence.
+`target/classes/META-INF/jandex.idx` files as artifacts. The convergence job
+downloads them into the `platform/` workspace before running the full rebuild.
 Both `.m2` artifacts (JARs) and Jandex indexes (filesystem) must be passed.
 
 **Escape hatch:** `-Dcasehub.generators.skip=true`
@@ -621,10 +668,10 @@ workflow gets its own runner.
 
 | Constraint | Impact | Mitigation |
 |-----------|--------|------------|
-| 2 CPUs per runner | `-T 1C` means 2 threads per job. | Platform slices run as 4 separate jobs = 8 CPUs total for the slice phase. |
+| 2 CPUs per runner | `-T 1C` means 2 threads per job. | 10-level pipeline with parallel jobs at each level gives up to 5 runners simultaneously (L8 has 5 parallel jobs). |
 | 7 GB RAM per runner | Each job has its own 7 GB — no memory sharing between jobs. | `MAVEN_OPTS='-Xmx4g'` per job. |
 | No shared filesystem | Each job starts with a clean workspace. | Artifacts pass `.m2` JARs and Jandex indexes between jobs via `actions/upload-artifact` / `actions/download-artifact`. |
-| Cache is per-repo, not per-job | All jobs restore the same `.m2` cache (snapshot from prior run). | Each job restores independently. Fresh build outputs pass via artifacts, not cache. |
+| Cache is per-repo, not per-job | All jobs restore the same `.m2` cache (snapshot from prior run). | Each job purges `io.casehub` from `.m2` before downloading fresh artifacts. |
 
 **Why 4 platform slices:** The slices have zero cross-dependencies (verified).
 Each runs on its own 2-CPU runner. The wall-clock time for the slice phase is
@@ -643,7 +690,7 @@ The `mvn-all.yml` workflow is parameterised via `workflow_dispatch` inputs:
 | `quarkus_build` | boolean | `false` | When true, runs Quarkus augmentation (produces runner JARs). Leave false — the deadlock makes this unsafe with `-T 1C`. |
 | `enforcer` | boolean | `false` | When true, runs Maven enforcer plugin. |
 | `maven_args` | string | (empty) | Escape hatch for additional Maven flags. Passed via `GITHUB_ENV` to prevent shell injection. |
-| `resume_from` | choice | (empty) | Resume from: `g1`, `g3`, `g4`, or `g5`. Skips prepare + platform-slices jobs entirely; build job uses cached `.m2`. |
+| `resume_from` | choice | (empty) | Resume from: `L1`, `L2`, `L3`, `L5`, or `L8`. Skips prepare + platform + earlier levels; downstream levels use cached `.m2`. |
 | `submodule_update` | choice | `pinned` | `pinned` = use committed SHAs (deterministic); `all` = pull latest main for all repos; `list` = pull latest only for repos named in `submodule_list`. |
 | `submodule_list` | string | (empty) | Comma-separated repo names to update (only when `submodule_update=list`). E.g. `engine,aml,claudony`. |
 | `retry_count` | number | `0` | Auto-retry counter. Set automatically by the retry step — do not set manually. Max 2 retries. |
@@ -661,218 +708,39 @@ gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f sub
 # Pull latest for specific repos only (after fixing a repo)
 gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f submodule_update=list -f submodule_list="engine,aml"
 
-# Resume from G3 after fixing an engine test (uses cached G1/G2 artifacts)
-gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f resume_from=g3
+# Resume from L3 after fixing a work test (uses cached L0/L1/L2 artifacts)
+gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f resume_from=L3
 ```
 
 `MVN_COMMON` is assembled dynamically from inputs in the "Configure Maven
 flags" step. `maven_args` is set as the `MAVEN_ARGS` environment variable
 (not interpolated directly) and logged via `::notice::`.
 
-## CI Dashboard
-
-### Architecture
-
-A live build progress dashboard at **https://casehub.org/casehub-all/**
-(GitHub Pages from `docs/`). Build data is stored in a GitHub Gist — no
-git history pollution in the main repo.
-
-| Component | Location |
-|-----------|----------|
-| Dashboard HTML | `docs/index.html` (single-file HTML+CSS+JS, no frameworks) |
-| Data store | [Gist `2858101a`](https://gist.github.com/mdproctor/2858101a4be664207373bf9491005f7d) |
-| Update script | `docs/update-progress.sh` (init, phase, finish commands) |
-| Maven wrapper | `docs/run-with-progress.sh` (90s incremental updates) |
-| Auth | `GIST_TOKEN` repo secret (fine-grained PAT with gist scope) |
-
-The workflow updates the gist via `GH_TOKEN` (set to `GIST_TOKEN`). The
-dashboard JS fetches from the gist raw URL — instant updates, no Pages
-deploy delay. Auto-refreshes every 30 seconds.
-
-### Live Build Progress
-
-The dashboard shows progress from the very first step:
-
-1. **Prepare job starts** → `init` creates the gist entry, all 11 phases shown as pending
-2. **Platform base builds** → background updater pushes stats every 90 seconds
-3. **4 slices run in parallel** → 4 phase boxes pulse simultaneously, module/test counts tick up
-4. **Convergence + G1–G6** → sequential phases with incremental stats
-5. **Build completes** → `finish` archives the run to history
-
-The `run-with-progress.sh` wrapper starts a background process alongside
-Maven that re-parses the growing log file every 90 seconds and pushes the
-latest counts to the gist. Module counts, test counts, and warnings tick
-up in real time as Maven progresses through a phase.
-
-### Stats Captured Per Phase
-
-All stats are parsed from Maven's own output — reactor summary, surefire
-aggregate lines, and Quarkus startup logs. Each parser section is wrapped
-in `try/except` so a parse failure in one stat never blocks the others.
-
-| Stat | Source | Example |
-|------|--------|---------|
-| `modules` | Reactor summary `SUCCESS/FAILURE/SKIPPED` lines | `87` |
-| `tests_run` | Surefire `Tests run: N` | `1514` |
-| `tests_failed` | Surefire `Failures: N, Errors: N` | `2` |
-| `tests_skipped` | Surefire `Skipped: N` | `3` |
-| `tests_flaky` | Surefire `Flakes: N` (failed then passed on retry) | `1` |
-| `timeouts` | `TimeoutException` / `forkedProcessTimeout` grep | `0` |
-| `compilation_warnings` | `[WARNING]` lines (noise filtered) | `45` |
-| `deprecation_warnings` | `deprecated` / `Xlint:deprecation` lines | `12` |
-| `slowest_modules` | Top 5 by time from reactor summary | `[{name, seconds}]` |
-| `slowest_tests` | Top 5 by time from surefire output | `[{test, seconds}]` |
-| `quarkus_boots` | `started in X.XXXs` lines (count, avg, max) | `{count: 35, avg: 2.1}` |
-| `self_healing` | Validation log events | `{corrupt_jars: 3, retries: 1}` |
-| `failed_modules` | Reactor `FAILURE` lines | `["casehub-engine"]` |
-| `artifact_size_mb` | Upload/download size lines | `12.5` |
-| `maven_time_s` | `Total time:` line | `2700` |
-
-### Per-Build Context
-
-Captured at `init` time:
-
-| Field | Source |
-|-------|--------|
-| `resume_from` | Workflow input — which group the build resumed from |
-| `retry_count` | Auto-retry attempt number |
-| `changed_repos` | `git diff` of submodule pointers since last commit |
-
-### Gist Data Model
-
-```json
-{
-  "current": {
-    "run_id": 41018829651,
-    "run_url": "https://github.com/casehubio/casehub-all/actions/runs/...",
-    "commit": "abc1234",
-    "started": "2026-10-30T14:00:00Z",
-    "resume_from": null,
-    "retry_count": 0,
-    "changed_repos": ["claudony", "platform"],
-    "phases": [
-      {"name": "Prepare + Platform base", "status": "success", "duration_s": 120,
-       "modules": 3, "tests_run": 16, "compilation_warnings": 0},
-      {"name": "Slice A", "status": "in_progress", "started": "...",
-       "modules": 22, "tests_run": 150},
-      {"name": "G3: Middleware", "status": "pending"},
-      ...
-    ]
-  },
-  "history": [
-    {"run_id": 41012076639, "conclusion": "success", "duration_s": 5400,
-     "total_tests": 4500, "total_modules": 247, "phases": [...]},
-    ...
-  ],
-  "_archives": [
-    {"gist_id": "abc123def456", "from": "2026-07-01", "to": "2026-09-30",
-     "runs": 150, "summary": {
-       "pass_rate": 78, "avg_duration_s": 5200, "avg_tests": 4500,
-       "total_flakes": 23, "most_failed_phases": ["G3: Middleware", "Slice D"]
-     }}
-  ]
-}
-```
-
-### Gist Rotation
-
-The head gist keeps `current` + the last 50 runs with full detail. When
-history exceeds 50 entries:
-
-1. Older entries are moved to a new **archive gist**
-2. **Summary stats** (pass rate, avg duration, avg tests, flakes, most-failed
-   phases) are computed and stored in the head gist's `_archives` array
-3. The archive gist ID is linked — dashboard loads it **on demand** for
-   drill-down into specific old runs
-4. Entries older than 90 days are trimmed on every write
-
-This gives the dashboard three tiers of resolution:
-
-- **Recent** (50 runs): full per-run, per-phase detail — in the head gist
-- **Archived summaries**: one aggregated data point per archive period — also
-  in the head gist, zero extra fetches needed for trend charts
-- **Archive drill-down**: load the linked gist on demand when clicking into
-  a specific old period
-
-Trend charts use recent + archived summaries together. The head gist is
-always self-sufficient for all charts.
-
-### Dashboard UI
-
-**Pipeline visualization:**
-- Prepare as full-width row → 4 slices side-by-side (CSS grid) →
-  Convergence → G1–G6 as sequential full-width rows
-- Visual connecting lines between stages
-- Each phase box: status colour, duration/elapsed, modules, tests, flaky
-  count, timeouts, self-healing indicator
-- Pulsing animation on `in_progress` phases, red FAILED badge on failures
-
-**Phase detail (click to expand):**
-- Top 5 slowest modules with times
-- Top 5 slowest tests with times
-- Compilation/deprecation warning counts
-- Quarkus boot times (count, avg, max)
-- Self-healing breakdown (corrupt JARs, Jandex, retries)
-- Failed module names
-
-**Failure emphasis:**
-- Red card border and background tint on failed builds
-- FAILED badge in header, failed modules shown inline (not hidden)
-- "Last build FAILED" banner when no build is in progress and the most
-  recent history entry is a failure
-
-**History (expandable rows):**
-- Summary line: status dot, run ID, commit, duration, tests, modules,
-  flakes, self-heals, resume-from
-- Click expands to full parallel pipeline view + detail tables for that run
-
-**Trend charts (inline SVG, no libraries):**
-- Build duration over last 50 runs (green/red dots for pass/fail)
-- Test count area chart
-- Phase failure heatmap (phases × runs grid, coloured by pass/fail)
-- Self-healing frequency
-
-**Stats cards:**
-Pass rate, avg duration, total runs, passed, failed, avg tests/run,
-avg flakes, total self-heals.
-
-### Setup
-
-1. **GitHub Pages:** Settings → Pages → Source: "Deploy from a branch" →
-   Branch: `main`, folder: `/docs`
-2. **GIST_TOKEN:** Create a fine-grained PAT with `Gists` permission
-   (read+write). Add as repo secret `GIST_TOKEN` in
-   Settings → Secrets → Actions
-3. **Gist:** Already created at
-   https://gist.github.com/mdproctor/2858101a4be664207373bf9491005f7d
-
 ## Known Limitations
 
 ### resume_from is fragile
-See "Resuming from a Group" above. Only safe when earlier groups haven't
+See "Resuming from a Level" above. Only safe when earlier levels haven't
 changed since the cached run. The Maven `.m2` cache is keyed on
 `parent/pom.xml` + `platform/pom.xml` hash — it does NOT invalidate when
 individual repo SNAPSHOTs are republished. Stale cache artifacts can mask
 or fabricate failures. Always run a full build (no `resume_from`) for
 definitive verification.
 
-The auto-retry mechanism uses `resume_from` to skip already-green groups.
+The auto-retry mechanism uses `resume_from` to skip already-green levels.
 This is safe for transient failures (corrupted downloads, runner timeouts)
 but will retry deterministic failures too — the 2-retry cap prevents
 infinite loops.
 
 ### Stale cache between jobs
-The convergence job restores a Maven cache from a previous run, which may
-contain stale or corrupted casehub snapshot JARs. A purge step
-(`rm -rf ~/.m2/repository/io/casehub`) runs before downloading fresh
-artifacts from the slice jobs. The convergence step then recompiles ALL
-platform modules from source (`mvn install -DskipTests -f platform/pom.xml`),
-so even if downloaded artifacts are corrupt (detected and deleted by the
-validation step), Maven regenerates them fresh. This defense-in-depth
-approach handles both stale cache entries and artifact download corruption.
+Each job restores a Maven cache from a previous run, which may contain stale
+or corrupted casehub snapshot JARs. A purge step (`rm -rf
+~/.m2/repository/io/casehub`) runs in every job before downloading fresh
+artifacts. Levels that build from source (convergence) regenerate everything
+fresh. This defense-in-depth approach handles both stale cache entries and
+artifact download corruption.
 
 ### Pointer advance race
-The workflow advances submodule pointers and pushes on success. If two runs
+The finalize job advances submodule pointers and pushes on success. If two runs
 complete near-simultaneously, the second push may fail. Mitigated with
 `git pull --rebase` before push. If rebase fails, the push is skipped —
 the pointers from the other run are correct.
@@ -891,12 +759,6 @@ SNAPSHOT. Fix: wait for upstream CI to publish, then re-trigger downstream.
 Maven also caches "not found" resolution failures. If a dependency wasn't
 published when Maven first checked, it won't retry until the update interval
 expires. Fix: add `-U` to force SNAPSHOT update checks.
-
-### Aggregator POM drift
-The `<modules>` lists in `aggregator-g*.xml` and `aggregator-slice-*.xml` are
-manually maintained. When a new module is added to a repo, the aggregator
-must be updated manually. A future improvement: generate aggregator POMs from
-CSVs, or add a CI validation step.
 
 ### Reactor-only CDI issues
 Some modules have CDI deployment problems that only manifest in the casehub-all
@@ -949,9 +811,12 @@ the assigned port from the server/resource.
 ### Adding a New Repo
 
 1. Add to `parent/build/modules-core.csv` or `modules-applications.csv`
-2. Add to the appropriate `aggregator-g*.xml`
+2. Run `python3 parent/build/sync-deps.py` to validate
 3. Add as submodule in casehub-all
-4. Run `python3 scripts/reconcile-submodules.py` in casehub-all
+4. Add to the appropriate level in `mvn-all.yml` (determine level from dependencies)
+5. Add the phase name to the `init` step's phases list and the `finish` command's
+   phase cleanup list in `update-progress.sh`
+6. Run `python3 scripts/reconcile-submodules.py` in casehub-all
 
 ## File Map
 
@@ -959,28 +824,36 @@ the assigned port from the server/resource.
 parent/
   pom.xml                          — casehub-parent BOM (single org parent for all repos)
   build/
-    modules-core.csv              — core repo dependency declarations
-    modules-applications.csv      — app repo dependency declarations
-  aggregator-g1-core-libs.xml     — G1: worker, ledger, connectors, neocortex, pages
-  aggregator-g2-domain.xml        — G2: eidos, qhorus
-  aggregator-g3-middleware.xml    — G3: work, engine, drafthouse
-  aggregator-g4-extensions.xml    — G4: ras, agency, langchain4j, mosaic, workers
-  aggregator-g5-apps-independent.xml — G5: independent apps
-  aggregator-g6-apps-chain.xml    — G6: chained apps (ops→fsitrading)
+    modules-core.csv              — core repo dependency declarations (generated by sync-deps.py)
+    modules-applications.csv      — app repo dependency declarations (generated by sync-deps.py)
+    sync-deps.py                  — regenerate CSVs from actual POM dependencies
+  aggregator-g1-core-libs.xml     — legacy G1 aggregator (not used by current pipeline)
+  aggregator-g2-domain.xml        — legacy G2 aggregator
+  aggregator-g3-middleware.xml    — legacy G3 aggregator
+  aggregator-g4-extensions.xml    — legacy G4 aggregator
+  aggregator-g5-apps-independent.xml — legacy G5 aggregator
+  aggregator-g6-apps-chain.xml    — legacy G6 aggregator
+  aggregator-foundation.xml       — foundation repos aggregator
+  aggregator-apps.xml             — app repos aggregator
 
 platform/
-  aggregator-base.xml             — base slice (platform-api, platform-core)
+  aggregator-base.xml             — base slice (platform-api, platform-core, playbook-catalog)
   aggregator-slice-a.xml          — Agent/AI (44 modules)
   aggregator-slice-b.xml          — Identity/Auth (57 modules)
   aggregator-slice-c.xml          — Events/Comms (53 modules)
   aggregator-slice-d.xml          — YAML/Tooling (15 modules)
-  aggregator-convergence.xml      — Spring convergence (historical — convergence now uses platform/pom.xml directly)
+  aggregator-convergence.xml      — historical — convergence now uses platform/pom.xml directly
 
 casehub-all/
-  .github/workflows/mvn-all.yml   — 3-job, 9-phase build (parameterised)
+  .github/workflows/mvn-all.yml   — 10-level parallel pipeline (15+ jobs, parameterised)
   docs/
-    index.html                    — CI dashboard (single-file HTML+CSS+JS)
-    update-progress.sh            — gist updater (init, phase, finish commands)
-    run-with-progress.sh          — Maven wrapper with 90s incremental updates
-  scripts/reconcile-submodules.py — syncs submodules from CSVs
+    index.html                    — CI dashboard (single-file HTML+CSS+JS, no frameworks)
+    update-progress.sh            — Cloudflare Worker updater (phase-file, phase, finish commands)
+    run-with-progress.sh          — Maven wrapper with start/end dashboard updates
+    check-cycles.py               — dependency graph cycle detection (Kahn's algorithm)
+    worker/
+      src/index.js                — Cloudflare Worker (KV store with run_id ownership)
+      wrangler.toml               — Worker configuration (KV namespace binding)
+  scripts/
+    reconcile-submodules.py       — syncs submodules from CSVs
 ```
