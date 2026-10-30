@@ -184,6 +184,12 @@ print(json.dumps(data, indent=2))
 import json, sys
 from datetime import datetime, timezone
 data = json.loads(sys.stdin.read())
+# Guard: only write if this is OUR build (prevents stale writes from cancelled runs)
+cur_run = data.get('current', {}).get('run_id')
+my_run = ${GITHUB_RUN_ID:-0}
+if cur_run and cur_run != my_run:
+    print(json.dumps(data))
+    sys.exit(0)
 stats = json.loads('''$STATS''')
 if data.get('current'):
     for p in data['current']['phases']:
