@@ -18,7 +18,31 @@ export default {
       if (token !== env.WRITE_TOKEN) {
         return new Response('Unauthorized', { status: 401 });
       }
+
+      const runId = request.headers.get('X-Run-Id');
+      const isInit = request.headers.get('X-Init') === 'true';
       const body = await request.text();
+
+      // Server-side run_id ownership enforcement.
+      // Init writes (X-Init: true) establish new ownership — always accepted.
+      // All other writes with X-Run-Id must match the current owner.
+      // This prevents cancelled/stale builds from corrupting the current build's data.
+      if (runId && !isInit) {
+        const progress = await env.KV.get('progress');
+        if (progress) {
+          try {
+            const p = JSON.parse(progress);
+            const ownerRunId = p?.current?.run_id;
+            if (ownerRunId && parseInt(runId) !== ownerRunId) {
+              return new Response(
+                JSON.stringify({ error: 'stale_run', owner: ownerRunId, rejected: parseInt(runId) }),
+                { status: 409, headers: { ...corsHeaders(), 'content-type': 'application/json' } }
+              );
+            }
+          } catch (e) { /* parse error — allow write */ }
+        }
+      }
+
       await env.KV.put(key, body);
       return new Response('ok', { headers: corsHeaders() });
     }
@@ -40,6 +64,6 @@ function corsHeaders() {
   return {
     'access-control-allow-origin': '*',
     'access-control-allow-methods': 'GET, PUT, DELETE, OPTIONS',
-    'access-control-allow-headers': 'Content-Type, Authorization',
+    'access-control-allow-headers': 'Content-Type, Authorization, X-Run-Id, X-Init',
   };
 }

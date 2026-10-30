@@ -117,7 +117,10 @@ jobs:
           print(json.dumps(data, indent=2))
           " "$OLD" | curl -sf -X PUT "$WORKER/progress" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" -d @- > /dev/null
+            -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
+            -H "X-Init: true" \
+            -d @- > /dev/null
           echo "::notice::Dashboard: https://casehub.org/casehub-all/"
         env:
           CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
@@ -264,6 +267,7 @@ jobs:
           curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE_NAME" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
             -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
             -d "{\"name\":\"$PHASE_NAME\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
         continue-on-error: true
 
@@ -334,6 +338,7 @@ jobs:
           curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
             -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
             -d "$(curl -sf "$CI_DASHBOARD_URL/progress" | python3 -c "
           import json,sys,datetime
           d=json.load(sys.stdin)
@@ -434,6 +439,7 @@ jobs:
           curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-g1--${{ matrix.repo }}" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
             -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
             -d "{\"name\":\"G1: ${{ matrix.repo }}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
         continue-on-error: true
       - uses: actions/checkout@v4
@@ -557,6 +563,7 @@ jobs:
           curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-g3--${{ matrix.repo }}" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
             -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
             -d "{\"name\":\"G3: ${{ matrix.repo }}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
         continue-on-error: true
       - uses: actions/checkout@v4
@@ -687,6 +694,7 @@ jobs:
           curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE_NAME" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
             -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
             -d "{\"name\":\"$PHASE_NAME\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
         continue-on-error: true
       - uses: actions/checkout@v4
