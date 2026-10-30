@@ -45,6 +45,37 @@ casehub-all solves these problems:
   represent the last combination that compiled together. Anyone cloning
   casehub-all gets a known-good set of versions.
 
+## Parent BOM and Version Management
+
+All repos extend `casehub-parent` — a single Bill of Materials (BOM) POM that
+centralises dependency versions, plugin configuration, and enforcer rules.
+
+### What casehub-parent manages
+
+- **Quarkus BOM** (3.39.x) — all Quarkus dependencies
+- **Spring Boot BOM** (4.1.x) — all Spring dependencies
+- **Serverless Workflow** (7.35.3.Final) — workflow type system
+- **Quarkus MCP Server** (1.11.1) — MCP protocol support
+- **LangChain4j** (1.19.x) — LLM integration
+- **Surefire** (3.5.5) — test runner, with `forkedProcessTimeoutInSeconds=300`
+- **Maven Enforcer** — `dependencyConvergence` rule (fail on version conflicts)
+
+### Repos extending casehub-parent
+
+Platform, engine, qhorus, ledger, connectors, neocortex, eidos, agency, work,
+claudony, scaffold, clinical, pages, casehub-langchain4j (14 repos).
+The remaining repos (iot, aml, fsitrading, etc.) inherit transitively or will
+be migrated incrementally.
+
+### Version override pattern
+
+Repos that need a different version of a managed dependency declare it in
+their own `<properties>` or `<dependencyManagement>`. The enforcer's
+`dependencyConvergence` rule catches conflicting transitive versions.
+
+For example, `work` pins `serverlessworkflow` to 7.13 (breaking API change
+in 7.35) and `claudony` pins Quarkus to 3.32 (pending migration).
+
 ## SHA Management and Submodule Pointers
 
 casehub-all tracks every repo as a git submodule. Each submodule pointer is a
@@ -290,7 +321,7 @@ jobs, giving the slice phase 8 CPUs total.
 
   <!-- Purge + Download + Validate -->
   <rect class="validate" x="60" y="272" width="210" height="28"/>
-  <text class="detail" x="72" y="291">Purge non-platform SNAPSHOTs</text>
+  <text class="detail" x="72" y="291">Purge all casehub SNAPSHOTs</text>
 
   <rect class="artifact" x="285" y="272" width="180" height="28"/>
   <text class="detail" x="297" y="291">Download slice artifacts</text>
@@ -412,39 +443,39 @@ within a single reactor phase.
 Within each group, Maven's `-T 1C` parallelises compilation across modules
 (2 threads per runner).
 
-### Per-Repo CI Status (as of 2026-10-29)
+### Per-Repo CI Status (as of 2026-10-30)
 
 All per-repo CIs are green. Full `mvn verify` times from latest successful runs.
 
 | Repo | CI Time | Group | Notes |
 |------|---------|-------|-------|
-| platform | ~36m | Slices | 212 modules, 61 @QuarkusTest |
+| platform | ~36m | Slices | ~220 modules, 61 @QuarkusTest. Extends casehub-parent. |
 | work | ~27m | G3 | MongoDB tests skip without Docker |
-| engine | ~22m | G3 | ~1500 tests |
-| iot | ~18m | G5 | HomeAssistant WS tests skip on CI |
-| neocortex | ~16m | G1 | ONNX latency test skips on CI |
-| quarkmind | ~16m | G6 | |
-| connectors | ~15m | G1 | Discord WS + Email tests hardened for CI |
+| engine | ~22m | G3 | ~1500 tests. Extends casehub-parent. |
+| iot | ~18m | G5 | All tests enabled (dynamic ports) |
+| neocortex | ~16m | G1 | ONNX latency test skips on CI. Dynamic WireMock ports. |
+| quarkmind | ~16m | G6 | Dynamic test port for ReplayVisualizerIT |
+| connectors | ~15m | G1 | All tests enabled (gateway leak + event-driven assertions fixed) |
 | casehub-mosaic | ~12m | G4 | declaration emit disabled for agent-viewer |
 | fsitrading | ~13m | G6 | ops-service excluded from classpath |
-| qhorus | ~12m | G2 | |
-| casehub-langchain4j | ~10m | G4 | |
+| qhorus | ~12m | G2 | Extends casehub-parent. |
+| casehub-langchain4j | ~10m | G4 | Extends casehub-parent. |
 | soc | ~8m | G5 | |
-| agency | ~8m | G4 | |
-| ledger | ~8m | G1 | |
-| eidos | ~7m | G2 | |
+| agency | ~8m | G4 | Extends casehub-parent. |
+| ledger | ~8m | G1 | Dynamic WireMock ports. Extends casehub-parent. |
+| eidos | ~7m | G2 | Extends casehub-parent. |
 | devtown | ~7m | G6 | |
 | aml | ~7m | G6 | |
-| scaffold | ~6m | G6 | |
-| claudony | ~6m | G5 | |
+| scaffold | ~6m | G6 | Extends casehub-parent. |
+| claudony | ~6m | G5 | Extends casehub-parent. |
 | drafthouse | ~6m | G3 | E2E tests excluded (need Playwright) |
 | ops | ~5m | G5 | |
 | life | ~4m | G6 | |
 | chat-app | ~3m | G5 | |
-| workers | ~3m | G4 | Script tests skip on CI |
-| clinical | ~3m | G6 | |
+| workers | ~3m | G4 | All tests enabled (thread pool leak fixed) |
+| clinical | ~3m | G6 | Extends casehub-parent. |
 | openclaw | ~3m | G5 | |
-| pages | ~8m | G1 | Maven publish + frontend-artifacts |
+| pages | ~8m | G1 | Extends casehub-parent. Maven publish + frontend-artifacts. |
 
 ### Tests Skipped on CI
 
@@ -454,11 +485,20 @@ or surefire `<exclude>`:
 
 | Test | Repo | Reason |
 |------|------|--------|
-| `DiscordGatewayTest` | connectors | WebSocket needs quiet env, flaky under `-T 1C` |
 | `StrategyClassifierOnnxTest.latencyUnderThreshold` | neocortex | Latency benchmark unreliable on shared runners |
-| `HomeAssistantWebSocketClientTest` | iot | Connects to hardcoded port 8081 |
-| `ScriptWorkerExecutionManagerTest` | workers | Process execution flaky under `-T 1C` |
 | `BrainstormE2ETest` + all `e2e/*` | drafthouse | Playwright browser driver not installed |
+
+Previously skipped tests that have been **re-enabled** (root causes fixed):
+
+| Test | Repo | What was fixed |
+|------|------|---------------|
+| `DiscordGatewayTest` (10 tests) | connectors | Gateway thread leak — `disconnect()` now joins connect thread + AutoCloseable |
+| `ScriptWorkerExecutionManagerTest` | workers | Thread pool leak — `@AfterEach` cleanup of unclosed CachedThreadPool |
+| `HomeAssistantWebSocketClientTest` | iot | Was NOT actually disabled — hardcoded port 8081 → dynamic port |
+| `DiscordChatPlatformTest` | connectors | Awaitility polling → CountDownLatch (event-driven) |
+| `EmailInboundConnectorTest` | connectors | Awaitility removed — LinkedBlockingQueue.poll() is already event-driven |
+| `PlaybookOrchestratorTest` | pages | Thread.sleep(2000) → CountDownLatch + 5s timeout |
+| `RaceStepTests` / `SelectStepTests` | platform | Scope leak + submission/cancel race fixed with CountDownLatch gate |
 
 ### casehub-all Build Times
 
@@ -485,9 +525,13 @@ minutes per job transition.
 
 ### Forked Process Timeout
 
-`forkedProcessTimeoutInSeconds=300` (parent POM) kills any hung Surefire
-forked JVM after 5 minutes. This prevents a single stuck test from consuming
-the entire CI job budget (previously caused 45-minute job timeouts).
+`forkedProcessTimeoutInSeconds=300` (casehub-parent POM) kills any hung
+Surefire forked JVM after 5 minutes. This prevents a single stuck test from
+consuming the entire CI job budget (previously caused 45-minute job timeouts).
+
+All repos that extend casehub-parent inherit this setting automatically.
+Platform also declares it in its own `<pluginManagement>` as belt-and-suspenders
+(platform extends casehub-parent since the BOM alignment work).
 
 The timeout applies per fork, not per test. If a fork has multiple tests,
 the 5-minute budget covers all of them. Individual tests should use JUnit
@@ -495,10 +539,10 @@ the 5-minute budget covers all of them. Individual tests should use JUnit
 
 ### Surefire Version Alignment
 
-All repos use Surefire **3.5.5** (set in `casehub-parent`). Engine previously
-overrode to 3.5.5 independently — the parent now adopts 3.5.5 ecosystem-wide,
-and engine inherits. Surefire 3.5.5 has stricter module-path validation that
-detects split packages (classes in the same Java package across different JARs).
+All repos use Surefire **3.5.5** (set in `casehub-parent`, inherited by all
+repos that extend it). Surefire 3.5.5 has stricter module-path validation
+that detects split packages (classes in the same Java package across
+different JARs).
 
 ## Quarkus Bugs and Limitations
 
@@ -595,7 +639,7 @@ The `mvn-all.yml` workflow is parameterised via `workflow_dispatch` inputs:
 
 | Input | Type | Default | Effect |
 |-------|------|---------|--------|
-| `test_mode` | choice | `skip` | `skip` = no compile/run (`maven.test.skip=true`); `compile` = compile tests only (`-DskipTests`); `run` = compile + execute tests |
+| `test_mode` | choice | `skip` | `skip` = compile tests but don't run (`-DskipTests`); `compile` = compile tests only (`-DskipTests`); `run` = compile + execute tests. Note: uses `-DskipTests` (not `-Dmaven.test.skip=true`) so test-jar artifacts are still produced for downstream deps. |
 | `quarkus_build` | boolean | `false` | When true, runs Quarkus augmentation (produces runner JARs). Leave false — the deadlock makes this unsafe with `-T 1C`. |
 | `enforcer` | boolean | `false` | When true, runs Maven enforcer plugin. |
 | `maven_args` | string | (empty) | Escape hatch for additional Maven flags. Passed via `GITHUB_ENV` to prevent shell injection. |
@@ -644,8 +688,11 @@ infinite loops.
 The convergence job restores a Maven cache from a previous run, which may
 contain stale or corrupted casehub snapshot JARs. A purge step
 (`rm -rf ~/.m2/repository/io/casehub`) runs before downloading fresh
-artifacts from the slice jobs. This ensures the convergence build always
-uses artifacts from the current run's slices, not stale cache entries.
+artifacts from the slice jobs. The convergence step then recompiles ALL
+platform modules from source (`mvn install -DskipTests -f platform/pom.xml`),
+so even if downloaded artifacts are corrupt (detected and deleted by the
+validation step), Maven regenerates them fresh. This defense-in-depth
+approach handles both stale cache entries and artifact download corruption.
 
 ### Pointer advance race
 The workflow advances submodule pointers and pushes on success. If two runs
@@ -696,6 +743,22 @@ don't reproduce locally. Current mitigations:
 - `declaration: false` in agent-viewer's tsconfig.build.json (TS4094)
 - `never` exhaustiveness checks replaced with fallback defaults
 
+## Port Management
+
+All test infrastructure uses **dynamic ports** (`0` or `dynamicPort()`).
+No hardcoded ports remain in test code. This eliminates port-conflict
+failures under `-T 1C` parallel builds.
+
+Previously hardcoded ports that were cleaned up:
+- neocortex: WireMock 39200/39201 → `QuarkusTestResourceLifecycleManager`
+- ledger: WireMock 8098/8099 → `@InjectWireMock` with dynamic port
+- connectors: IRC 16667 → `ServerSocket(0)` with `SO_REUSEADDR`
+- iot: Quarkus 8082 → `quarkus.http.test-port=0` + `DynamicTestPortResource`
+- quarkmind: Quarkus http.port → `-Dquarkus.http.port=0` + stdout parser
+
+When adding new test infrastructure, always bind to port `0` and read
+the assigned port from the server/resource.
+
 ## Operations
 
 ### Fixing a Red Repo
@@ -717,6 +780,7 @@ don't reproduce locally. Current mitigations:
 
 ```
 parent/
+  pom.xml                          — casehub-parent BOM (single org parent for all repos)
   build/
     modules-core.csv              — core repo dependency declarations
     modules-applications.csv      — app repo dependency declarations
