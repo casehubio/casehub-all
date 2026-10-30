@@ -110,11 +110,12 @@ jobs:
                           'G3: engine',
                           'G4: ras','G4: langchain4j','G4: workers',
                           'G4: agency-mosaic',
-                          'App: claudony','App: openclaw','App: soc','App: desiredstate',
-                          'App: life',
-                          'App: devtown','App: aml','App: clinical','App: quarkmind','App: scaffold','App: iot','App: chat-app',
+                          'App: iot','App: quarkmind',
+                          'App: soc','App: claudony','App: clinical',
+                          'App: devtown','App: aml','App: chat-app',
+                          'App: life','App: openclaw','App: desiredstate',
                           'App: ops',
-                          'App: fsitrading']]},
+                          'App: scaffold','App: fsitrading']]},
             'history': old.get('history', []),
             '_archives': old.get('_archives', [])
           }
@@ -790,14 +791,24 @@ jobs:
   # Phase 9a: Apps wave 1 — independent apps (4 parallel)
   # ════════════════════════════════════════════════════════════════════
   apps-wave1:
-    name: "App: ${{ matrix.repo }}"
+    name: "Apps: ${{ matrix.name }}"
     needs: [g2-domain, g4-sequential]
     if: always() && !cancelled() && needs.g4-sequential.result == 'success'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        repo: [claudony, openclaw, soc, desiredstate]
+        include:
+          - name: iot
+            repos: "iot"
+          - name: quarkmind
+            repos: "quarkmind"
+          - name: bundle-a
+            repos: "soc claudony clinical"
+          - name: bundle-b
+            repos: "devtown aml chat-app"
+          - name: bundle-c
+            repos: "life openclaw desiredstate"
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -808,15 +819,16 @@ jobs:
       MVN_COMMON: ${{ needs.g2-domain.outputs.mvn-common }}
       MAVEN_ARGS: ${{ needs.g2-domain.outputs.maven-args }}
     steps:
-      - name: Dashboard — App ${{ matrix.repo }} started
+      - name: Dashboard — Apps ${{ matrix.name }} started
         run: |
-          SAFE_NAME="${GITHUB_RUN_ID}-app--${{ matrix.repo }}"
           NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE_NAME" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d "{\"name\":\"App: ${{ matrix.repo }}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
+          for repo in ${{ matrix.repos }}; do
+            curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-app--${repo}" \
+              -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+              -H "Content-Type: application/json" \
+              -H "X-Run-Id: ${GITHUB_RUN_ID}" \
+              -d "{\"name\":\"App: ${repo}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null || true
+          done
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
@@ -843,141 +855,23 @@ jobs:
       - name: Download all prior artifacts
         uses: actions/download-artifact@v4
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: "Build ${{ matrix.repo }}"
+      - name: "Build ${{ matrix.name }}"
         run: |
-          bash docs/run-with-progress.sh --parallel "App: ${{ matrix.repo }}" mvn install -fae -T 1C -f ${{ matrix.repo }}/pom.xml $MVN_COMMON $MAVEN_ARGS
+          for repo in ${{ matrix.repos }}; do
+            bash docs/run-with-progress.sh --parallel "App: ${repo}" mvn install -fae -T 1C -f ${repo}/pom.xml $MVN_COMMON $MAVEN_ARGS
+          done
         timeout-minutes: 30
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
-        with: { name: "m2-app-${{ matrix.repo }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+        with: { name: "m2-app-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
-  # Phase 9b: Apps wave 2 — life (needs openclaw)
+  # Phase 9b: Apps wave 2 — ops (needs desiredstate from wave 1)
   # ════════════════════════════════════════════════════════════════════
   apps-wave2:
-    name: "App: life"
+    name: "App: ops"
     needs: [g2-domain, apps-wave1]
     if: always() && !cancelled() && needs.apps-wave1.result == 'success'
-    runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.g2-domain.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.g2-domain.outputs.maven-args }}
-    steps:
-      - name: Dashboard — App life started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-app--life" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d "{\"name\":\"App: life\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
-        continue-on-error: true
-      - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - name: Restore Maven cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
-      - name: Install parent POMs
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download all prior artifacts
-        uses: actions/download-artifact@v4
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: "Build life"
-        run: |
-          bash docs/run-with-progress.sh --parallel "App: life" mvn install -fae -T 1C -f life/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 20
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with: { name: "m2-app-life", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
-
-  # ════════════════════════════════════════════════════════════════════
-  # Phase 9c: Apps wave 3 — apps needing life (7 parallel)
-  # ════════════════════════════════════════════════════════════════════
-  apps-wave3:
-    name: "App: ${{ matrix.repo }}"
-    needs: [g2-domain, apps-wave2]
-    if: always() && !cancelled() && needs.apps-wave2.result == 'success'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        repo: [devtown, aml, clinical, quarkmind, scaffold, iot, chat-app]
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.g2-domain.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.g2-domain.outputs.maven-args }}
-    steps:
-      - name: Dashboard — App ${{ matrix.repo }} started
-        run: |
-          SAFE_NAME="${GITHUB_RUN_ID}-app--${{ matrix.repo }}"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE_NAME" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d "{\"name\":\"App: ${{ matrix.repo }}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
-        continue-on-error: true
-      - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - name: Enable Corepack
-        run: corepack enable
-      - name: Restore Maven cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
-      - name: Install parent POMs
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download all prior artifacts
-        uses: actions/download-artifact@v4
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: "Build ${{ matrix.repo }}"
-        run: |
-          bash docs/run-with-progress.sh --parallel "App: ${{ matrix.repo }}" mvn install -fae -T 1C -f ${{ matrix.repo }}/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 30
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with: { name: "m2-app-${{ matrix.repo }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
-
-  # ════════════════════════════════════════════════════════════════════
-  # Phase 9d: Apps wave 4 — ops (needs iot + agency)
-  # ════════════════════════════════════════════════════════════════════
-  apps-wave4:
-    name: "App: ops"
-    needs: [g2-domain, apps-wave3]
-    if: always() && !cancelled() && needs.apps-wave3.result == 'success'
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1027,13 +921,17 @@ jobs:
         with: { name: "m2-app-ops", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
-  # Phase 9e: Apps wave 5 — fsitrading (needs ops) + finalize
+  # Phase 9c: Apps wave 3 — scaffold + fsitrading (both need ops) + finalize
   # ════════════════════════════════════════════════════════════════════
-  apps-wave5:
-    name: "App: fsitrading + finalize"
-    needs: [prepare, convergence, g1-repos, g2-domain, g3-parallel, g3-engine, g4-parallel, g4-sequential, apps-wave1, apps-wave2, apps-wave3, apps-wave4]
-    if: always() && !cancelled()
+  apps-wave3:
+    name: "App: ${{ matrix.repo }}"
+    needs: [g2-domain, apps-wave2]
+    if: always() && !cancelled() && needs.apps-wave2.result == 'success'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: [scaffold, fsitrading]
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -1041,6 +939,57 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      MVN_COMMON: ${{ needs.g2-domain.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.g2-domain.outputs.maven-args }}
+    steps:
+      - name: Dashboard — App ${{ matrix.repo }} started
+        run: |
+          SAFE_NAME="${GITHUB_RUN_ID}-app--${{ matrix.repo }}"
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE_NAME" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
+            -d "{\"name\":\"App: ${{ matrix.repo }}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
+        continue-on-error: true
+      - uses: actions/checkout@v4
+        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
+      - name: Restore Maven cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
+      - name: Purge casehub snapshots
+        run: rm -rf ~/.m2/repository/io/casehub
+      - name: Install parent POMs
+        run: |
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+      - name: Download all prior artifacts
+        uses: actions/download-artifact@v4
+        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
+      - name: "Build ${{ matrix.repo }}"
+        run: |
+          bash docs/run-with-progress.sh --parallel "App: ${{ matrix.repo }}" mvn install -fae -T 1C -f ${{ matrix.repo }}/pom.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 30
+
+  # ════════════════════════════════════════════════════════════════════
+  # Finalize — dashboard + pointer advance
+  # ════════════════════════════════════════════════════════════════════
+  finalize:
+    name: "Finalize"
+    needs: [prepare, convergence, g1-repos, g2-domain, g3-parallel, g3-engine, g4-parallel, g4-sequential, apps-wave1, apps-wave2, apps-wave3]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
@@ -1062,44 +1011,13 @@ jobs:
             done
           fi
         timeout-minutes: 5
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - name: Restore Maven cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-${{ runner.os }}-
-      - name: Configure Maven flags
-        run: |
-          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
-          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then FLAGS="$FLAGS -DskipTests"; fi
-          if [ "${{ inputs.quarkus_build }}" != "true" ]; then FLAGS="$FLAGS -Dquarkus.build.skip=true"; fi
-          if [ "${{ inputs.enforcer }}" != "true" ]; then FLAGS="$FLAGS -Denforcer.skip=true"; fi
-          echo "MVN_COMMON=$FLAGS" >> "$GITHUB_ENV"
-          echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
-      - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
-      - name: Install parent POMs
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download all prior artifacts
-        if: needs.apps-wave4.result == 'success'
-        uses: actions/download-artifact@v4
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: "Build fsitrading"
-        if: needs.apps-wave4.result == 'success'
-        run: |
-          bash docs/run-with-progress.sh "App: fsitrading" mvn install -fae -T 1C -f fsitrading/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 20
 
       # ── Finalize dashboard ──────────────────────────────────────────
       - name: Finalize CI dashboard
         if: always()
         run: |
-          if [ "${{ job.status }}" = "success" ]; then
+          ALL_OK="${{ needs.apps-wave3.result }}"
+          if [ "$ALL_OK" = "success" ]; then
             bash docs/update-progress.sh finish success || true
           else
             bash docs/update-progress.sh finish failure || true

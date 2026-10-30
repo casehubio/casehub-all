@@ -221,11 +221,9 @@ function renderPipe(phases,id,clickFn){
   const g3e=m['G3: engine'];
   const g4p=['G4: ras','G4: langchain4j','G4: workers'].map(n=>m[n]);
   const g4s=m['G4: agency-mosaic'];
-  const w1=['App: claudony','App: openclaw','App: soc','App: desiredstate'].map(n=>m[n]);
-  const w2=m['App: life'];
-  const w3=['App: devtown','App: aml','App: clinical','App: quarkmind','App: scaffold','App: iot','App: chat-app'].map(n=>m[n]);
-  const w4=m['App: ops'];
-  const w5=m['App: fsitrading'];
+  const w1=['App: iot','App: quarkmind','App: soc','App: claudony','App: clinical','App: devtown','App: aml','App: chat-app','App: life','App: openclaw','App: desiredstate'].map(n=>m[n]);
+  const w2=m['App: ops'];
+  const w3=['App: scaffold','App: fsitrading'].map(n=>m[n]);
 
   const row=(content,cls='pipe-full')=>`<div class="pipe-row ${cls}">${content}</div>`;
   const conn='<div class="pipe-connector"></div>';
@@ -243,9 +241,7 @@ function renderPipe(phases,id,clickFn){
     row(phaseBox(g4s,clickFn))+conn+
     fan+row(w1.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
     row(phaseBox(w2,clickFn))+conn+
-    fan+row(w3.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    row(phaseBox(w4,clickFn))+
-    row(phaseBox(w5,clickFn))+
+    fan+row(w3.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+
     `</div>`;
 }
 
