@@ -92,8 +92,10 @@ jobs:
                         'commit': '${GITHUB_SHA:0:7}', 'started': '$NOW',
                         'resume_from': '${{ inputs.resume_from }}' or None,
                         'retry_count': ${{ inputs.retry_count || 0 }},
-                        'phases': [{'name': p, 'status': 'pending'} for p in [
-                          'Prepare + Platform base','Platform A','Platform B','Platform C','Platform D',
+                        'phases': [
+                          {'name': 'Prepare + Platform base', 'status': 'in_progress', 'started': '$NOW'},
+                        ] + [{'name': p, 'status': 'pending'} for p in [
+                          'Platform A','Platform B','Platform C','Platform D',
                           'Platform convergence','G1: Core libs','G2: Domain',
                           'G3: Middleware','G4: Extensions','G5+G6: Apps']]},
             'history': old.get('history', []),
@@ -239,6 +241,17 @@ jobs:
       MVN_COMMON: ${{ needs.prepare.outputs.mvn-common }}
       MAVEN_ARGS: ${{ needs.prepare.outputs.maven-args }}
     steps:
+      - name: Dashboard — slice ${{ matrix.slice }} started
+        run: |
+          PHASE_NAME="Platform $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
+          SAFE_NAME="${GITHUB_RUN_ID}-platform-$(echo ${{ matrix.slice }})"
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE_NAME" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"$PHASE_NAME\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
+        continue-on-error: true
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -321,7 +334,7 @@ jobs:
   build:
     name: "Convergence + Ecosystem"
     needs: [prepare, platform-slices]
-    if: always() && (needs.prepare.result == 'success' && needs.platform-slices.result == 'success' || inputs.resume_from != '')
+    if: always() && !cancelled() && (needs.prepare.result == 'success' || inputs.resume_from != '')
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -516,7 +529,7 @@ jobs:
       # ── Phase 2: Platform convergence ─────────────────────────────────
       - name: "Platform: convergence (full rebuild, tests already ran in slices)"
         id: platform-convergence
-        if: inputs.resume_from == ''
+        if: inputs.resume_from == '' && needs.platform-slices.result == 'success'
         run: |
           bash docs/run-with-progress.sh "Platform convergence" mvn install -T 1C -DskipTests -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20

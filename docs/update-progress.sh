@@ -142,14 +142,26 @@ case "${1:-}" in
       STATS=$(parse_maven_stats "$LOGFILE")
     fi
 
+    # Read existing phase file to preserve started timestamp
+    EXISTING=$(curl -sf "$WORKER_URL/phase-$SAFE_NAME" 2>/dev/null || echo '{}')
+
     PHASE_DATA=$(python3 -c "
 import json
+existing = json.loads('''$EXISTING''')
 stats = json.loads('''$STATS''')
 data = {'name': '$NAME', 'status': '$STATUS', 'updated': '$NOW'}
 if '$STATUS' == 'in_progress':
-    data['started'] = '$NOW'
+    data['started'] = existing.get('started', '$NOW')
 elif '$STATUS' in ('success', 'failure', 'skipped'):
+    data['started'] = existing.get('started', '$NOW')
     data['ended'] = '$NOW'
+    if data['started']:
+        from datetime import datetime
+        try:
+            s = datetime.fromisoformat(data['started'].replace('Z','+00:00'))
+            e = datetime.fromisoformat('$NOW'.replace('Z','+00:00'))
+            data['duration_s'] = int((e - s).total_seconds())
+        except: pass
     data.update(stats)
 print(json.dumps(data, indent=2))
 ")
@@ -178,7 +190,7 @@ if data.get('current'):
         if p['name'] == '$NAME':
             p['status'] = '$STATUS'
             if '$STATUS' == 'in_progress':
-                p['started'] = '$NOW'
+                p.setdefault('started', '$NOW')
             elif '$STATUS' in ('success', 'failure', 'skipped'):
                 p.setdefault('started', '$NOW')
                 p['ended'] = '$NOW'
