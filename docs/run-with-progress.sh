@@ -1,11 +1,13 @@
 #!/bin/bash
-# Run a Maven command with incremental dashboard updates.
+# Run a Maven command with dashboard updates at start and end.
 #
 # Usage: run-with-progress.sh <phase-name> <maven-command...>
 #
-# Starts a background process that updates the gist every 90 seconds
-# with the latest stats from the growing log. On completion, sends
-# final stats with success or failure status.
+# Updates the gist at phase start (in_progress) and end (success/failure)
+# with stats parsed from the Maven log.
+#
+# Background incremental updates are disabled to avoid race conditions
+# when multiple phases run in parallel (e.g., slices A-D).
 
 set -euo pipefail
 
@@ -14,16 +16,7 @@ shift
 LOGFILE="/tmp/phase-$(echo "$PHASE" | tr ' :+' '---').log"
 
 # Signal start
-bash docs/update-progress.sh phase "$PHASE" in_progress || true
-
-# Background updater: push incremental stats every 90s
-(
-  while true; do
-    sleep 90
-    bash docs/update-progress.sh phase "$PHASE" in_progress "$LOGFILE" 2>/dev/null || true
-  done
-) &
-UPDATER_PID=$!
+bash docs/update-progress.sh phase "$PHASE" in_progress 2>/dev/null || true
 
 # Run Maven, capture output
 set +e
@@ -31,15 +24,11 @@ set +e
 EXIT_CODE=${PIPESTATUS[0]}
 set -e
 
-# Stop background updater
-kill $UPDATER_PID 2>/dev/null || true
-wait $UPDATER_PID 2>/dev/null || true
-
 # Final update with full stats
 if [ "$EXIT_CODE" -eq 0 ]; then
-  bash docs/update-progress.sh phase "$PHASE" success "$LOGFILE" || true
+  bash docs/update-progress.sh phase "$PHASE" success "$LOGFILE" 2>/dev/null || true
 else
-  bash docs/update-progress.sh phase "$PHASE" failure "$LOGFILE" || true
+  bash docs/update-progress.sh phase "$PHASE" failure "$LOGFILE" 2>/dev/null || true
 fi
 
 exit $EXIT_CODE
