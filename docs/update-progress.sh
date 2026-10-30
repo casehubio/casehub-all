@@ -10,6 +10,7 @@
 # Environment:
 #   GITHUB_RUN_ID, GITHUB_SHA, GITHUB_SERVER_URL, GITHUB_REPOSITORY
 #   GH_TOKEN or GITHUB_TOKEN — for gist API access
+#   RESUME_FROM, RETRY_COUNT — workflow inputs (optional)
 #
 # Statuses: pending | in_progress | success | failure | skipped
 
@@ -35,59 +36,136 @@ parse_maven_stats() {
 import re, json, sys
 
 log = open('$logfile').read()
+stats = {}
 
-# Module count from reactor summary
-modules = len(re.findall(r'^\[INFO\] [\w. -]+ \.+ (SUCCESS|FAILURE|SKIPPED)', log, re.MULTILINE))
+# ── Module count + slowest modules ──────────────────────────────────
+try:
+    reactor_lines = re.findall(
+        r'^\[INFO\]\s+(.+?)\s+\.{2,}\s+(SUCCESS|FAILURE|SKIPPED)\s+\[\s*([0-9.]+)\s*s\s*\]',
+        log, re.MULTILINE)
+    stats['modules'] = len(reactor_lines)
+    if reactor_lines:
+        by_time = sorted(reactor_lines, key=lambda x: float(x[2]), reverse=True)
+        stats['slowest_modules'] = [
+            {'name': m[0].strip(), 'seconds': round(float(m[2]), 1)}
+            for m in by_time[:5]
+        ]
+    failed = [m[0].strip() for m in reactor_lines if m[1] == 'FAILURE']
+    if failed:
+        stats['failed_modules'] = failed
+except Exception:
+    pass
 
-# Test summary — aggregate all 'Tests run:' lines
-tests_run = sum(int(m) for m in re.findall(r'Tests run: (\d+)', log))
-failures = sum(int(m) for m in re.findall(r'Failures: (\d+)', log))
-errors = sum(int(m) for m in re.findall(r'Errors: (\d+)', log))
-skipped = sum(int(m) for m in re.findall(r'Skipped: (\d+)', log))
+# ── Test summary ────────────────────────────────────────────────────
+try:
+    stats['tests_run'] = sum(int(m) for m in re.findall(r'Tests run: (\d+)', log))
+    stats['tests_failed'] = (
+        sum(int(m) for m in re.findall(r'Failures: (\d+)', log)) +
+        sum(int(m) for m in re.findall(r'Errors: (\d+)', log))
+    )
+    stats['tests_skipped'] = sum(int(m) for m in re.findall(r'Skipped: (\d+)', log))
+except Exception:
+    pass
 
-# Total time
-time_match = re.search(r'Total time:\s+([0-9:.]+)\s*(s|min)', log)
-total_time_s = 0
-if time_match:
-    t = time_match.group(1)
-    unit = time_match.group(2)
-    if unit == 'min':
-        parts = t.split(':')
-        total_time_s = int(float(parts[0])) * 60 + (int(float(parts[1])) if len(parts) > 1 else 0)
-    else:
-        total_time_s = int(float(t))
+# ── Flaky tests (surefire 3.5.5 Flakes: N) ─────────────────────────
+try:
+    stats['tests_flaky'] = sum(int(m) for m in re.findall(r'Flakes: (\d+)', log))
+except Exception:
+    pass
 
-# Flaky tests (surefire 3.5.5 reports Flakes: N)
-flakes = sum(int(m) for m in re.findall(r'Flakes: (\d+)', log))
+# ── Slowest tests ───────────────────────────────────────────────────
+try:
+    test_lines = re.findall(
+        r'Time elapsed:\s+([0-9.]+)\s*s\s*.*?--\s*in\s+([\w.]+)',
+        log)
+    if test_lines:
+        by_time = sorted(test_lines, key=lambda x: float(x[0]), reverse=True)
+        stats['slowest_tests'] = [
+            {'test': t[1].split('.')[-1], 'seconds': round(float(t[0]), 1)}
+            for t in by_time[:5]
+        ]
+except Exception:
+    pass
 
-# Timeouts
-timeouts = len(re.findall(r'TimeoutException|timed out|forkedProcessTimeoutInSeconds', log, re.IGNORECASE))
+# ── Total time ──────────────────────────────────────────────────────
+try:
+    time_match = re.search(r'Total time:\s+([0-9:.]+)\s*(s|min)', log)
+    if time_match:
+        t = time_match.group(1)
+        unit = time_match.group(2)
+        if unit == 'min':
+            parts = t.split(':')
+            stats['maven_time_s'] = int(float(parts[0])) * 60 + (int(float(parts[1])) if len(parts) > 1 else 0)
+        else:
+            stats['maven_time_s'] = int(float(t))
+except Exception:
+    pass
 
-# Failed modules from reactor summary
-failed_modules = re.findall(r'^\[INFO\] ([\w. -]+?) \.+ FAILURE', log, re.MULTILINE)
+# ── Timeouts ────────────────────────────────────────────────────────
+try:
+    stats['timeouts'] = len(re.findall(
+        r'TimeoutException|timed out|forkedProcessTimeoutInSeconds',
+        log, re.IGNORECASE))
+except Exception:
+    pass
 
-# Robustness events — artifact validation, retries, self-healing
-corrupt_jars = len(re.findall(r'Corrupt JAR', log))
-corrupt_jandex = len(re.findall(r'Corrupt Jandex', log))
-retries = len(re.findall(r'retrying once|retry', log, re.IGNORECASE))
+# ── Compilation warnings (exclude known noise) ─────────────────────
+try:
+    noise = re.compile(r'LogManager|byte-buddy|Overriding managed|Some problems were encountered|bootstrap class path')
+    warnings = [l for l in log.split('\n')
+                if l.startswith('[WARNING]') and not noise.search(l)]
+    stats['compilation_warnings'] = len(warnings)
+except Exception:
+    pass
 
-stats = {
-    'modules': modules,
-    'tests_run': tests_run,
-    'tests_failed': failures + errors,
-    'tests_skipped': skipped,
-    'tests_flaky': flakes,
-    'timeouts': timeouts,
-    'maven_time_s': total_time_s
-}
-if failed_modules:
-    stats['failed_modules'] = [m.strip() for m in failed_modules]
-if corrupt_jars or corrupt_jandex or retries:
-    stats['self_healing'] = {
-        'corrupt_jars_deleted': corrupt_jars,
-        'corrupt_jandex_deleted': corrupt_jandex,
-        'retries': retries
-    }
+# ── Deprecation warnings ───────────────────────────────────────────
+try:
+    stats['deprecation_warnings'] = len(re.findall(
+        r'deprecated|Xlint:deprecation', log, re.IGNORECASE))
+except Exception:
+    pass
+
+# ── Quarkus boot times ─────────────────────────────────────────────
+try:
+    boots = re.findall(r'started in\s+([0-9.]+)s', log)
+    if boots:
+        times = [float(b) for b in boots]
+        stats['quarkus_boots'] = {
+            'count': len(times),
+            'avg_s': round(sum(times) / len(times), 2),
+            'max_s': round(max(times), 2)
+        }
+except Exception:
+    pass
+
+# ── Self-healing / robustness events ───────────────────────────────
+try:
+    corrupt_jars = len(re.findall(r'Corrupt JAR', log))
+    corrupt_jandex = len(re.findall(r'Corrupt Jandex', log))
+    retries = len(re.findall(r'retrying once|Convergence failed', log, re.IGNORECASE))
+    if corrupt_jars or corrupt_jandex or retries:
+        stats['self_healing'] = {
+            'corrupt_jars_deleted': corrupt_jars,
+            'corrupt_jandex_deleted': corrupt_jandex,
+            'retries': retries
+        }
+except Exception:
+    pass
+
+# ── Artifact size (best effort) ────────────────────────────────────
+try:
+    sizes = re.findall(r'Uploading.*?(\d+(?:\.\d+)?)\s*(KB|MB|GB)', log)
+    if sizes:
+        total_mb = 0
+        for val, unit in sizes:
+            v = float(val)
+            if unit == 'KB': total_mb += v / 1024
+            elif unit == 'MB': total_mb += v
+            elif unit == 'GB': total_mb += v * 1024
+        stats['artifact_size_mb'] = round(total_mb, 1)
+except Exception:
+    pass
+
 print(json.dumps(stats))
 " 2>/dev/null || echo '{}'
 }
@@ -138,7 +216,7 @@ print(json.dumps(data, indent=2))
 import json, sys
 from datetime import datetime, timezone
 data = json.loads(sys.stdin.read())
-stats = json.loads('$STATS')
+stats = json.loads('''$STATS''')
 if data.get('current'):
     for p in data['current']['phases']:
         if p['name'] == '$NAME':
@@ -174,8 +252,18 @@ if cur:
     started = cur.get('started', '$NOW')
     s = datetime.fromisoformat(started.replace('Z','+00:00'))
     e = datetime.fromisoformat('$NOW'.replace('Z','+00:00'))
-    total_tests = sum(p.get('tests_run', 0) for p in cur.get('phases', []))
-    total_modules = sum(p.get('modules', 0) for p in cur.get('phases', []))
+    phases = cur.get('phases', [])
+    total_tests = sum(p.get('tests_run', 0) for p in phases)
+    total_modules = sum(p.get('modules', 0) for p in phases)
+    total_flaky = sum(p.get('tests_flaky', 0) for p in phases)
+    total_warnings = sum(p.get('compilation_warnings', 0) for p in phases)
+    total_timeouts = sum(p.get('timeouts', 0) for p in phases)
+    healing = {'corrupt_jars_deleted': 0, 'corrupt_jandex_deleted': 0, 'retries': 0}
+    for p in phases:
+        sh = p.get('self_healing', {})
+        healing['corrupt_jars_deleted'] += sh.get('corrupt_jars_deleted', 0)
+        healing['corrupt_jandex_deleted'] += sh.get('corrupt_jandex_deleted', 0)
+        healing['retries'] += sh.get('retries', 0)
     entry = {
         'run_id': cur.get('run_id'),
         'run_url': cur.get('run_url'),
@@ -186,7 +274,13 @@ if cur:
         'duration_s': int((e - s).total_seconds()),
         'total_tests': total_tests,
         'total_modules': total_modules,
-        'phases': cur.get('phases', [])
+        'total_flaky': total_flaky,
+        'total_warnings': total_warnings,
+        'total_timeouts': total_timeouts,
+        'self_healing': healing if any(healing.values()) else None,
+        'resume_from': cur.get('resume_from'),
+        'retry_count': cur.get('retry_count', 0),
+        'phases': phases
     }
     history = data.get('history', [])
     history.insert(0, entry)
