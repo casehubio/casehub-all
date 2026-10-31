@@ -1,5 +1,6 @@
 export default {
   async fetch(request, env) {
+    try {
     const url = new URL(request.url);
     const key = url.pathname.slice(1) || 'progress';
 
@@ -57,6 +58,12 @@ export default {
     }
 
     return new Response('Method not allowed', { status: 405 });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: e.message, stack: e.stack }), {
+        status: 500,
+        headers: { ...corsHeaders(), 'content-type': 'application/json' }
+      });
+    }
   }
 };
 
