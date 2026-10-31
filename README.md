@@ -140,7 +140,10 @@ jumping straight to L3 (work). This works because:
    the artifacts were built in this run or restored from cache.
 
 When resuming, the prepare, platform-slices, and convergence jobs are skipped
-entirely. Levels start from the `resume_from` point using cached `.m2`.
+entirely. Each level job **automatically pulls latest main** for all
+submodules after checkout — so you just fix the repo, push, and trigger
+`resume_from=L5` without manually advancing SHAs. Levels resolve Maven
+dependencies from cached `.m2` plus GitHub Packages.
 
 **When resumption is safe:** Immediately after a failure in a later level, when
 the earlier levels haven't changed. You fix the failing repo, push, and
@@ -150,12 +153,11 @@ re-trigger with `resume_from=L3` to skip rebuilding platform and core libs.
 since the cached run. The cache holds stale artifacts, so downstream modules
 compile against the old API.
 
-**Warning — resumed builds weaken the pointer guarantee:** The submodule
-update still pulls ALL repos to latest main regardless of `resume_from`.
-If the build passes, the pointer advance commits SHAs for *every* repo —
-including repos whose build levels were skipped. The SHAs are accurate (latest
-main), but the verification is partial: skipped levels were not rebuilt, so
-API compatibility between skipped and built levels is assumed, not proven.
+**Pointer guarantee:** Resumed builds pull latest main for all repos. If the
+build passes, the pointer advance commits SHAs for *every* repo — including
+repos whose build levels were skipped. The SHAs are accurate (latest main),
+but the verification is partial: skipped levels were not rebuilt, so API
+compatibility between skipped and built levels is assumed, not proven.
 
 ## Dependency Graph
 
@@ -726,14 +728,18 @@ individual repo SNAPSHOTs are republished. Stale cache artifacts can mask
 or fabricate failures. Always run a full build (no `resume_from`) for
 definitive verification.
 
-When resuming, the workflow skips the `.m2` purge and tolerates download
-failures at the entry level — Maven resolves dependencies from cache and
-GitHub Packages instead. Each level's `MVN_COMMON` flags are computed from
-inputs when convergence outputs are unavailable.
+When resuming, the workflow:
+- **Pulls latest main** for all submodules (same as a full run) — so you
+  don't need to manually advance SHAs after pushing a fix
+- Skips the `.m2` purge and tolerates download failures at the entry level
+  — Maven resolves dependencies from cache and GitHub Packages
+- Computes `MVN_COMMON` flags from inputs when convergence outputs are
+  unavailable
+- Advances submodule pointers in Finalize if the build succeeds
 
-**SHA rebase caveat:** Submodule updates rebase against main, so advancing
-one repo's SHA may pull in other repos' latest commits too. The resumed
-build verifies the combined state, not just the one repo you fixed.
+**SHA rebase caveat:** Submodule updates pull latest main for ALL repos,
+so advancing one repo's SHA pulls in other repos' latest commits too. The
+resumed build verifies the combined state, not just the one repo you fixed.
 
 The auto-retry mechanism uses `resume_from` to skip already-green levels.
 This is safe for transient failures (corrupted downloads, runner timeouts)

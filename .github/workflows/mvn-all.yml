@@ -361,6 +361,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -463,6 +466,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -531,6 +537,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - uses: actions/setup-node@v4
@@ -594,6 +603,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - uses: actions/cache@v4
@@ -654,6 +666,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - uses: actions/cache@v4
@@ -719,6 +734,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - uses: actions/setup-node@v4
@@ -787,6 +805,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - uses: actions/setup-node@v4
@@ -845,6 +866,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - uses: actions/setup-node@v4
@@ -917,6 +941,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - uses: actions/setup-node@v4
@@ -977,6 +1004,9 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - uses: actions/cache@v4
@@ -1017,6 +1047,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Pull latest submodules (resume)
+        if: inputs.resume_from != ''
+        run: git submodule update --remote
       - name: Configure git
         run: |
           git config user.email "github-actions@github.com"
