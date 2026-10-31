@@ -729,17 +729,20 @@ or fabricate failures. Always run a full build (no `resume_from`) for
 definitive verification.
 
 When resuming, the workflow:
-- **Pulls latest main** for all submodules (same as a full run) — so you
-  don't need to manually advance SHAs after pushing a fix
+- **Pulls latest main** for each level's own repos — so you don't need
+  to manually advance SHAs after pushing a fix. Only repos that are
+  actually built at each level are updated; earlier-level repos stay at
+  committed SHAs to avoid cross-level dependency mismatches.
 - Skips the `.m2` purge and tolerates download failures at the entry level
   — Maven resolves dependencies from cache and GitHub Packages
 - Computes `MVN_COMMON` flags from inputs when convergence outputs are
   unavailable
 - Advances submodule pointers in Finalize if the build succeeds
 
-**SHA rebase caveat:** Submodule updates pull latest main for ALL repos,
-so advancing one repo's SHA pulls in other repos' latest commits too. The
-resumed build verifies the combined state, not just the one repo you fixed.
+**Cross-level safety:** Each level only pulls its own repos to latest.
+Repos at earlier levels stay at their committed (cached) SHAs. This
+prevents a resumed level from depending on new artifacts from earlier
+levels that weren't rebuilt.
 
 The auto-retry mechanism uses `resume_from` to skip already-green levels.
 This is safe for transient failures (corrupted downloads, runner timeouts)
