@@ -304,7 +304,7 @@ jobs:
       - name: "Build slice ${{ matrix.slice }}"
         run: |
           SLICE_NAME="Platform $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
-          bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -T 1C -DskipTests -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
+          bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -T 1C -Dmaven.test.skip=true -f platform/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
 
       - name: Upload slice .m2 artifacts
