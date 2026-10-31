@@ -388,6 +388,7 @@ jobs:
           echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
           echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
       - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - name: Install parent POMs
         run: |
@@ -426,7 +427,7 @@ jobs:
   level1:
     name: "L1: ${{ matrix.name }}"
     needs: convergence
-    if: inputs.resume_from == '' || inputs.resume_from == 'L1'
+    if: always() && !cancelled() && (inputs.resume_from == '' || inputs.resume_from == 'L1')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -445,8 +446,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L1 started
         run: |
@@ -477,6 +478,7 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - name: Install parent POMs
         run: |
@@ -502,7 +504,7 @@ jobs:
   level2:
     name: "L2: ${{ matrix.repo }}"
     needs: [convergence, level1]
-    if: always() && !cancelled() && needs.level1.result == 'success'
+    if: always() && !cancelled() && (needs.level1.result == 'success' || inputs.resume_from == 'L2')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -515,8 +517,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L2 ${{ matrix.repo }} started
         run: |
@@ -539,11 +541,15 @@ jobs:
           path: ~/.m2/repository
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
-      - run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
+        run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |
@@ -558,7 +564,7 @@ jobs:
   level3:
     name: "L3: work"
     needs: [convergence, level2]
-    if: always() && !cancelled() && needs.level2.result == 'success'
+    if: always() && !cancelled() && (needs.level2.result == 'success' || inputs.resume_from == 'L3')
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -567,8 +573,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L3 work started
         run: |
@@ -595,11 +601,15 @@ jobs:
           path: ~/.m2/repository
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
-      - run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
+        run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |
@@ -623,8 +633,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L4 engine started
         run: |
@@ -651,11 +661,15 @@ jobs:
           path: ~/.m2/repository
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
-      - run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
+        run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |
@@ -670,7 +684,7 @@ jobs:
   level5:
     name: "L5: ${{ matrix.name }}"
     needs: [convergence, level4]
-    if: always() && !cancelled() && needs.level4.result == 'success'
+    if: always() && !cancelled() && (needs.level4.result == 'success' || inputs.resume_from == 'L5')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -689,8 +703,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L5 started
         run: |
@@ -715,11 +729,15 @@ jobs:
           path: ~/.m2/repository
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
-      - run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
+        run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |
@@ -753,8 +771,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L6 started
         run: |
@@ -779,11 +797,15 @@ jobs:
           path: ~/.m2/repository
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
-      - run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
+        run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |
@@ -809,8 +831,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L7 started
         run: |
@@ -833,11 +855,15 @@ jobs:
           path: ~/.m2/repository
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
-      - run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
+        run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |
@@ -852,7 +878,7 @@ jobs:
   level8:
     name: "L8: ${{ matrix.name }}"
     needs: [convergence, level7]
-    if: always() && !cancelled() && needs.level7.result == 'success'
+    if: always() && !cancelled() && (needs.level7.result == 'success' || inputs.resume_from == 'L8')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -875,8 +901,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L8 started
         run: |
@@ -901,11 +927,15 @@ jobs:
           path: ~/.m2/repository
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
-      - run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
+        run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |
@@ -931,8 +961,8 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - name: Dashboard — L9 started
         run: |
@@ -954,11 +984,15 @@ jobs:
           path: ~/.m2/repository
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
-      - run: rm -rf ~/.m2/repository/io/casehub
+      - name: Purge casehub snapshots
+        if: inputs.resume_from == ''
+        run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-      - uses: actions/download-artifact@v4
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |

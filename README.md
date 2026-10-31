@@ -718,13 +718,22 @@ flags" step. `maven_args` is set as the `MAVEN_ARGS` environment variable
 
 ## Known Limitations
 
-### resume_from is fragile
+### resume_from relies on cached artifacts
 See "Resuming from a Level" above. Only safe when earlier levels haven't
 changed since the cached run. The Maven `.m2` cache is keyed on
 `parent/pom.xml` + `platform/pom.xml` hash — it does NOT invalidate when
 individual repo SNAPSHOTs are republished. Stale cache artifacts can mask
 or fabricate failures. Always run a full build (no `resume_from`) for
 definitive verification.
+
+When resuming, the workflow skips the `.m2` purge and tolerates download
+failures at the entry level — Maven resolves dependencies from cache and
+GitHub Packages instead. Each level's `MVN_COMMON` flags are computed from
+inputs when convergence outputs are unavailable.
+
+**SHA rebase caveat:** Submodule updates rebase against main, so advancing
+one repo's SHA may pull in other repos' latest commits too. The resumed
+build verifies the combined state, not just the one repo you fixed.
 
 The auto-retry mechanism uses `resume_from` to skip already-green levels.
 This is safe for transient failures (corrupted downloads, runner timeouts)
@@ -733,11 +742,14 @@ infinite loops.
 
 ### Stale cache between jobs
 Each job restores a Maven cache from a previous run, which may contain stale
-or corrupted casehub snapshot JARs. A purge step (`rm -rf
-~/.m2/repository/io/casehub`) runs in every job before downloading fresh
-artifacts. Levels that build from source (convergence) regenerate everything
-fresh. This defense-in-depth approach handles both stale cache entries and
-artifact download corruption.
+or corrupted casehub snapshot JARs. On full runs (no `resume_from`), a purge
+step (`rm -rf ~/.m2/repository/io/casehub`) runs in every job before
+downloading fresh artifacts from the current run. On resumed runs, the purge
+is skipped — Maven resolves from the cached `.m2` plus GitHub Packages.
+Levels that build from source (convergence) regenerate everything fresh.
+This defense-in-depth approach handles both stale cache entries and artifact
+download corruption on full runs, while allowing resumed runs to use cached
+state from a prior green build.
 
 ### Pointer advance race
 The finalize job advances submodule pointers and pushes on success. If two runs
@@ -807,6 +819,45 @@ the assigned port from the server/resource.
 3. Reproduce locally: `mvn -f ~/claude/casehub/REPO/pom.xml verify`
 4. Fix, commit, push to origin + fork.
 5. Restore original branch.
+
+### Advancing Submodule SHAs (common pitfall)
+
+After fixing a repo and pushing, you must advance the submodule pointer in
+casehub-all **and** ensure CI runs from the commit that includes the advance.
+The sequence matters:
+
+```
+1. Fix and push the repo                        ← repo is green
+2. Advance submodule:
+     git -C casehub-all submodule update --remote REPO
+     git -C casehub-all add REPO
+     git -C casehub-all commit -m "chore: advance REPO submodule"
+     git -C casehub-all push origin main
+3. Trigger CI from the NEW commit                ← must be AFTER step 2
+```
+
+**What goes wrong:** If CI is triggered before pushing the SHA advance (or if
+a run was already in-flight from an older commit), it tests the OLD submodule
+SHAs — not your fix. The run may fail on the exact same bug you just fixed,
+or worse, pass vacuously and advance stale pointers.
+
+**How to verify:** Check which casehub-all commit a run used, and which
+submodule SHA that commit includes:
+
+```bash
+# What commit did the CI run use?
+gh run view RUN_ID --repo casehubio/casehub-all --json headSha
+
+# What submodule SHA does that commit point to?
+git -C casehub-all ls-tree COMMIT_SHA REPO
+```
+
+If the submodule SHA in the CI run doesn't match the fix you pushed, the run
+tested old code. Trigger a new run after confirming the SHA advance is on main.
+
+**With `resume_from`:** The resumed run checks out the HEAD of casehub-all at
+dispatch time. If you dispatch `resume_from=L5` before pushing the SHA advance,
+the run gets the old submodule pointers. Always push first, then dispatch.
 
 ### Adding a New Repo
 
