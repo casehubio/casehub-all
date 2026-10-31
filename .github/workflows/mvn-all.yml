@@ -464,7 +464,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
           REPOS="${{ matrix.repos }}"
           if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
@@ -537,7 +537,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: git submodule update --remote ${{ matrix.repo }}
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -603,7 +603,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: git submodule update --remote work
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -666,7 +666,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: git submodule update --remote engine
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -734,7 +734,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
           REPOS="${{ matrix.repos }}"
           if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
@@ -807,7 +807,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
           REPOS="${{ matrix.repos }}"
           if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
@@ -870,7 +870,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: git submodule update --remote drafthouse
       - uses: actions/setup-java@v4
         with: { java-version: '21', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -945,7 +945,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
           REPOS="${{ matrix.repos }}"
           if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
@@ -1010,7 +1010,7 @@ jobs:
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != ''
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
           for repo in scaffold fsitrading; do git submodule update --remote "$repo"; done
       - uses: actions/setup-java@v4
