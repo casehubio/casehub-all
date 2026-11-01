@@ -388,7 +388,6 @@ jobs:
           echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
           echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - name: Install parent POMs
         run: |
@@ -483,7 +482,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - name: Install parent POMs
         run: |
@@ -550,7 +548,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -613,7 +610,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -676,7 +672,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -749,7 +744,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -823,7 +817,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -884,7 +877,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -961,7 +953,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -1022,7 +1013,6 @@ jobs:
           key: m2-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.resume_from == ''
         run: rm -rf ~/.m2/repository/io/casehub
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
