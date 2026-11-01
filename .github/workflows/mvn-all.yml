@@ -462,6 +462,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
@@ -534,6 +550,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: git submodule update --remote ${{ matrix.repo }}
@@ -599,6 +631,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: git submodule update --remote work
@@ -661,6 +709,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: git submodule update --remote engine
@@ -728,6 +792,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
@@ -801,6 +881,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
@@ -863,6 +959,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: git submodule update --remote drafthouse
@@ -937,6 +1049,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
@@ -1001,6 +1129,22 @@ jobs:
         continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - name: Initialize dashboard (resume)
+        if: inputs.resume_from != ''
+        run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          PHASES='["Prepare + Platform base","Platform A","Platform B","Platform C","Platform D","Platform convergence","ledger","eidos","connectors","worker","pages","neocortex","qhorus","work","engine","ras","desiredstate","claudony","agency","casehub-langchain4j","workers","ops","casehub-mosaic","drafthouse","life","iot","quarkmind","devtown","aml","soc","chat-app","clinical","openclaw","scaffold","fsitrading"]'
+          OLD=$(curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null || echo '{}')
+          HIST=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('history',[])))" 2>/dev/null || echo '[]')
+          ARCH=$(echo "$OLD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(json.dumps(d.get('_archives',[])))" 2>/dev/null || echo '[]')
+          BODY=$(python3 -c "import json; phases=json.loads('$PHASES'); print(json.dumps({'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':json.loads('$HIST'),'_archives':json.loads('$ARCH')}))" 2>/dev/null)
+          [ -n "$BODY" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Init: true" \
+            -d "$BODY" > /dev/null || true
+        continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
         run: |
