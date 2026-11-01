@@ -37,7 +37,7 @@ export default {
         }
 
         const response = new Response(JSON.stringify(data), {
-          headers: { ...corsHeaders(), 'content-type': 'application/json', 'cache-control': 'max-age=120' }
+          headers: { ...corsHeaders(), 'content-type': 'application/json', 'cache-control': 'max-age=15' }
         });
         await cache.put(cacheKey, response.clone());
         return response;
