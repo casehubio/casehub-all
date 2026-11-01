@@ -305,21 +305,14 @@ function renderPipe(phases,id,clickFn){
   const prep=m['Prepare + Platform base'];
   const plat=['Platform A','Platform B','Platform C','Platform D'].map(n=>m[n]);
   const conv=m['Platform convergence'];
-  // L1: [ledger→eidos] | connectors | worker
-  const L1=[[m['ledger'],m['eidos']],[m['connectors']],[m['worker'],m['pages']]];
-  // L2: neocortex | qhorus
+  const tall=(groups)=>groups.sort((a,b)=>b.length-a.length);
+  const L1=tall([[m['ledger'],m['eidos']],[m['worker'],m['pages']],[m['connectors']]]);
   const L2=[m['neocortex'],m['qhorus']];
-  // L3: work, L4: engine
   const L3=m['work'], L4=m['engine'];
-  // L5: [ras+desiredstate] | [claudony+agency] | [langchain4j+workers]
-  const L5=[[m['ras'],m['desiredstate']],[m['claudony'],m['agency']],[m['casehub-langchain4j'],m['workers']]];
-  // L6: ops | casehub-mosaic (foundational)
-  const L6=[[m['ops']],[m['casehub-mosaic']]];
-  // L7: drafthouse
+  const L5=tall([[m['claudony'],m['agency']],[m['ras'],m['desiredstate']],[m['casehub-langchain4j'],m['workers']]]);
+  const L6=tall([[m['ops']],[m['casehub-mosaic']]]);
   const L7=[[m['drafthouse']]];
-  // L8: life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]
-  const L8=[[m['life']],[m['iot']],[m['quarkmind']],[m['devtown'],m['aml'],m['soc']],[m['chat-app'],m['clinical'],m['openclaw']]];
-  // L9: scaffold+fsitrading
+  const L8=tall([[m['devtown'],m['aml'],m['soc']],[m['chat-app'],m['clinical'],m['openclaw']],[m['life']],[m['iot']],[m['quarkmind']]]);
   const L9=[[m['scaffold'],m['fsitrading']]];
 
   const row=(content,cls='pipe-full')=>`<div class="pipe-row ${cls}">${content}</div>`;
