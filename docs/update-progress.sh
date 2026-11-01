@@ -119,6 +119,16 @@ try:
 except: pass
 
 try:
+    loc_match = re.search(r'\[LOC\] java_src=(\d+) java_test=(\d+) yaml=(\d+) json=(\d+) ts=(\d+) xml=(\d+)', log)
+    if loc_match:
+        loc = {'java_src': int(loc_match.group(1)), 'java_test': int(loc_match.group(2)),
+               'yaml': int(loc_match.group(3)), 'json': int(loc_match.group(4)),
+               'ts': int(loc_match.group(5)), 'xml': int(loc_match.group(6))}
+        loc['total'] = sum(loc.values())
+        stats['loc'] = loc
+except: pass
+
+try:
     corrupt_jars = len(re.findall(r'Corrupt JAR', log))
     corrupt_jandex = len(re.findall(r'Corrupt Jandex', log))
     retries = len(re.findall(r'retrying once|retry', log, re.IGNORECASE))

@@ -23,7 +23,18 @@ a:hover { text-decoration: underline; }
 .badge.failed { background: rgba(239,68,68,0.3); color: var(--red); font-size: 11px; padding: 3px 10px; }
 .badge.resume { background: rgba(245,158,11,0.2); color: var(--yellow); }
 .badge.retry { background: rgba(239,68,68,0.2); color: var(--red); }
-.run-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; font-size: 12px; }
+.run-meta { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; font-size: 12px; }
+.loc-summary { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; font-size: 11px; }
+.loc-total { font-weight: 700; font-size: 13px; color: var(--fg); margin-right: 4px; }
+.loc-tag { padding: 1px 6px; border-radius: 8px; font-size: 9px; font-weight: 600; }
+.loc-tag.java { background: rgba(245,158,11,0.15); color: #d97706; }
+.loc-tag.test { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+.loc-tag.ts { background: rgba(59,130,246,0.15); color: #3b82f6; }
+.loc-tag.yaml { background: rgba(16,185,129,0.15); color: #10b981; }
+.loc-tag.json { background: rgba(236,72,153,0.15); color: #ec4899; }
+.loc-tag.xml { background: rgba(107,114,128,0.15); color: #6b7280; }
+.loc-info { font-size: 8px; color: var(--muted); opacity: 0.7; }
+.loc-breakdown { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
 .failure-banner { background: rgba(239,68,68,0.1); border: 2px solid var(--red); border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; display: none; }
 .failure-banner .msg { font-size: 14px; font-weight: 700; color: var(--red); margin-bottom: 4px; }
 .failure-banner .detail { font-size: 11px; color: var(--muted); }
@@ -134,6 +145,20 @@ const WORKER_URL='https://casehub-ci-dashboard.casehub.workers.dev';
 const POLL_MS=10000;
 function fmt(s){if(!s&&s!==0)return'—';if(s<60)return s+'s';const m=Math.floor(s/60),r=s%60;if(m<60)return r>0?m+'m'+r+'s':m+'m';return Math.floor(m/60)+'h'+(m%60)+'m';}
 function ago(t){return t?fmt(Math.floor((Date.now()-new Date(t).getTime())/1000)):'';}
+function fmtLoc(n){if(!n)return'';if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'k';return n+'';}
+function locSummary(phases){
+  const totals={java_src:0,java_test:0,yaml:0,json:0,ts:0,xml:0,total:0};
+  let hasLoc=false;
+  (phases||[]).forEach(p=>{if(p.loc){hasLoc=true;Object.keys(totals).forEach(k=>totals[k]+=(p.loc[k]||0));}});
+  if(!hasLoc)return'';
+  return`<div class="loc-summary"><span class="loc-total">${fmtLoc(totals.total)} lines</span>`+
+    `<span class="loc-tag java">Java ${fmtLoc(totals.java_src)}</span>`+
+    `<span class="loc-tag test">Tests ${fmtLoc(totals.java_test)}</span>`+
+    (totals.ts?`<span class="loc-tag ts">TS ${fmtLoc(totals.ts)}</span>`:'')+
+    `<span class="loc-tag yaml">YAML ${fmtLoc(totals.yaml)}</span>`+
+    `<span class="loc-tag json">JSON ${fmtLoc(totals.json)}</span>`+
+    `</div>`;
+}
 function shortDate(iso){if(!iso)return'?';const d=new Date(iso);return d.getDate()+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]+' '+d.getHours()+':'+String(d.getMinutes()).padStart(2,'0');}
 
 // ── Event log ─────────────────────────────────────────────────────
@@ -197,11 +222,14 @@ function phaseBox(p,clickFn){
   if(p.tests_run)parts.push(p.tests_run+' tests');
   if(p.tests_failed)parts.push(`<span style="color:var(--red)">${p.tests_failed} fail</span>`);
   if(p.tests_flaky)parts.push(`<span style="color:var(--yellow)">${p.tests_flaky} flaky</span>`);
+  const loc=p.loc;
+  const locStr=loc?fmtLoc(loc.total):'';
   const sh=p.self_healing,healed=sh&&(sh.corrupt_jars_deleted||sh.corrupt_jandex_deleted||sh.retries);
   return`<div class="phase ${p.status}" ${clickFn?`onclick="${clickFn}('${p.name}')"`:''}>`+
     `<div class="name">${p.name}</div>`+
     `<div class="info">${dur||'—'}</div>`+
     (parts.length?`<div class="info">${parts.join(' · ')}</div>`:'')+
+    (locStr?`<div class="info loc-info">${locStr}</div>`:'')+
     (p.status==='failure'&&p.test_errors?p.test_errors.slice(0,2).map(e=>`<div class="fail-detail" title="${(e.error||'').replace(/"/g,'&quot;')}">${e.test}: ${(e.error||'').slice(0,50)}</div>`).join(''):
      p.status==='failure'&&p.tests_failed?`<div class="fail-detail">${p.tests_failed} test failure${p.tests_failed>1?'s':''}</div>`:'')+
     (p.status==='failure'&&p.timeouts?`<div class="fail-detail">⏱ timeout</div>`:'')+
@@ -275,6 +303,14 @@ function showDetail(name){
   if(p.slowest_tests?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Slowest tests</div></div><ul class="detail-list">${p.slowest_tests.map(t=>`<li><span>${t.test}</span><span class="val">${t.seconds}s</span></li>`).join('')}</ul></div>`;
   if(p.failed_modules?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Failed modules</div></div><ul class="detail-list">${p.failed_modules.map(m=>`<li style="color:var(--red)">${m}</li>`).join('')}</ul></div>`;
   if(p.test_errors?.length)h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Test errors</div></div><ul class="detail-list">${p.test_errors.map(e=>`<li style="color:var(--red)"><span>${e.test}</span><span class="val" title="${(e.error||'').replace(/"/g,'&quot;')}">${(e.error||'').slice(0,80)}</span></li>`).join('')}</ul></div>`;
+  if(p.loc){const l=p.loc;h+=`<div style="margin-top:8px"><div class="detail-item"><div class="dlabel">Lines of Code</div><strong>${fmtLoc(l.total)}</strong></div><div class="loc-breakdown">`+
+    (l.java_src?`<span class="loc-tag java">Java ${fmtLoc(l.java_src)}</span>`:'')+
+    (l.java_test?`<span class="loc-tag test">Tests ${fmtLoc(l.java_test)}</span>`:'')+
+    (l.ts?`<span class="loc-tag ts">TS ${fmtLoc(l.ts)}</span>`:'')+
+    (l.yaml?`<span class="loc-tag yaml">YAML ${fmtLoc(l.yaml)}</span>`:'')+
+    (l.json?`<span class="loc-tag json">JSON ${fmtLoc(l.json)}</span>`:'')+
+    (l.xml?`<span class="loc-tag xml">POM ${fmtLoc(l.xml)}</span>`:'')+
+    `</div></div>`;}
   panel.innerHTML=h;panel.classList.add('open');
 }
 
@@ -300,7 +336,7 @@ function renderCurrent(cur,hist){
     (fail?'<span class="badge failed">FAILED</span>':'')+
     (cur.resume_from?`<span class="badge resume">resumed from ${cur.resume_from}</span>`:'')+
     (cur.retry_count>0?`<span class="badge retry">retry #${cur.retry_count}</span>`:'')+
-    `</div><div id="cur-pipe"></div><div id="active-detail" class="detail-panel"></div></div>`;
+    `</div>`+locSummary(cur.phases)+`<div id="cur-pipe"></div><div id="active-detail" class="detail-panel"></div></div>`;
   renderPipe(cur.phases,'cur-pipe','showDetail');
 }
 
