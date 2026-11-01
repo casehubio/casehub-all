@@ -160,7 +160,7 @@ a:hover { text-decoration: underline; }
     <label>Test mode</label>
     <select id="opt-test-mode"><option value="skip">skip (compile only)</option><option value="run">run (full tests)</option></select>
     <label>Resume from</label>
-    <select id="opt-resume"><option value="">Full build</option><option value="L1">L1 — ledger, eidos, connectors, worker, pages</option><option value="L2">L2 — neocortex, qhorus</option><option value="L3">L3 — work</option><option value="L5">L5 — claudony, agency, ras, workers</option><option value="L8">L8 — apps (life, iot, quarkmind, devtown…)</option></select>
+    <select id="opt-resume"><option value="">From start (full build)</option><option value="auto">From last failure (auto-detect)</option><option value="L1">L1 — ledger, eidos, connectors, worker, pages</option><option value="L2">L2 — neocortex, qhorus</option><option value="L3">L3 — work</option><option value="L5">L5 — claudony, agency, ras, workers</option><option value="L8">L8 — apps (life, iot, quarkmind, devtown…)</option></select>
     <label>Submodule update</label>
     <select id="opt-submodule"><option value="pinned">pinned (committed SHAs)</option><option value="all">all (latest main)</option><option value="list">list (specific repos)</option></select>
     <div class="modal-actions">
@@ -470,6 +470,22 @@ async function refresh(){
 refresh();setInterval(refresh,POLL_MS);
 
 // ── Build actions ────────────────────────────────────────────────
+function detectFailedLevel(){
+  const phases=(window._data?.current||window._data?.history?.[0])?.phases||[];
+  const failed=phases.filter(p=>p.status==='failure').map(p=>p.name);
+  if(!failed.length)return '';
+  const levelMap={'Prepare + Platform base':'','Platform A':'','Platform B':'','Platform C':'','Platform D':'','Platform convergence':'',
+    'ledger':'L1','eidos':'L1','connectors':'L1','worker':'L1','pages':'L1',
+    'neocortex':'L2','qhorus':'L2','work':'L3','engine':'L3',
+    'ras':'L5','desiredstate':'L5','claudony':'L5','agency':'L5','casehub-langchain4j':'L5','workers':'L5',
+    'ops':'L5','casehub-mosaic':'L5','drafthouse':'L5',
+    'life':'L8','iot':'L8','quarkmind':'L8','devtown':'L8','aml':'L8','soc':'L8',
+    'chat-app':'L8','clinical':'L8','openclaw':'L8','scaffold':'L8','fsitrading':'L8'};
+  const levels=failed.map(n=>levelMap[n]).filter(Boolean);
+  const order=['L1','L2','L3','L5','L8'];
+  for(const l of order){if(levels.includes(l))return l;}
+  return '';
+}
 function getToken(){return localStorage.getItem('gh-ci-token')||'';}
 function showSettings(){document.getElementById('gh-token-input').value=getToken();document.getElementById('settings-modal').classList.add('open');}
 function closeSettings(){document.getElementById('settings-modal').classList.remove('open');}
@@ -490,7 +506,8 @@ function toast(msg,type='ok',ms=4000){
 async function triggerBuild(){
   const token=getToken();if(!token){showSettings();return;}
   const inputs={test_mode:document.getElementById('opt-test-mode').value};
-  const resume=document.getElementById('opt-resume').value;
+  let resume=document.getElementById('opt-resume').value;
+  if(resume==='auto')resume=detectFailedLevel();
   if(resume)inputs.resume_from=resume;
   const sub=document.getElementById('opt-submodule').value;
   if(sub!=='pinned')inputs.submodule_update=sub;
