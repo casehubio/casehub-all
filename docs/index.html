@@ -41,8 +41,9 @@ a:hover { text-decoration: underline; }
 .card.failed-build { border-color: var(--red); background: rgba(239,68,68,0.04); }
 
 .pipe { margin: 8px 0; padding-left: 28px; position: relative; }
-.pipe-level { display: flex; align-items: center; position: relative; }
-.lvl-tag { position: absolute; left: -28px; width: 22px; font-size: 8px; font-weight: 700; color: var(--muted); text-align: right; letter-spacing: -0.3px; }
+.pipe-level { position: relative; }
+.pipe-level > .pipe-row { width: 100%; }
+.lvl-tag { position: absolute; left: -28px; top: 50%; transform: translateY(-50%); width: 22px; font-size: 8px; font-weight: 700; color: var(--muted); text-align: right; letter-spacing: -0.3px; }
 .pipe-row { margin-bottom: 2px; }
 .pipe-full { display: flex; }
 .pipe-full .phase { flex: 1; }
