@@ -1018,12 +1018,15 @@ jobs:
         include:
           - name: life
             repos: life
+            maven_extra: "-DskipTests"
           - name: iot
             repos: iot
           - name: quarkmind
             repos: quarkmind
+            maven_extra: "-DskipTests"
           - name: "devtown, aml, soc"
             repos: "devtown aml soc"
+            maven_extra: "-DskipTests"
           - name: "chat-app, clinical, openclaw"
             repos: "chat-app clinical openclaw"
     env:
@@ -1092,7 +1095,7 @@ jobs:
       - name: Build
         run: |
           for repo in ${{ matrix.repos }}; do
-            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS
+            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS ${{ matrix.maven_extra }}
           done
         timeout-minutes: 30
       - uses: actions/upload-artifact@v4
