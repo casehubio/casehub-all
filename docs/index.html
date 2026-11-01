@@ -362,25 +362,6 @@ async function refresh(){
     const r=await timedFetch(WORKER_URL+'/progress');if(!r.ok)throw new Error('HTTP '+r.status);
     const data=await r.json();
     if(data.current){
-      const runId=data.current.run_id;
-      const phaseKeys=[
-        'prepare---platform-base','platform-a','platform-b','platform-c','platform-d',
-        'ledger','eidos','connectors','worker','pages',
-        'neocortex','qhorus',
-        'ras','desiredstate','claudony','agency','casehub-langchain4j','workers',
-        'ops','casehub-mosaic',
-        'drafthouse',
-        'life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw',
-        'scaffold','fsitrading'
-      ];
-      await Promise.all(phaseKeys.map(async k=>{
-        try{
-          const pr=await timedFetch(`${WORKER_URL}/phase-${runId}-${k}`);
-          if(!pr.ok)return;
-          const pd=await pr.json();
-          if(pd.name){const ph=data.current.phases.find(p=>p.name===pd.name);if(ph)Object.assign(ph,{...pd,name:ph.name});}
-        }catch(e){}
-      }));
       detectTransitions(data.current.phases);
     }
     window._data=data;

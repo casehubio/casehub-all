@@ -9,6 +9,40 @@ export default {
     }
 
     if (request.method === 'GET') {
+      if (key === 'progress') {
+        const cache = caches.default;
+        const cacheKey = new Request(url.toString(), { method: 'GET' });
+        const cached = await cache.match(cacheKey);
+        if (cached) return cached;
+
+        const value = await env.KV.get('progress');
+        const data = value ? JSON.parse(value) : {};
+
+        if (data.current?.run_id) {
+          const runId = data.current.run_id;
+          const phases = (data.current.phases || []).filter(p => p.status !== 'success');
+          await Promise.all(phases.map(async p => {
+            const phaseKey = `phase-${runId}-${p.name.toLowerCase().replace(/ \+ /g, '---').replace(/ /g, '-')}`;
+            try {
+              const pd = await env.KV.get(phaseKey);
+              if (pd) {
+                const phase = JSON.parse(pd);
+                if (phase.name) {
+                  const match = data.current.phases.find(pp => pp.name === phase.name);
+                  if (match) Object.assign(match, { ...phase, name: match.name });
+                }
+              }
+            } catch (e) {}
+          }));
+        }
+
+        const response = new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders(), 'content-type': 'application/json', 'cache-control': 'max-age=30' }
+        });
+        await cache.put(cacheKey, response.clone());
+        return response;
+      }
+
       const value = await env.KV.get(key);
       if (!value) return new Response('{}', { headers: { ...corsHeaders(), 'content-type': 'application/json' } });
       return new Response(value, { headers: { ...corsHeaders(), 'content-type': 'application/json' } });
