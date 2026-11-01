@@ -37,7 +37,7 @@ export default {
         }
 
         const response = new Response(JSON.stringify(data), {
-          headers: { ...corsHeaders(), 'content-type': 'application/json', 'cache-control': 'max-age=30' }
+          headers: { ...corsHeaders(), 'content-type': 'application/json', 'cache-control': 'max-age=120' }
         });
         await cache.put(cacheKey, response.clone());
         return response;
@@ -79,6 +79,13 @@ export default {
       }
 
       await env.KV.put(key, body);
+
+      if (key === 'progress' || key.startsWith('phase-')) {
+        const cache = caches.default;
+        const progressUrl = new URL('/progress', url.origin).toString();
+        await cache.delete(new Request(progressUrl, { method: 'GET' }));
+      }
+
       return new Response('ok', { headers: corsHeaders() });
     }
 
