@@ -108,6 +108,12 @@ a:hover { text-decoration: underline; }
 .build-modal-content .btn-close { background: var(--surface2); color: var(--fg); border: 1px solid var(--border); }
 .settings-link { font-size: 10px; color: var(--muted); cursor: pointer; text-decoration: underline; }
 .settings-link:hover { color: var(--fg); }
+.toast { position: fixed; top: 16px; right: 16px; padding: 10px 18px; border-radius: 8px; font-size: 12px; font-weight: 600; z-index: 200; animation: toast-in 0.3s ease; }
+.toast.ok { background: rgba(34,197,94,0.2); border: 1px solid var(--green); color: var(--green); }
+.toast.err { background: rgba(239,68,68,0.2); border: 1px solid var(--red); color: var(--red); }
+.toast.info { background: rgba(59,130,246,0.2); border: 1px solid #3b82f6; color: #3b82f6; }
+@keyframes toast-in { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+.build-actions button:disabled { opacity: 0.5; cursor: wait; }
 
 .history-item { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 3px; overflow: hidden; }
 .history-summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; font-size: 11px; transition: background 0.1s; flex-wrap: wrap; }
@@ -476,6 +482,11 @@ function showBuildModal(){
 }
 function closeBuildModal(){document.getElementById('build-modal').classList.remove('open');}
 
+function toast(msg,type='ok',ms=4000){
+  const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;
+  document.body.appendChild(t);setTimeout(()=>t.remove(),ms);
+}
+
 async function triggerBuild(){
   const token=getToken();if(!token){showSettings();return;}
   const inputs={test_mode:document.getElementById('opt-test-mode').value};
@@ -484,22 +495,33 @@ async function triggerBuild(){
   const sub=document.getElementById('opt-submodule').value;
   if(sub!=='pinned')inputs.submodule_update=sub;
   closeBuildModal();
+  const btn=document.querySelector('.btn-build');
+  btn.disabled=true;btn.textContent='Triggering…';
+  const desc=resume?`resume from ${resume}`:`full build`;
+  toast(`Triggering ${desc} (${inputs.test_mode})…`,'info');
   try{
     const r=await fetch(WORKER_URL+'/github/dispatch',{method:'POST',headers:{'Content-Type':'application/json','X-GitHub-Token':token},body:JSON.stringify(inputs)});
-    if(r.ok||r.status===204){logEvent('Build triggered','ev-fetch');setTimeout(refresh,3000);}
-    else{const t=await r.text();logEvent('Trigger failed: '+r.status+' '+t,'ev-fetch');}
-  }catch(e){logEvent('Trigger error: '+e.message,'ev-fetch');}
+    if(r.ok||r.status===204){
+      toast(`Build triggered — ${desc}. Waiting for GitHub…`,'ok',6000);
+      setTimeout(refresh,5000);setTimeout(refresh,15000);
+    }else{
+      const t=await r.text();toast('Trigger failed: '+r.status,'err',8000);
+    }
+  }catch(e){toast('Error: '+e.message,'err',8000);}
+  btn.disabled=false;btn.textContent='Build';
 }
 
 async function cancelBuild(){
   const token=getToken();if(!token){showSettings();return;}
-  const runId=window._data?.current?.run_id;if(!runId){logEvent('No active run to cancel','ev-fetch');return;}
+  const runId=window._data?.current?.run_id;if(!runId){toast('No active run to cancel','err');return;}
   if(!confirm('Cancel run #'+runId+'?'))return;
+  const btn=document.getElementById('btn-cancel');btn.disabled=true;btn.textContent='Cancelling…';
   try{
     const r=await fetch(WORKER_URL+'/github/cancel',{method:'POST',headers:{'Content-Type':'application/json','X-GitHub-Token':token},body:JSON.stringify({run_id:runId})});
-    if(r.ok||r.status===202){logEvent('Run cancelled','ev-fetch');setTimeout(refresh,3000);}
-    else{logEvent('Cancel failed: '+r.status,'ev-fetch');}
-  }catch(e){logEvent('Cancel error: '+e.message,'ev-fetch');}
+    if(r.ok||r.status===202){toast('Run #'+runId+' cancelled','ok');setTimeout(refresh,3000);}
+    else{toast('Cancel failed: '+r.status,'err');}
+  }catch(e){toast('Error: '+e.message,'err');}
+  btn.disabled=false;btn.textContent='Cancel';
 }
 
 // Show/hide cancel button based on active build
