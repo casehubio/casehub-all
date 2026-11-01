@@ -213,89 +213,69 @@ print(json.dumps(data, indent=2))
   finish)
     CONCLUSION="${2:?conclusion required}"
     NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    TMPDIR=$(mktemp -d)
 
-    # Read progress + all phase files for this run
-    PROGRESS=$(fetch_progress)
-    RUN_ID=$(echo "$PROGRESS" | python3 -c "import sys,json; print(json.load(sys.stdin).get('current',{}).get('run_id',''))" 2>/dev/null || echo "")
+    fetch_progress > "$TMPDIR/progress.json"
+    RUN_ID=$(python3 -c "import json; print(json.load(open('$TMPDIR/progress.json')).get('current',{}).get('run_id',''))" 2>/dev/null || echo "")
 
-    # Fetch each phase file that exists for this run
-    PHASE_FILES='{}'
+    mkdir -p "$TMPDIR/phases"
     if [ -n "$RUN_ID" ]; then
       for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "ledger" "eidos" "connectors" "worker" "pages" "neocortex" "qhorus" "ras" "desiredstate" "claudony" "agency" "casehub-langchain4j" "workers" "ops" "casehub-mosaic" "drafthouse" "life" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "scaffold" "fsitrading"; do
-        KEY="phase-${RUN_ID}-${phase_name}"
-        CONTENT=$(curl -sf "$WORKER_URL/$KEY" 2>/dev/null || echo "")
-        if [ -n "$CONTENT" ] && [ "$CONTENT" != "{}" ]; then
-          PHASE_FILES=$(echo "$PHASE_FILES" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-d['$KEY']='''$CONTENT'''
-print(json.dumps(d))
-" 2>/dev/null || echo "$PHASE_FILES")
-        fi
+        curl -sf "$WORKER_URL/phase-${RUN_ID}-${phase_name}" > "$TMPDIR/phases/${phase_name}.json" 2>/dev/null || echo "{}" > "$TMPDIR/phases/${phase_name}.json"
       done
     fi
 
-    UPDATED=$(python3 -c "
-import json, sys
+    python3 -c "
+import json, os, glob
 from datetime import datetime, timedelta, timezone
 
-data = json.loads('''$(echo "$PROGRESS" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)))")''')
-phase_files = json.loads('''$(echo "$PHASE_FILES" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin)))")''')
+data = json.load(open('$TMPDIR/progress.json'))
 cur = data.get('current')
 if cur:
-    for key, content in phase_files.items():
+    for f in glob.glob('$TMPDIR/phases/*.json'):
         try:
-            pd = json.loads(content)
-            for p in cur.get('phases', []):
-                if p['name'] == pd.get('name'):
-                    p.update({k:v for k,v in pd.items() if k not in ('name','updated')})
-                    p['_aggregated_at'] = '$NOW'
-                    break
+            pd = json.load(open(f))
+            if pd.get('name'):
+                for p in cur.get('phases', []):
+                    if p['name'] == pd['name']:
+                        p.update({k:v for k,v in pd.items() if k not in ('name','updated')})
+                        break
         except: pass
 
     started = cur.get('started', '$NOW')
     s = datetime.fromisoformat(started.replace('Z','+00:00'))
     e = datetime.fromisoformat('$NOW'.replace('Z','+00:00'))
     phases = cur.get('phases', [])
-    total_tests = sum(p.get('tests_run', 0) for p in phases)
-    total_modules = sum(p.get('modules', 0) for p in phases)
-    total_flaky = sum(p.get('tests_flaky', 0) for p in phases)
-    total_warnings = sum(p.get('compilation_warnings', 0) for p in phases)
-    total_timeouts = sum(p.get('timeouts', 0) for p in phases)
-    healing = {'corrupt_jars_deleted':0,'corrupt_jandex_deleted':0,'retries':0}
-    for p in phases:
-        sh = p.get('self_healing', {})
-        for k in healing: healing[k] += sh.get(k, 0)
 
     entry = {
         'run_id': cur.get('run_id'), 'run_url': cur.get('run_url'),
         'commit': cur.get('commit'), 'conclusion': '$CONCLUSION',
         'started': started, 'ended': '$NOW',
         'duration_s': int((e - s).total_seconds()),
-        'total_tests': total_tests, 'total_modules': total_modules,
-        'total_flaky': total_flaky, 'total_warnings': total_warnings,
-        'total_timeouts': total_timeouts,
-        'self_healing': healing if any(healing.values()) else None,
+        'total_tests': sum(p.get('tests_run', 0) for p in phases),
+        'total_modules': sum(p.get('modules', 0) for p in phases),
+        'total_flaky': sum(p.get('tests_flaky', 0) for p in phases),
+        'total_warnings': sum(p.get('compilation_warnings', 0) for p in phases),
+        'total_timeouts': sum(p.get('timeouts', 0) for p in phases),
         'phases': phases
     }
     history = data.get('history', [])
     history.insert(0, entry)
     cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).isoformat()
-    history = [h for h in history if h.get('started', '') > cutoff]
-    data['history'] = history[:200]
+    data['history'] = [h for h in history if h.get('started', '') > cutoff][:200]
     data['current'] = None
 
-print(json.dumps(data, indent=2))
-")
-    update_progress "$UPDATED"
+json.dump(data, open('$TMPDIR/result.json', 'w'))
+" 2>/dev/null
+    update_progress "$(cat "$TMPDIR/result.json")"
 
-    # Clean up phase files
     if [ -n "$RUN_ID" ]; then
       for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "ledger" "eidos" "connectors" "worker" "pages" "neocortex" "qhorus" "ras" "desiredstate" "claudony" "agency" "casehub-langchain4j" "workers" "ops" "casehub-mosaic" "drafthouse" "life" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "scaffold" "fsitrading"; do
         curl -sf -X DELETE "$WORKER_URL/phase-${RUN_ID}-${phase_name}" \
           -H "Authorization: Bearer $WORKER_TOKEN" > /dev/null 2>&1 || true
       done
     fi
+    rm -rf "$TMPDIR"
 
     echo "::notice::Dashboard archived run as $CONCLUSION"
     ;;
