@@ -1018,15 +1018,15 @@ jobs:
         include:
           - name: life
             repos: life
-            maven_extra: "-DskipTests"
+            maven_extra: "-Dmaven.test.skip=true"
           - name: iot
             repos: iot
           - name: quarkmind
             repos: quarkmind
-            maven_extra: "-DskipTests"
+            maven_extra: "-Dmaven.test.skip=true"
           - name: "devtown, aml, soc"
             repos: "devtown aml soc"
-            maven_extra: "-DskipTests"
+            maven_extra: "-Dmaven.test.skip=true"
           - name: "chat-app, clinical, openclaw"
             repos: "chat-app clinical openclaw"
     env:
