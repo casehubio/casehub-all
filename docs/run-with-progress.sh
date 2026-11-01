@@ -40,15 +40,19 @@ EXIT_CODE=${PIPESTATUS[0]}
 set -e
 
 # Count lines of code per file type (repo dir = phase name)
+# Must not fail the build — wrapped in set +e
+set +e
 if [ -d "$PHASE" ]; then
-  JAVA_SRC=$(find "$PHASE" -name "*.java" -not -path "*/test/*" -not -path "*/target/*" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1+0}')
-  JAVA_TEST=$(find "$PHASE" -name "*.java" -path "*/test/*" -not -path "*/target/*" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1+0}')
-  YAML_LOC=$(find "$PHASE" \( -name "*.yaml" -o -name "*.yml" \) -not -path "*/target/*" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1+0}')
-  JSON_LOC=$(find "$PHASE" -name "*.json" -not -path "*/target/*" -not -path "*/node_modules/*" -not -path "*/.yarn/*" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1+0}')
-  TS_LOC=$(find "$PHASE" \( -name "*.ts" -o -name "*.tsx" \) -not -path "*/target/*" -not -path "*/node_modules/*" -not -path "*/.yarn/*" -not -path "*/dist/*" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1+0}')
-  XML_LOC=$(find "$PHASE" -name "pom.xml" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1+0}')
+  _loc_count() { find "$@" 2>/dev/null | xargs wc -l 2>/dev/null | tail -1 | awk '{print $1+0}'; }
+  JAVA_SRC=$(_loc_count "$PHASE" -name "*.java" -not -path "*/test/*" -not -path "*/target/*")
+  JAVA_TEST=$(_loc_count "$PHASE" -name "*.java" -path "*/test/*" -not -path "*/target/*")
+  YAML_LOC=$(_loc_count "$PHASE" \( -name "*.yaml" -o -name "*.yml" \) -not -path "*/target/*")
+  JSON_LOC=$(_loc_count "$PHASE" -name "*.json" -not -path "*/target/*" -not -path "*/node_modules/*" -not -path "*/.yarn/*")
+  TS_LOC=$(_loc_count "$PHASE" \( -name "*.ts" -o -name "*.tsx" \) -not -path "*/target/*" -not -path "*/node_modules/*" -not -path "*/.yarn/*" -not -path "*/dist/*")
+  XML_LOC=$(_loc_count "$PHASE" -name "pom.xml")
   echo "[LOC] java_src=${JAVA_SRC:-0} java_test=${JAVA_TEST:-0} yaml=${YAML_LOC:-0} json=${JSON_LOC:-0} ts=${TS_LOC:-0} xml=${XML_LOC:-0}" >> "$LOGFILE"
 fi
+set -e
 
 # Final update with stats
 FINAL_SENT=1
