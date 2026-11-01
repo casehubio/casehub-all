@@ -98,6 +98,35 @@ export default {
       return new Response('ok', { headers: corsHeaders() });
     }
 
+    if (request.method === 'POST' && key.startsWith('github/')) {
+      const ghToken = request.headers.get('X-GitHub-Token');
+      if (!ghToken) return new Response('Missing X-GitHub-Token', { status: 401, headers: corsHeaders() });
+
+      const action = key.slice(7);
+      const body = await request.json();
+      const repo = 'casehubio/casehub-all';
+
+      let ghUrl, ghMethod, ghBody;
+      if (action === 'dispatch') {
+        ghUrl = `https://api.github.com/repos/${repo}/actions/workflows/mvn-all.yml/dispatches`;
+        ghMethod = 'POST';
+        ghBody = JSON.stringify({ ref: 'main', inputs: body });
+      } else if (action === 'cancel') {
+        ghUrl = `https://api.github.com/repos/${repo}/actions/runs/${body.run_id}/cancel`;
+        ghMethod = 'POST';
+        ghBody = null;
+      } else {
+        return new Response('Unknown action', { status: 400, headers: corsHeaders() });
+      }
+
+      const ghResp = await fetch(ghUrl, {
+        method: ghMethod,
+        headers: { 'Authorization': `Bearer ${ghToken}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'casehub-ci-dashboard', 'X-GitHub-Api-Version': '2022-11-28' },
+        body: ghBody
+      });
+      return new Response(await ghResp.text(), { status: ghResp.status, headers: { ...corsHeaders(), 'content-type': 'application/json' } });
+    }
+
     return new Response('Method not allowed', { status: 405 });
     } catch (e) {
       return new Response(JSON.stringify({ error: e.message, stack: e.stack }), {
@@ -111,7 +140,7 @@ export default {
 function corsHeaders() {
   return {
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'GET, PUT, DELETE, OPTIONS',
-    'access-control-allow-headers': 'Content-Type, Authorization, X-Run-Id, X-Init',
+    'access-control-allow-methods': 'GET, PUT, POST, DELETE, OPTIONS',
+    'access-control-allow-headers': 'Content-Type, Authorization, X-Run-Id, X-Init, X-GitHub-Token',
   };
 }

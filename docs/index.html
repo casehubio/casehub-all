@@ -87,6 +87,26 @@ a:hover { text-decoration: underline; }
 .chart-card h3 { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
 .chart-card svg { width: 100%; display: block; }
 
+.build-actions { display: flex; gap: 6px; margin-left: auto; }
+.build-actions button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--fg); font-size: 10px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+.build-actions button:hover { background: var(--dim); }
+.build-actions .btn-cancel { border-color: var(--red); color: var(--red); }
+.build-actions .btn-cancel:hover { background: rgba(239,68,68,0.15); }
+.build-actions .btn-build { border-color: var(--green); color: var(--green); }
+.build-actions .btn-build:hover { background: rgba(34,197,94,0.15); }
+.build-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: none; align-items: center; justify-content: center; z-index: 100; }
+.build-modal.open { display: flex; }
+.build-modal-content { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px; width: 340px; max-width: 90vw; }
+.build-modal-content h3 { margin: 0 0 12px; font-size: 14px; }
+.build-modal-content label { display: block; font-size: 11px; color: var(--muted); margin: 8px 0 3px; }
+.build-modal-content select, .build-modal-content input { width: 100%; padding: 6px 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; color: var(--fg); font-size: 12px; }
+.build-modal-content .modal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+.build-modal-content .modal-actions button { padding: 6px 16px; border-radius: 6px; border: none; font-size: 11px; font-weight: 600; cursor: pointer; }
+.build-modal-content .btn-go { background: var(--green); color: #000; }
+.build-modal-content .btn-close { background: var(--surface2); color: var(--fg); border: 1px solid var(--border); }
+.settings-link { font-size: 10px; color: var(--muted); cursor: pointer; text-decoration: underline; }
+.settings-link:hover { color: var(--fg); }
+
 .history-item { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 3px; overflow: hidden; }
 .history-summary { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; font-size: 11px; transition: background 0.1s; flex-wrap: wrap; }
 .history-summary:hover { background: rgba(255,255,255,0.02); }
@@ -118,7 +138,40 @@ a:hover { text-decoration: underline; }
 
 <div class="header">
   <div><h1>CaseHub CI</h1><div class="subtitle">casehub-all reactor build</div></div>
+  <div class="build-actions">
+    <button class="btn-cancel" id="btn-cancel" onclick="cancelBuild()" style="display:none">Cancel</button>
+    <button class="btn-build" onclick="showBuildModal()">Build</button>
+    <span class="settings-link" onclick="showSettings()">token</span>
+  </div>
   <div class="subtitle" id="refresh-info"></div>
+</div>
+
+<div id="build-modal" class="build-modal" onclick="if(event.target===this)closeBuildModal()">
+  <div class="build-modal-content">
+    <h3 id="modal-title">Trigger Build</h3>
+    <label>Test mode</label>
+    <select id="opt-test-mode"><option value="skip">skip (compile only)</option><option value="run">run (full tests)</option></select>
+    <label>Resume from</label>
+    <select id="opt-resume"><option value="">Full build</option><option value="L1">L1</option><option value="L2">L2</option><option value="L3">L3</option><option value="L5">L5</option><option value="L8">L8</option></select>
+    <label>Submodule update</label>
+    <select id="opt-submodule"><option value="pinned">pinned (committed SHAs)</option><option value="all">all (latest main)</option><option value="list">list (specific repos)</option></select>
+    <div class="modal-actions">
+      <button class="btn-close" onclick="closeBuildModal()">Cancel</button>
+      <button class="btn-go" onclick="triggerBuild()">Build</button>
+    </div>
+  </div>
+</div>
+
+<div id="settings-modal" class="build-modal" onclick="if(event.target===this)closeSettings()">
+  <div class="build-modal-content">
+    <h3>GitHub Token</h3>
+    <p style="font-size:11px;color:var(--muted);margin:0 0 8px">PAT with <code>actions:write</code> scope. Stored in this browser only.</p>
+    <input type="password" id="gh-token-input" placeholder="ghp_...">
+    <div class="modal-actions">
+      <button class="btn-close" onclick="closeSettings()">Cancel</button>
+      <button class="btn-go" onclick="saveToken()">Save</button>
+    </div>
+  </div>
 </div>
 
 <div id="failure-banner" class="failure-banner"></div>
@@ -406,6 +459,48 @@ async function refresh(){
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
 }
 refresh();setInterval(refresh,POLL_MS);
+
+// ── Build actions ────────────────────────────────────────────────
+function getToken(){return localStorage.getItem('gh-ci-token')||'';}
+function showSettings(){document.getElementById('gh-token-input').value=getToken();document.getElementById('settings-modal').classList.add('open');}
+function closeSettings(){document.getElementById('settings-modal').classList.remove('open');}
+function saveToken(){localStorage.setItem('gh-ci-token',document.getElementById('gh-token-input').value.trim());closeSettings();}
+
+function showBuildModal(){
+  if(!getToken()){showSettings();return;}
+  document.getElementById('modal-title').textContent='Trigger Build';
+  document.getElementById('build-modal').classList.add('open');
+}
+function closeBuildModal(){document.getElementById('build-modal').classList.remove('open');}
+
+async function triggerBuild(){
+  const token=getToken();if(!token){showSettings();return;}
+  const inputs={test_mode:document.getElementById('opt-test-mode').value};
+  const resume=document.getElementById('opt-resume').value;
+  if(resume)inputs.resume_from=resume;
+  const sub=document.getElementById('opt-submodule').value;
+  if(sub!=='pinned')inputs.submodule_update=sub;
+  closeBuildModal();
+  try{
+    const r=await fetch(WORKER_URL+'/github/dispatch',{method:'POST',headers:{'Content-Type':'application/json','X-GitHub-Token':token},body:JSON.stringify(inputs)});
+    if(r.ok||r.status===204){logEvent('Build triggered','ev-fetch');setTimeout(refresh,3000);}
+    else{const t=await r.text();logEvent('Trigger failed: '+r.status+' '+t,'ev-fetch');}
+  }catch(e){logEvent('Trigger error: '+e.message,'ev-fetch');}
+}
+
+async function cancelBuild(){
+  const token=getToken();if(!token){showSettings();return;}
+  const runId=window._data?.current?.run_id;if(!runId){logEvent('No active run to cancel','ev-fetch');return;}
+  if(!confirm('Cancel run #'+runId+'?'))return;
+  try{
+    const r=await fetch(WORKER_URL+'/github/cancel',{method:'POST',headers:{'Content-Type':'application/json','X-GitHub-Token':token},body:JSON.stringify({run_id:runId})});
+    if(r.ok||r.status===202){logEvent('Run cancelled','ev-fetch');setTimeout(refresh,3000);}
+    else{logEvent('Cancel failed: '+r.status,'ev-fetch');}
+  }catch(e){logEvent('Cancel error: '+e.message,'ev-fetch');}
+}
+
+// Show/hide cancel button based on active build
+setInterval(()=>{const btn=document.getElementById('btn-cancel');if(btn)btn.style.display=window._data?.current?'inline-block':'none';},2000);
 </script>
 </body>
 </html>
