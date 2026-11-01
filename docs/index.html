@@ -40,7 +40,9 @@ a:hover { text-decoration: underline; }
 .failure-banner .detail { font-size: 11px; color: var(--muted); }
 .card.failed-build { border-color: var(--red); background: rgba(239,68,68,0.04); }
 
-.pipe { margin: 8px 0; }
+.pipe { margin: 8px 0; padding-left: 28px; position: relative; }
+.pipe-level { display: flex; align-items: center; position: relative; }
+.lvl-tag { position: absolute; left: -28px; width: 22px; font-size: 8px; font-weight: 700; color: var(--muted); text-align: right; letter-spacing: -0.3px; }
 .pipe-row { margin-bottom: 2px; }
 .pipe-full { display: flex; }
 .pipe-full .phase { flex: 1; }
@@ -152,7 +154,7 @@ a:hover { text-decoration: underline; }
     <label>Test mode</label>
     <select id="opt-test-mode"><option value="skip">skip (compile only)</option><option value="run">run (full tests)</option></select>
     <label>Resume from</label>
-    <select id="opt-resume"><option value="">Full build</option><option value="L1">L1</option><option value="L2">L2</option><option value="L3">L3</option><option value="L5">L5</option><option value="L8">L8</option></select>
+    <select id="opt-resume"><option value="">Full build</option><option value="L1">L1 — ledger, eidos, connectors, worker, pages</option><option value="L2">L2 — neocortex, qhorus</option><option value="L3">L3 — work</option><option value="L5">L5 — claudony, agency, ras, workers</option><option value="L8">L8 — apps (life, iot, quarkmind, devtown…)</option></select>
     <label>Submodule update</label>
     <select id="opt-submodule"><option value="pinned">pinned (committed SHAs)</option><option value="all">all (latest main)</option><option value="list">list (specific repos)</option></select>
     <div class="modal-actions">
@@ -317,20 +319,21 @@ function renderPipe(phases,id,clickFn){
   const conn='<div class="pipe-connector"></div>';
   const fan='<div class="pipe-fan"></div>';
   const grp=(g)=>`<div style="flex:1;display:flex;flex-direction:column;gap:2px">${g.map(r=>phaseBox(r,clickFn)).join('')}</div>`;
+  const lvl=(label,content,cls='pipe-full')=>`<div class="pipe-level"><span class="lvl-tag">${label}</span><div class="pipe-row ${cls}">${content}</div></div>`;
 
   el.innerHTML=`<div class="pipe">`+
-    row(phaseBox(prep,clickFn))+conn+
+    lvl('L0',phaseBox(prep,clickFn))+conn+
     fan+row(plat.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
     row(phaseBox(conv,clickFn))+conn+
-    fan+row(L1.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    fan+row(L2.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    row(phaseBox(L3,clickFn))+conn+
-    row(phaseBox(L4,clickFn))+conn+
-    fan+row(L5.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    fan+row(L6.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    fan+row(L7.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    fan+row(L8.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    row(grp(L9[0]))+
+    fan+lvl('L1',L1.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    fan+lvl('L2',L2.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    lvl('L3',phaseBox(L3,clickFn))+conn+
+    lvl('L4',phaseBox(L4,clickFn))+conn+
+    fan+lvl('L5',L5.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    fan+lvl('L6',L6.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    lvl('L7',grp(L7[0]))+conn+
+    fan+lvl('L8',L8.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    lvl('L9',grp(L9[0]))+
     `</div>`;
 }
 
