@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Base slice — platform-api, platform-core, playbooks.
+  Zero @QuarkusTest. Everything else depends on this.
+  Built first, then slices A/B/C/D run in parallel.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-platform-aggregator-base</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Platform :: Base</name>
+
+  <modules>
+    <module>../../platform/playbooks</module>
+    <module>../../platform/platform-api</module>
+    <module>../../platform/platform-core</module>
+  </modules>
+</project>

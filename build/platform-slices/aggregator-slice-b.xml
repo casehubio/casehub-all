@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Slice B — Identity/Auth/Data: authn, acl, identity, scim, persistence,
+  datasource, registry, config, expression, governance, subscriptions.
+  57 modules, 15 @QuarkusTest. Independent of slices A and C.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-platform-aggregator-slice-b</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Platform :: Slice B (Identity/Auth)</name>
+
+  <modules>
+    <!-- Testing support -->
+    <module>../../platform/testing</module>
+
+    <!-- Config -->
+    <module>../../platform/config-core</module>
+    <module>../../platform/config</module>
+
+    <!-- Expression -->
+    <module>../../platform/expression-core</module>
+    <module>../../platform/expression</module>
+
+    <!-- OIDC -->
+    <module>../../platform/oidc</module>
+
+    <!-- Persistence -->
+    <module>../../platform/persistence-jpa-common</module>
+    <module>../../platform/persistence-jpa</module>
+    <module>../../platform/persistence-mongodb</module>
+
+    <!-- Endpoints -->
+    <module>../../platform/endpoints-memory-core</module>
+    <module>../../platform/endpoints-memory</module>
+    <module>../../platform/endpoints-config-core</module>
+    <module>../../platform/endpoints-config</module>
+
+    <!-- Registry -->
+    <module>../../platform/registry-inmem-core</module>
+    <module>../../platform/registry-inmem</module>
+    <module>../../platform/registry-jpa-common</module>
+    <module>../../platform/registry-jpa</module>
+    <module>../../platform/registry-client</module>
+    <module>../../platform/registry-client-quarkus</module>
+
+    <!-- Datasource -->
+    <module>../../platform/datasource-alpha</module>
+    <module>../../platform/datasource-inmem-core</module>
+    <module>../../platform/datasource-inmem</module>
+    <module>../../platform/datasource-jpa-common</module>
+    <module>../../platform/datasource-jpa</module>
+
+    <!-- SCIM -->
+    <module>../../platform/scim-core</module>
+    <module>../../platform/scim</module>
+
+    <!-- Identity -->
+    <module>../../platform/identity-core</module>
+    <module>../../platform/identity</module>
+
+    <!-- Credentials -->
+    <module>../../platform/credentials-quarkus</module>
+
+    <!-- ACL -->
+    <module>../../platform/acl-inmem-core</module>
+    <module>../../platform/acl-inmem</module>
+    <module>../../platform/acl-jpa-common</module>
+    <module>../../platform/acl-jpa</module>
+    <module>../../platform/acl-admin-core</module>
+    <module>../../platform/acl-admin</module>
+    <module>../../platform/acl-worker-core</module>
+    <module>../../platform/acl-worker</module>
+
+    <!-- Auth -->
+    <module>../../platform/authn-core</module>
+    <module>../../platform/authn-inmem</module>
+    <module>../../platform/authn-webauthn-core</module>
+    <module>../../platform/authn-social-core</module>
+    <module>../../platform/session-jpa-common</module>
+    <module>../../platform/session-jpa</module>
+    <module>../../platform/authn-webauthn-jpa-common</module>
+    <module>../../platform/authn-webauthn-jpa</module>
+    <module>../../platform/authn-social-jpa-common</module>
+    <module>../../platform/authn-social-jpa</module>
+    <module>../../platform/authn</module>
+    <module>../../platform/authn-spring</module>
+
+    <!-- Governance -->
+    <module>../../platform/governance-core</module>
+    <module>../../platform/governance</module>
+
+    <!-- Subscriptions -->
+    <module>../../platform/subscriptions-core</module>
+    <module>../../platform/subscriptions</module>
+    <module>../../platform/subscriptions-inmem-core</module>
+    <module>../../platform/subscriptions-inmem</module>
+    <module>../../platform/subscriptions-jpa-common</module>
+    <module>../../platform/subscriptions-jpa</module>
+  </modules>
+</project>

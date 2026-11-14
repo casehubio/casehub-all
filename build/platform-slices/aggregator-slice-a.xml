@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Slice A — Agent/AI: agents, simulation, mcp, llm-config.
+  44 modules, 14 @QuarkusTest. Independent of slices B, C, and D.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-platform-aggregator-slice-a</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Platform :: Slice A (Agent/AI)</name>
+
+  <modules>
+    <!-- Agent modules -->
+    <module>../../platform/agent-api</module>
+    <module>../../platform/agent-http-core</module>
+    <module>../../platform/agent-http</module>
+    <module>../../platform/agent-runtime-core</module>
+    <module>../../platform/agent-runtime</module>
+    <module>../../platform/agent-claude-core</module>
+    <module>../../platform/agent-claude</module>
+    <module>../../platform/agent-openai-core</module>
+    <module>../../platform/agent-openai</module>
+    <module>../../platform/agent-ollama-core</module>
+    <module>../../platform/agent-ollama</module>
+    <module>../../platform/agent-codex-core</module>
+    <module>../../platform/agent-codex</module>
+    <module>../../platform/agent-gemini-core</module>
+    <module>../../platform/agent-gemini</module>
+    <module>../../platform/agent-gemini-cli-core</module>
+    <module>../../platform/agent-gemini-cli</module>
+    <module>../../platform/agent-config-core</module>
+    <module>../../platform/agent-config</module>
+    <module>../../platform/agent-session-core</module>
+    <module>../../platform/agent-session</module>
+    <module>../../platform/agent-react-core</module>
+    <module>../../platform/agent-router-core</module>
+    <module>../../platform/agent-router</module>
+    <module>../../platform/agent-gate-core</module>
+    <module>../../platform/agent-gate</module>
+
+    <!-- Simulation modules -->
+    <module>../../platform/simulation-api</module>
+    <module>../../platform/simulation-core</module>
+    <module>../../platform/simulation-inmem</module>
+    <module>../../platform/simulation-generator</module>
+    <module>../../platform/rest-client-simulation-generator</module>
+    <module>../../platform/agent-simulation-core</module>
+    <module>../../platform/simulation-config-core</module>
+    <module>../../platform/simulation-config</module>
+    <module>../../platform/memory-simulation-core</module>
+    <module>../../platform/platform-simulation-core</module>
+    <module>../../platform/simulation-testing</module>
+    <module>../../platform/simulation-starter</module>
+    <module>../../platform/event-simulation-core</module>
+    <module>../../platform/event-simulation</module>
+
+    <!-- MCP -->
+    <module>../../platform/mcp-core</module>
+    <module>../../platform/mcp</module>
+
+    <!-- LLM config -->
+    <module>../../platform/llm-config-core</module>
+    <module>../../platform/llm-config</module>
+    <module>../../platform/llm-config-vertex</module>
+    <module>../../platform/llm-config-bedrock</module>
+  </modules>
+</project>

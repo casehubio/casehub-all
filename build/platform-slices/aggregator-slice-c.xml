@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Slice C — Events/Comms: streams, notifications, delivery, digest,
+  callback, confirmation, graphql, platform-view, preferences.
+  53 modules, 25 @QuarkusTest. Independent of slices A and B.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-platform-aggregator-slice-c</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Platform :: Slice C (Events/Comms)</name>
+
+  <modules>
+    <!-- Streams -->
+    <module>../../platform/streams-core</module>
+    <module>../../platform/streams-kafka-core</module>
+    <module>../../platform/streams-kafka</module>
+    <module>../../platform/streams-amqp-core</module>
+    <module>../../platform/streams-amqp</module>
+    <module>../../platform/streams-webhook-core</module>
+    <module>../../platform/streams-webhook</module>
+    <module>../../platform/streams-poll-core</module>
+    <module>../../platform/streams-poll</module>
+    <module>../../platform/streams-camel-core</module>
+    <module>../../platform/streams-camel</module>
+
+    <!-- Notifications -->
+    <module>../../platform/notifications-core</module>
+    <module>../../platform/notifications</module>
+    <module>../../platform/notifications-inmem-core</module>
+    <module>../../platform/notifications-inmem</module>
+    <module>../../platform/notifications-jpa-common</module>
+    <module>../../platform/notifications-jpa</module>
+
+    <!-- Notification settings -->
+    <module>../../platform/notification-settings-inmem-core</module>
+    <module>../../platform/notification-settings-inmem</module>
+    <module>../../platform/notification-settings-jpa-common</module>
+    <module>../../platform/notification-settings-jpa</module>
+
+    <!-- Delivery -->
+    <module>../../platform/delivery-channel-inmem-core</module>
+    <module>../../platform/delivery-channel-inmem</module>
+    <module>../../platform/notification-dispatch-core</module>
+    <module>../../platform/notification-dispatch</module>
+    <module>../../platform/delivery-tracking-inmem-core</module>
+    <module>../../platform/delivery-tracking-inmem</module>
+    <module>../../platform/delivery-tracking-jpa-common</module>
+    <module>../../platform/delivery-tracking-jpa</module>
+
+    <!-- Digest -->
+    <module>../../platform/digest-inmem-core</module>
+    <module>../../platform/digest-inmem</module>
+    <module>../../platform/digest-jpa-common</module>
+    <module>../../platform/digest-jpa</module>
+
+    <!-- Callback -->
+    <module>../../platform/callback-inmem-core</module>
+    <module>../../platform/callback-inmem</module>
+    <module>../../platform/callback-core</module>
+    <module>../../platform/callback</module>
+    <module>../../platform/callback-generator</module>
+    <module>../../platform/callback-client-core</module>
+    <module>../../platform/callback-client</module>
+
+    <!-- Confirmation -->
+    <module>../../platform/confirmation-core</module>
+    <module>../../platform/confirmation</module>
+    <module>../../platform/confirmation-generator</module>
+
+    <!-- GraphQL -->
+    <module>../../platform/graphql</module>
+    <module>../../platform/graphql-client</module>
+    <module>../../platform/graphql-generator</module>
+
+    <!-- Platform View -->
+    <module>../../platform/platform-view-core</module>
+    <module>../../platform/platform-view</module>
+    <module>../../platform/platform-view-inmem</module>
+    <module>../../platform/platform-view-jpa-common</module>
+    <module>../../platform/platform-view-jpa</module>
+
+    <!-- Preferences -->
+    <module>../../platform/preferences-editor-core</module>
+    <module>../../platform/preferences-editor</module>
+  </modules>
+</project>

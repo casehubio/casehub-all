@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Slice D — YAML/Tooling: yaml processors, observability, signing, PDF.
+  15 modules, 0 @QuarkusTest (all fast unit tests).
+  Independent of slices A, B, and C.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-platform-aggregator-slice-d</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Platform :: Slice D (YAML/Tooling)</name>
+
+  <modules>
+    <!-- YAML modules -->
+    <module>../../platform/yaml-core</module>
+    <module>../../platform/yaml-codegen</module>
+    <module>../../platform/yaml-jackson</module>
+    <module>../../platform/yaml-plugin-api</module>
+    <module>../../platform/schema-generator</module>
+    <module>../../platform/yaml-plugin-processor</module>
+    <module>../../platform/yaml-statemachine-generator</module>
+    <module>../../platform/yaml-step-runtime</module>
+    <module>../../platform/yaml-step-testing</module>
+
+    <!-- Observability -->
+    <module>../../platform/platform-observability-core</module>
+    <module>../../platform/platform-observability</module>
+
+    <!-- Misc tooling -->
+    <module>../../platform/callback-api</module>
+    <module>../../platform/drift-detection</module>
+    <module>../../platform/platform-pdf</module>
+    <module>../../platform/platform-signing</module>
+  </modules>
+</project>
