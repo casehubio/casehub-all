@@ -46,10 +46,21 @@ on:
         description: "Comma-separated repo names to update (only when submodule_update=list)"
         type: string
         default: ''
+      if_running:
+        description: "If a build is already running: cancel_existing = stop it and start this one, abort = cancel this run instead"
+        type: choice
+        options:
+          - abort
+          - cancel_existing
+        default: abort
       retry_count:
         description: "Auto-retry counter (0 = first attempt, max 2 retries)"
         type: number
         default: 0
+
+concurrency:
+  group: mvn-all
+  cancel-in-progress: ${{ inputs.if_running == 'cancel_existing' }}
 
 permissions:
   contents: write
@@ -75,11 +86,34 @@ permissions:
 jobs:
 
   # ════════════════════════════════════════════════════════════════════
+  # Gate: abort this run if another is already in progress (default)
+  # ════════════════════════════════════════════════════════════════════
+  gate:
+    name: "Concurrency gate"
+    if: inputs.if_running == 'abort'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for in-progress runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IN_PROGRESS=$(gh api repos/${{ github.repository }}/actions/workflows/mvn-all.yml/runs \
+            --jq '[.workflow_runs[] | select(.status == "in_progress" and .id != '${{ github.run_id }}')] | length')
+          if [ "$IN_PROGRESS" -gt 0 ]; then
+            echo "::error::Another mvn-all run is already in progress. This run will be cancelled (if_running=abort)."
+            gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+            sleep 5
+            exit 1
+          fi
+          echo "No other runs in progress — proceeding."
+
+  # ════════════════════════════════════════════════════════════════════
   # Phase 0: Prepare — checkout, submodule update, platform base
   # ════════════════════════════════════════════════════════════════════
   prepare:
     name: "Prepare + Platform base"
-    if: inputs.resume_from == ''
+    needs: [gate]
+    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
