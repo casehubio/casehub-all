@@ -230,7 +230,7 @@ print(json.dumps(data, indent=2))
 
     mkdir -p "$TMPDIR/phases"
     if [ -n "$RUN_ID" ]; then
-      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "ledger" "eidos" "connectors" "worker" "pages" "neocortex" "qhorus" "ras" "desiredstate" "claudony" "agency" "casehub-langchain4j" "workers" "ops" "casehub-mosaic" "drafthouse" "life" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "scaffold" "fsitrading"; do
+      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "platform-convergence" "ledger" "eidos" "connectors" "worker" "pages" "neocortex" "qhorus" "work" "engine" "ras" "desiredstate" "claudony" "agency" "casehub-langchain4j" "workers" "ops" "casehub-mosaic" "drafthouse" "life" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "scaffold" "fsitrading"; do
         curl -sf "$WORKER_URL/phase-${RUN_ID}-${phase_name}" > "$TMPDIR/phases/${phase_name}.json" 2>/dev/null || echo "{}" > "$TMPDIR/phases/${phase_name}.json"
       done
     fi
@@ -256,6 +256,10 @@ if cur:
     s = datetime.fromisoformat(started.replace('Z','+00:00'))
     e = datetime.fromisoformat('$NOW'.replace('Z','+00:00'))
     phases = cur.get('phases', [])
+    for p in phases:
+        if p.get('status') == 'in_progress':
+            p['status'] = 'failure'
+            p['ended'] = '$NOW'
 
     entry = {
         'run_id': cur.get('run_id'), 'run_url': cur.get('run_url'),
@@ -280,7 +284,7 @@ json.dump(data, open('$TMPDIR/result.json', 'w'))
     update_progress "$(cat "$TMPDIR/result.json")"
 
     if [ -n "$RUN_ID" ]; then
-      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "ledger" "eidos" "connectors" "worker" "pages" "neocortex" "qhorus" "ras" "desiredstate" "claudony" "agency" "casehub-langchain4j" "workers" "ops" "casehub-mosaic" "drafthouse" "life" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "scaffold" "fsitrading"; do
+      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "platform-convergence" "ledger" "eidos" "connectors" "worker" "pages" "neocortex" "qhorus" "work" "engine" "ras" "desiredstate" "claudony" "agency" "casehub-langchain4j" "workers" "ops" "casehub-mosaic" "drafthouse" "life" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "scaffold" "fsitrading"; do
         curl -sf -X DELETE "$WORKER_URL/phase-${RUN_ID}-${phase_name}" \
           -H "Authorization: Bearer $WORKER_TOKEN" > /dev/null 2>&1 || true
       done
