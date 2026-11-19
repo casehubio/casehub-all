@@ -1042,7 +1042,6 @@ jobs:
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Build
         run: |
-          rm -rf drafthouse/server/runtime/target
           bash docs/run-with-progress.sh --parallel "drafthouse" mvn install -fae -T 1C -f drafthouse/server/pom.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 25
       - uses: actions/upload-artifact@v4
