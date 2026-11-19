@@ -485,10 +485,13 @@ jobs:
         include:
           - name: "ledger, eidos"
             repos: "ledger eidos"
+            maven_extra: ""
           - name: connectors
             repos: connectors
+            maven_extra: "-pl !voice-sherpa-native-linux-x64,!voice-sherpa-native-linux-arm64,!voice-sherpa-native-osx-x64,!voice-sherpa-native-osx-arm64,!voice-sherpa-native-win-x64"
           - name: worker, pages
             repos: worker pages
+            maven_extra: ""
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -575,7 +578,7 @@ jobs:
       - name: Build
         run: |
           for repo in ${{ matrix.repos }}; do
-            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -DskipTests -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS
+            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -DskipTests -f $repo/pom.xml ${{ matrix.maven_extra }} $MVN_COMMON $MAVEN_ARGS
           done
         timeout-minutes: 25
       - name: Upload artifacts
