@@ -319,17 +319,6 @@ jobs:
       MVN_COMMON: ${{ needs.prepare.outputs.mvn-common }}
       MAVEN_ARGS: ${{ needs.prepare.outputs.maven-args }}
     steps:
-      - name: Dashboard — slice ${{ matrix.slice }} started
-        run: |
-          PHASE_NAME="Platform $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
-          SAFE_NAME="${GITHUB_RUN_ID}-platform-$(echo ${{ matrix.slice }})"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE_NAME" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d "{\"name\":\"$PHASE_NAME\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
-        continue-on-error: true
 
       - uses: actions/checkout@v4
         with:
@@ -393,23 +382,6 @@ jobs:
       mvn-common: ${{ steps.flags.outputs.mvn-common }}
       maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
-      - name: Dashboard — convergence started
-        run: |
-          curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d "$(curl -sf "$CI_DASHBOARD_URL/progress" | python3 -c "
-          import json,sys,datetime
-          d=json.load(sys.stdin)
-          if d.get('current'):
-            now=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-            for p in d['current']['phases']:
-              if p['name']=='Platform convergence':
-                p['status']='in_progress'; p.setdefault('started',now); break
-          print(json.dumps(d))
-          ")" > /dev/null
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Set up Java 25
@@ -499,18 +471,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L1 started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          for repo in ${{ matrix.repos }}; do
-            SAFE="${GITHUB_RUN_ID}-${repo}"
-            curl -sf -X PUT "$CI_DASHBOARD_URL/phase-$SAFE" \
-              -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-              -H "Content-Type: application/json" \
-              -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-              -d "{\"name\":\"${repo}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null || true
-          done
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
@@ -610,15 +570,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L2 ${{ matrix.repo }} started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-${{ matrix.repo }}" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d "{\"name\":\"${{ matrix.repo }}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
@@ -698,22 +649,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L3 work started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -sf "$CI_DASHBOARD_URL/progress" | python3 -c "
-          import json,sys
-          d=json.load(sys.stdin)
-          if d.get('current'):
-            for p in d['current']['phases']:
-              if p['name']=='work': p['status']='in_progress'; p.setdefault('started','$NOW'); break
-          print(json.dumps(d))
-          " | curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d @- > /dev/null
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
@@ -790,22 +725,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L4 engine started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -sf "$CI_DASHBOARD_URL/progress" | python3 -c "
-          import json,sys
-          d=json.load(sys.stdin)
-          if d.get('current'):
-            for p in d['current']['phases']:
-              if p['name']=='engine': p['status']='in_progress'; p.setdefault('started','$NOW'); break
-          print(json.dumps(d))
-          " | curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d @- > /dev/null
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
@@ -892,17 +811,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L5 started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          for repo in ${{ matrix.repos }}; do
-            curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-${repo}" \
-              -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-              -H "Content-Type: application/json" \
-              -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-              -d "{\"name\":\"${repo}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null || true
-          done
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
@@ -995,17 +903,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L6 started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          for repo in ${{ matrix.repos }}; do
-            curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-${repo}" \
-              -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-              -H "Content-Type: application/json" \
-              -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-              -d "{\"name\":\"${repo}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null || true
-          done
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
@@ -1089,15 +986,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L7 started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-drafthouse" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -d "{\"name\":\"drafthouse\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null || true
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
@@ -1194,17 +1082,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L8 started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          for repo in ${{ matrix.repos }}; do
-            curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-${repo}" \
-              -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-              -H "Content-Type: application/json" \
-              -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-              -d "{\"name\":\"${repo}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null || true
-          done
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
@@ -1288,17 +1165,6 @@ jobs:
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
-      - name: Dashboard — L9 started
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          for repo in scaffold fsitrading; do
-            curl -sf -X PUT "$CI_DASHBOARD_URL/phase-${GITHUB_RUN_ID}-${repo}" \
-              -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-              -H "Content-Type: application/json" \
-              -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-              -d "{\"name\":\"${repo}\",\"status\":\"in_progress\",\"started\":\"$NOW\"}" > /dev/null || true
-          done
-        continue-on-error: true
       - uses: actions/checkout@v4
         with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
