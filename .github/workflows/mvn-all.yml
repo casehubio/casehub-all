@@ -156,17 +156,15 @@ jobs:
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}-${{ github.run_id }}
-      - name: Restart build if cache was incomplete
-        if: steps.download.outputs.delta > 10240 && steps.download.conclusion == 'success'
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+      - name: Report cache status
+        if: always()
         run: |
-          echo "::warning::Cache grew by ${{ steps.download.outputs.delta }}KB (>10MB) — was incomplete. Restarting with warm cache."
-          gh workflow run mvn-all.yml \
-            -f test_mode=${{ inputs.test_mode }} \
-            -f submodule_update=${{ inputs.submodule_update }} \
-            -f submodule_list="${{ inputs.submodule_list }}"
-          gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
+          DELTA="${{ steps.download.outputs.delta }}"
+          if [ "${DELTA:-0}" -gt 10240 ]; then
+            echo "::notice::Cache grew by ${DELTA}KB — was incomplete, now saved for next run"
+          else
+            echo "::notice::Cache verified — delta ${DELTA:-0}KB"
+          fi
 
   # ════════════════════════════════════════════════════════════════════
   # Phase 0: Prepare — checkout, submodule update, platform base
