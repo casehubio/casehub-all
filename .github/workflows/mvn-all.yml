@@ -142,7 +142,7 @@ jobs:
           done
           wait
           echo "Dependency resolution complete — $(du -sh ~/.m2/repository | cut -f1) cached"
-        timeout-minutes: 15
+        timeout-minutes: 5
 
   # ════════════════════════════════════════════════════════════════════
   # Phase 0: Prepare — checkout, submodule update, platform base
@@ -1336,13 +1336,12 @@ jobs:
       - name: Auto-retry on transient failure
         if: failure() && inputs.retry_count < 2
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           RETRY=$(( ${{ inputs.retry_count }} + 1 ))
-          echo "::warning::Build failed. Auto-retrying (attempt $RETRY/2)"
+          echo "::warning::Build failed (attempt $RETRY/2). Dispatching retry — warm cache will cover previously downloaded deps."
           gh workflow run mvn-all.yml \
             -f test_mode=${{ inputs.test_mode }} \
             -f submodule_update=${{ inputs.submodule_update }} \
             -f submodule_list="${{ inputs.submodule_list }}" \
-            -f resume_from="L7" \
             -f retry_count="$RETRY"
