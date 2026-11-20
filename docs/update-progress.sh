@@ -275,7 +275,10 @@ if cur:
     has_failure = any(p.get('status') == 'failure' for p in phases)
     ran = [p for p in phases if p.get('status') != 'pending']
     all_ran_success = ran and all(p.get('status') == 'success' for p in ran)
-    conclusion = 'success' if all_ran_success else ('failure' if has_failure else '$CONCLUSION')
+    # A valid non-resume green needs at least 10 phases. Fewer means cancelled/incomplete.
+    is_resume = bool(cur.get('resume_from'))
+    min_phases = 3 if is_resume else 10
+    conclusion = 'success' if (all_ran_success and len(ran) >= min_phases) else ('failure' if has_failure or len(ran) < min_phases else '$CONCLUSION')
 
     entry = {
         'run_id': cur.get('run_id'), 'run_url': cur.get('run_url'),
