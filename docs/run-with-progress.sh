@@ -9,15 +9,20 @@
 # SELF-HEALING REGISTRY
 # ══════════════════════════════════════════════════════════════════════
 #
-# When a build fails, the script scans the Maven output for known
-# failure signatures. If matched, it repairs the cause and retries
-# once. Each entry documents: what breaks, how we detect it, what
-# we fix, and why it works.
+# Philosophy: only compilation errors and test failures are real.
+# Everything else is infrastructure — diagnose it, fix it, retry.
+#
+# The build FIRST checks for code failures (compilation, tests).
+# If found → fail immediately, human must fix.
+# If NOT found → it's infrastructure. Diagnose the class, repair
+# surgically (delete only what's broken), retry once.
 #
 # To add a new self-healing rule:
-#   1. Add a grep pattern to the diagnose block in run_with_healing()
+#   1. Add a grep pattern to the infrastructure section in run_with_healing()
 #   2. Add the targeted repair (delete only what's broken)
 #   3. Document it here with the same format
+#   4. If it's a code failure that should NOT retry, add it to the
+#      code-failure detection block instead
 #
 # ── Corrupt JARs ──────────────────────────────────────────────────
 #   Cause:   Artifact transfer between GitHub Actions jobs truncates
@@ -54,6 +59,40 @@
 #   Repair:  Delete all jandex.idx files from ~/.m2/repository/io/casehub.
 #   Retry:   Maven regenerates the index during the next build.
 #
+# ── Network / Runner Failures ─────────────────────────────────────
+#   Cause:   GitHub Actions runner loses network, DNS fails, or the
+#            runner is preempted mid-build.
+#   Detect:  Maven output contains:
+#              "Connection reset" / "Connection refused"
+#              "UnknownHostException" / "SocketTimeoutException"
+#              "NoRouteToHostException" / "EOFException"
+#   Repair:  Clear .lastUpdated markers (same as CDN failures).
+#   Retry:   Network is usually back within seconds on a new attempt.
+#
+# ── Out of Memory ─────────────────────────────────────────────────
+#   Cause:   Large reactor builds exhaust JVM heap or system memory.
+#   Detect:  Maven output contains:
+#              "OutOfMemoryError" / "GC overhead limit"
+#              "Java heap space" / "Cannot allocate memory"
+#   Repair:  Delete target/ dirs to free disk (which relieves swap).
+#   Retry:   Second attempt has more free memory from cleanup.
+#
+# ── Disk Space ────────────────────────────────────────────────────
+#   Cause:   Artifact cache + build output fills the runner disk.
+#   Detect:  Maven output contains:
+#              "No space left on device" / "Disk quota exceeded"
+#   Repair:  Delete target/ dirs and temp provisioning files.
+#   Retry:   Freed space allows the build to continue.
+#
+# ── Lock Contention ───────────────────────────────────────────────
+#   Cause:   Parallel builds or stale processes leave lock files.
+#   Detect:  Maven output contains:
+#              "OverlappingFileLockException"
+#              "Could not acquire lock"
+#              "locked by another process"
+#   Repair:  Delete .lock files from ~/.m2/repository.
+#   Retry:   Clean locks allow normal file access.
+#
 # ══════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
@@ -80,47 +119,79 @@ trap cleanup EXIT
 # Signal start (won't overwrite existing started timestamp)
 bash docs/update-progress.sh "$MODE" "$PHASE" in_progress 2>&1 || echo "::warning::Dashboard update failed for $PHASE"
 
-# Run command with self-healing — diagnose, repair, retry known transient failures
+# Run command with self-healing.
+#
+# Logic: if the build fails, classify the failure.
+#   CODE FAILURE (compilation/test) → fail immediately, human must fix
+#   INFRASTRUCTURE FAILURE (everything else) → diagnose, repair, retry
+#
 run_with_healing() {
   "$@" 2>&1 | tee "$LOGFILE"
   EXIT_CODE=${PIPESTATUS[0]}
   [ "$EXIT_CODE" -eq 0 ] && return 0
 
-  # Diagnose failure class
-  local HEALED=0
+  # ── Code failures — these are real, don't retry ──────────────────
+  if grep -qE "COMPILATION ERROR" "$LOGFILE" 2>/dev/null &&
+     grep -qE "cannot find symbol|does not exist|is not abstract|cannot access|incompatible types" "$LOGFILE" 2>/dev/null; then
+    echo "::error::[$PHASE] Compilation failure — code fix required"
+    return $EXIT_CODE
+  fi
+  if grep -qE "Tests run:.*Failures: [1-9]|Tests run:.*Errors: [1-9]" "$LOGFILE" 2>/dev/null; then
+    echo "::error::[$PHASE] Test failure — code fix required"
+    return $EXIT_CODE
+  fi
+
+  # ── Infrastructure failures — diagnose, repair, retry ────────────
+  echo "::warning::[$PHASE] Infrastructure failure detected — diagnosing"
 
   # Corrupt JARs (truncated artifact transfer)
   if grep -qE "Unexpected end of ZLIB|error reading.*\.jar|invalid LOC header|zip END header not found" "$LOGFILE" 2>/dev/null; then
-    echo "::warning::[$PHASE] Corrupt JAR detected — purging damaged artifacts"
+    echo "  → Corrupt JAR — purging damaged artifacts"
     grep -oE '/[^ ]*\.jar' "$LOGFILE" | sort -u | while read -r jar; do
-      if [ -f "$jar" ]; then
-        echo "  Deleting corrupt: $jar"
-        rm -f "$jar"
-      fi
+      [ -f "$jar" ] && echo "    rm $jar" && rm -f "$jar"
     done
-    HEALED=1
   fi
 
   # Cached resolution failures (CDN flakiness)
-  if grep -qE "Could not find artifact|could not be resolved|Plugin not found" "$LOGFILE" 2>/dev/null; then
-    echo "::warning::[$PHASE] Resolution failure — clearing .lastUpdated markers"
+  if grep -qE "Could not find artifact|could not be resolved|Plugin not found|Non-resolvable" "$LOGFILE" 2>/dev/null; then
+    echo "  → Resolution failure — clearing .lastUpdated markers"
     find ~/.m2/repository -name "*.lastUpdated" -delete 2>/dev/null || true
-    HEALED=1
   fi
 
   # Corrupt Jandex indexes
-  if grep -qE "Corrupt Jandex\|IllegalArgumentException.*jandex" "$LOGFILE" 2>/dev/null; then
-    echo "::warning::[$PHASE] Corrupt Jandex index — purging"
+  if grep -qE "Corrupt Jandex|IllegalArgumentException.*jandex" "$LOGFILE" 2>/dev/null; then
+    echo "  → Corrupt Jandex index — purging"
     find ~/.m2/repository/io/casehub -name "jandex.idx" -delete 2>/dev/null || true
-    HEALED=1
   fi
 
-  if [ "$HEALED" -eq 1 ]; then
-    echo "::notice::[$PHASE] Self-healed — retrying build"
-    "$@" 2>&1 | tee "$LOGFILE"
-    EXIT_CODE=${PIPESTATUS[0]}
+  # Network / runner failures
+  if grep -qE "Connection reset|Connection refused|UnknownHostException|SocketTimeoutException|NoRouteToHostException|EOFException.*HTTP" "$LOGFILE" 2>/dev/null; then
+    echo "  → Network failure — clearing cached connection errors"
+    find ~/.m2/repository -name "*.lastUpdated" -delete 2>/dev/null || true
   fi
 
+  # Out of memory
+  if grep -qE "OutOfMemoryError|GC overhead limit|Java heap space|Cannot allocate memory" "$LOGFILE" 2>/dev/null; then
+    echo "  → OOM — clearing target dirs to free disk, retrying with more memory"
+    find . -maxdepth 3 -name target -type d -exec rm -rf {} + 2>/dev/null || true
+  fi
+
+  # Disk space
+  if grep -qE "No space left on device|Disk quota exceeded" "$LOGFILE" 2>/dev/null; then
+    echo "  → Disk full — purging target dirs and temp files"
+    find . -maxdepth 3 -name target -type d -exec rm -rf {} + 2>/dev/null || true
+    rm -rf /tmp/.provisioning-* 2>/dev/null || true
+  fi
+
+  # Stale lock files
+  if grep -qE "OverlappingFileLockException|Could not acquire lock|locked by another process" "$LOGFILE" 2>/dev/null; then
+    echo "  → Lock contention — clearing lock files"
+    find ~/.m2/repository -name "*.lock" -delete 2>/dev/null || true
+  fi
+
+  echo "::notice::[$PHASE] Repair complete — retrying build"
+  "$@" 2>&1 | tee "$LOGFILE"
+  EXIT_CODE=${PIPESTATUS[0]}
   return $EXIT_CODE
 }
 
