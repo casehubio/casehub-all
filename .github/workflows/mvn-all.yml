@@ -132,7 +132,9 @@ jobs:
             m2-deps-${{ runner.os }}-
       - name: Download all dependencies
         if: steps.cache.outputs.cache-hit != 'true'
+        id: download
         run: |
+          START=$(date +%s)
           echo "Cache miss — resolving all dependencies in parallel"
           mvn dependency:go-offline -f parent/pom.xml --batch-mode -ntp -U || true
           for repo in platform engine connectors agency work eidos neocortex qhorus pages ledger worker desiredstate ras workers claudony ops casehub-mosaic drafthouse iot chat-app openclaw devtown aml clinical life soc fsitrading quarkmind scaffold casehub-langchain4j; do
@@ -141,8 +143,20 @@ jobs:
             fi
           done
           wait
-          echo "Dependency resolution complete — $(du -sh ~/.m2/repository | cut -f1) cached"
-        timeout-minutes: 5
+          ELAPSED=$(( $(date +%s) - START ))
+          echo "Dependency resolution complete — $(du -sh ~/.m2/repository | cut -f1) cached in ${ELAPSED}s"
+          echo "elapsed=$ELAPSED" >> "$GITHUB_OUTPUT"
+      - name: Restart build if download was slow
+        if: steps.download.outputs.elapsed > 300 && steps.download.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          echo "::warning::Dependency download took ${{ steps.download.outputs.elapsed }}s (>5min). Cache is now warm — restarting for a clean run."
+          gh workflow run mvn-all.yml \
+            -f test_mode=${{ inputs.test_mode }} \
+            -f submodule_update=${{ inputs.submodule_update }} \
+            -f submodule_list="${{ inputs.submodule_list }}"
+          gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
 
   # ════════════════════════════════════════════════════════════════════
   # Phase 0: Prepare — checkout, submodule update, platform base
