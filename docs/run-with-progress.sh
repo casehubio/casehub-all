@@ -33,16 +33,52 @@ trap cleanup EXIT
 # Signal start (won't overwrite existing started timestamp)
 bash docs/update-progress.sh "$MODE" "$PHASE" in_progress 2>&1 || echo "::warning::Dashboard update failed for $PHASE"
 
-# Run command, capture output — retry once on transient Maven Central failures
-set +e
-"$@" 2>&1 | tee "$LOGFILE"
-EXIT_CODE=${PIPESTATUS[0]}
-if [ "$EXIT_CODE" -ne 0 ] && grep -qE "Could not find artifact|could not be resolved|Plugin not found|Unexpected end of ZLIB|error reading.*\.jar" "$LOGFILE" 2>/dev/null; then
-  echo "::warning::Transient resolution failure — retrying in 10s"
-  sleep 10
+# Run command with self-healing — diagnose, repair, retry known transient failures
+run_with_healing() {
   "$@" 2>&1 | tee "$LOGFILE"
   EXIT_CODE=${PIPESTATUS[0]}
-fi
+  [ "$EXIT_CODE" -eq 0 ] && return 0
+
+  # Diagnose failure class
+  local HEALED=0
+
+  # Corrupt JARs (truncated artifact transfer)
+  if grep -qE "Unexpected end of ZLIB|error reading.*\.jar|invalid LOC header|zip END header not found" "$LOGFILE" 2>/dev/null; then
+    echo "::warning::[$PHASE] Corrupt JAR detected — purging damaged artifacts"
+    grep -oE '/[^ ]*\.jar' "$LOGFILE" | sort -u | while read -r jar; do
+      if [ -f "$jar" ]; then
+        echo "  Deleting corrupt: $jar"
+        rm -f "$jar"
+      fi
+    done
+    HEALED=1
+  fi
+
+  # Cached resolution failures (CDN flakiness)
+  if grep -qE "Could not find artifact|could not be resolved|Plugin not found" "$LOGFILE" 2>/dev/null; then
+    echo "::warning::[$PHASE] Resolution failure — clearing .lastUpdated markers"
+    find ~/.m2/repository -name "*.lastUpdated" -delete 2>/dev/null || true
+    HEALED=1
+  fi
+
+  # Corrupt Jandex indexes
+  if grep -qE "Corrupt Jandex\|IllegalArgumentException.*jandex" "$LOGFILE" 2>/dev/null; then
+    echo "::warning::[$PHASE] Corrupt Jandex index — purging"
+    find ~/.m2/repository/io/casehub -name "jandex.idx" -delete 2>/dev/null || true
+    HEALED=1
+  fi
+
+  if [ "$HEALED" -eq 1 ]; then
+    echo "::notice::[$PHASE] Self-healed — retrying build"
+    "$@" 2>&1 | tee "$LOGFILE"
+    EXIT_CODE=${PIPESTATUS[0]}
+  fi
+
+  return $EXIT_CODE
+}
+
+set +e
+run_with_healing "$@"
 set -e
 
 # Count lines of code per file type (repo dir = phase name)
