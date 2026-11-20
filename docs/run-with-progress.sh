@@ -37,7 +37,7 @@ bash docs/update-progress.sh "$MODE" "$PHASE" in_progress 2>&1 || echo "::warnin
 set +e
 "$@" 2>&1 | tee "$LOGFILE"
 EXIT_CODE=${PIPESTATUS[0]}
-if [ "$EXIT_CODE" -ne 0 ] && grep -qE "Could not find artifact|could not be resolved|Plugin not found" "$LOGFILE" 2>/dev/null; then
+if [ "$EXIT_CODE" -ne 0 ] && grep -qE "Could not find artifact|could not be resolved|Plugin not found|Unexpected end of ZLIB|error reading.*\.jar" "$LOGFILE" 2>/dev/null; then
   echo "::warning::Transient resolution failure — retrying in 10s"
   sleep 10
   "$@" 2>&1 | tee "$LOGFILE"
