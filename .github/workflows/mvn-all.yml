@@ -462,7 +462,14 @@ jobs:
           echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
           echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - name: Install parent POMs
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -580,7 +587,14 @@ jobs:
           key: casehub-native-${{ runner.os }}-sherpa-${{ hashFiles('connectors/voice-sherpa/src/main/java/**/SherpaLibrary.java') }}
           restore-keys: casehub-native-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - name: Install parent POMs
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
@@ -667,7 +681,14 @@ jobs:
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -743,7 +764,14 @@ jobs:
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -819,7 +847,14 @@ jobs:
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -910,7 +945,14 @@ jobs:
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -1002,7 +1044,14 @@ jobs:
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -1083,7 +1132,14 @@ jobs:
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -1181,7 +1237,14 @@ jobs:
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -1260,7 +1323,14 @@ jobs:
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
-        run: rm -rf ~/.m2/repository/io/casehub
+        run: |
+          # Preserve npm artifact containers — they don't change between levels
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
