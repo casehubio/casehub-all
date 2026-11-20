@@ -277,7 +277,7 @@ function lineChart(el,data,opts={}){
 
 // ── Pipeline renderer ─────────────────────────────────────────────
 function phaseBox(p,clickFn){
-  if(!p)return'<div class="phase pending"><div class="name">?</div></div>';
+  if(!p){console.warn('Phase not found in API data:',name);return'<div class="phase pending"><div class="name">?</div></div>';}
   const dur=p.status==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
   const parts=[];
   if(p.modules)parts.push(p.modules+' mod');

@@ -158,12 +158,14 @@ case "${1:-}" in
     fi
 
     # Read existing phase file to preserve started timestamp
-    EXISTING=$(curl -sf "$WORKER_URL/phase-$SAFE_NAME" 2>/dev/null || echo '{}')
+    TMPDIR_PF=$(mktemp -d)
+    curl -sf "$WORKER_URL/phase-$SAFE_NAME" > "$TMPDIR_PF/existing.json" 2>/dev/null || echo '{}' > "$TMPDIR_PF/existing.json"
+    echo "$STATS" > "$TMPDIR_PF/stats.json"
 
     PHASE_DATA=$(python3 -c "
 import json
-existing = json.loads('''$EXISTING''')
-stats = json.loads('''$STATS''')
+existing = json.load(open('$TMPDIR_PF/existing.json'))
+stats = json.load(open('$TMPDIR_PF/stats.json'))
 data = {'name': '$NAME', 'status': '$STATUS', 'updated': '$NOW', '_written_at': '$NOW'}
 if '$STATUS' == 'in_progress':
     data['started'] = existing.get('started', '$NOW')
@@ -180,6 +182,7 @@ elif '$STATUS' in ('success', 'failure', 'skipped'):
     data.update(stats)
 print(json.dumps(data, indent=2))
 ")
+    rm -rf "$TMPDIR_PF"
     update_phase_file "$SAFE_NAME" "$PHASE_DATA"
     ;;
 
@@ -231,11 +234,14 @@ print(json.dumps(data, indent=2))
     fetch_progress > "$TMPDIR/progress.json"
     RUN_ID=$(python3 -c "import json; print(json.load(open('$TMPDIR/progress.json')).get('current',{}).get('run_id',''))" 2>/dev/null || echo "")
 
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
     mkdir -p "$TMPDIR/phases"
     if [ -n "$RUN_ID" ]; then
-      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "platform-convergence" "ledger" "eidos" "connectors" "worker" "pages" "neocortex" "qhorus" "work" "engine" "ras" "desiredstate" "claudony" "agency" "casehub-langchain4j" "workers" "ops" "casehub-mosaic" "drafthouse" "life" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "scaffold" "fsitrading"; do
+      while IFS= read -r phase_display_name; do
+        [ -z "$phase_display_name" ] && continue
+        phase_name=$(echo "$phase_display_name" | tr ' :+/()' '------' | tr '[:upper:]' '[:lower:]')
         curl -sf "$WORKER_URL/phase-${RUN_ID}-${phase_name}" > "$TMPDIR/phases/${phase_name}.json" 2>/dev/null || echo "{}" > "$TMPDIR/phases/${phase_name}.json"
-      done
+      done < "$SCRIPT_DIR/phases.txt"
     fi
 
     python3 -c "
@@ -287,10 +293,12 @@ json.dump(data, open('$TMPDIR/result.json', 'w'))
     update_progress "$(cat "$TMPDIR/result.json")"
 
     if [ -n "$RUN_ID" ]; then
-      for phase_name in "prepare---platform-base" "platform-a" "platform-b" "platform-c" "platform-d" "platform-convergence" "ledger" "eidos" "connectors" "worker" "pages" "neocortex" "qhorus" "work" "engine" "ras" "desiredstate" "claudony" "agency" "casehub-langchain4j" "workers" "ops" "casehub-mosaic" "drafthouse" "life" "iot" "quarkmind" "devtown" "aml" "soc" "chat-app" "clinical" "openclaw" "scaffold" "fsitrading"; do
+      while IFS= read -r phase_display_name; do
+        [ -z "$phase_display_name" ] && continue
+        phase_name=$(echo "$phase_display_name" | tr ' :+/()' '------' | tr '[:upper:]' '[:lower:]')
         curl -sf -X DELETE "$WORKER_URL/phase-${RUN_ID}-${phase_name}" \
           -H "Authorization: Bearer $WORKER_TOKEN" > /dev/null 2>&1 || true
-      done
+      done < "$SCRIPT_DIR/phases.txt"
     fi
     rm -rf "$TMPDIR"
 

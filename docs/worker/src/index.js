@@ -22,7 +22,7 @@ export default {
           const runId = data.current.run_id;
           const phases = (data.current.phases || []).filter(p => p.status !== 'success');
           await Promise.all(phases.map(async p => {
-            const phaseKey = `phase-${runId}-${p.name.toLowerCase().replace(/ \+ /g, '---').replace(/ /g, '-')}`;
+            const phaseKey = `phase-${runId}-${p.name.toLowerCase().replace(/[ :+/()]/g, '-')}`;
             try {
               const pd = await env.KV.get(phaseKey);
               if (pd) {
