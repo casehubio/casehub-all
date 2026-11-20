@@ -123,19 +123,20 @@ jobs:
       - uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - name: Restore dependency cache
-        id: cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
-          restore-keys: |
-            m2-deps-${{ runner.os }}-
-      - name: Download all dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
+          restore-keys: m2-deps-${{ runner.os }}-
+      - name: Verify and complete dependencies
         id: download
         run: |
           START=$(date +%s)
-          echo "Cache miss — resolving all dependencies in parallel"
+          CACHE_SIZE_BEFORE=$(du -s ~/.m2/repository 2>/dev/null | cut -f1 || echo 0)
+          echo "Cache restored — $(du -sh ~/.m2/repository 2>/dev/null | cut -f1 || echo '0'). Verifying completeness..."
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+          mvn validate -f platform/pom.xml --batch-mode -ntp -U -q 2>/dev/null || true
           mvn dependency:go-offline -f parent/pom.xml --batch-mode -ntp -U || true
           for repo in platform engine connectors agency work eidos neocortex qhorus pages ledger worker desiredstate ras workers claudony ops casehub-mosaic drafthouse iot chat-app openclaw devtown aml clinical life soc fsitrading quarkmind scaffold casehub-langchain4j; do
             if [ -f "$repo/pom.xml" ]; then
@@ -144,8 +145,16 @@ jobs:
           done
           wait
           ELAPSED=$(( $(date +%s) - START ))
-          echo "Dependency resolution complete — $(du -sh ~/.m2/repository | cut -f1) cached in ${ELAPSED}s"
+          CACHE_SIZE_AFTER=$(du -s ~/.m2/repository 2>/dev/null | cut -f1 || echo 0)
+          DELTA=$(( CACHE_SIZE_AFTER - CACHE_SIZE_BEFORE ))
+          echo "Dependencies verified — $(du -sh ~/.m2/repository | cut -f1) in ${ELAPSED}s (delta: ${DELTA}KB)"
           echo "elapsed=$ELAPSED" >> "$GITHUB_OUTPUT"
+      - name: Save dependency cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}-${{ github.run_id }}
       - name: Restart build if download was slow
         if: steps.download.outputs.elapsed > 300 && steps.download.conclusion == 'success'
         env:
@@ -1379,17 +1388,29 @@ jobs:
             done
           fi
         timeout-minutes: 5
+      - name: Compute build result
+        id: result
+        if: always()
+        run: |
+          BUILD_OK=true
+          for result in "${{ needs.prepare.result }}" "${{ needs.convergence.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.level4.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
+            if [ "$result" = "failure" ]; then
+              BUILD_OK=false
+              break
+            fi
+          done
+          echo "build_ok=$BUILD_OK" >> "$GITHUB_OUTPUT"
+          echo "Build result: $BUILD_OK"
       - name: Finalize CI dashboard
         if: always()
         run: |
-          ALL_OK="${{ needs.level9.result }}"
-          if [ "$ALL_OK" = "success" ]; then
+          if [ "${{ steps.result.outputs.build_ok }}" = "true" ]; then
             bash docs/update-progress.sh finish success || true
           else
             bash docs/update-progress.sh finish failure || true
           fi
       - name: Advance submodule pointers
-        if: success()
+        if: steps.result.outputs.build_ok == 'true'
         run: |
           git checkout HEAD -- agency workers
           git add -u
@@ -1406,7 +1427,7 @@ jobs:
             echo ""
             echo "_$(date -u '+%Y-%m-%d %H:%M UTC') | Tests: \`${{ inputs.test_mode }}\` | Resume: \`${{ inputs.resume_from || 'none' }}\`_"
             echo ""
-            if [ "${{ job.status }}" = "success" ]; then
+            if [ "${{ steps.result.outputs.build_ok }}" = "true" ]; then
               echo "✅ **Reactor build passed — pointers advanced.**"
             else
               echo "❌ **Reactor build failed — pointers unchanged.**"
@@ -1418,7 +1439,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Auto-retry on transient failure
-        if: failure() && inputs.retry_count < 2
+        if: steps.result.outputs.build_ok != 'true' && inputs.retry_count < 2
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
