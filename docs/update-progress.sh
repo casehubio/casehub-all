@@ -22,12 +22,15 @@ fetch_progress() {
 }
 
 update_progress() {
-  local content="$1"
+  local tmpfile
+  tmpfile=$(mktemp)
+  echo "$1" > "$tmpfile"
   curl -sf -X PUT "$WORKER_URL/progress" \
     -H "Authorization: Bearer $WORKER_TOKEN" \
     -H "Content-Type: application/json" \
     -H "X-Run-Id: ${GITHUB_RUN_ID:-0}" \
-    -d "$content" > /dev/null
+    -d @"$tmpfile" > /dev/null
+  rm -f "$tmpfile"
 }
 
 update_phase_file() {

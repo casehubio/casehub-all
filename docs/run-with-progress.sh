@@ -25,13 +25,13 @@ LOGFILE="/tmp/phase-$(echo "$PHASE" | tr ' :+/()' '------').log"
 cleanup() {
   local code=$?
   if [ "$code" -ne 0 ] && [ -z "${FINAL_SENT:-}" ]; then
-    bash docs/update-progress.sh "$MODE" "$PHASE" failure "$LOGFILE" 2>/dev/null || true
+    bash docs/update-progress.sh "$MODE" "$PHASE" failure "$LOGFILE" 2>&1 || echo "::warning::Dashboard update failed for $PHASE"
   fi
 }
 trap cleanup EXIT
 
 # Signal start (won't overwrite existing started timestamp)
-bash docs/update-progress.sh "$MODE" "$PHASE" in_progress 2>/dev/null || true
+bash docs/update-progress.sh "$MODE" "$PHASE" in_progress 2>&1 || echo "::warning::Dashboard update failed for $PHASE"
 
 # Run command, capture output — retry once on transient Maven Central failures
 set +e
@@ -63,9 +63,9 @@ set -e
 # Final update with stats
 FINAL_SENT=1
 if [ "$EXIT_CODE" -eq 0 ]; then
-  bash docs/update-progress.sh "$MODE" "$PHASE" success "$LOGFILE" 2>/dev/null || true
+  bash docs/update-progress.sh "$MODE" "$PHASE" success "$LOGFILE" 2>&1 || echo "::warning::Dashboard update failed for $PHASE"
 else
-  bash docs/update-progress.sh "$MODE" "$PHASE" failure "$LOGFILE" 2>/dev/null || true
+  bash docs/update-progress.sh "$MODE" "$PHASE" failure "$LOGFILE" 2>&1 || echo "::warning::Dashboard update failed for $PHASE"
 fi
 
 exit $EXIT_CODE
