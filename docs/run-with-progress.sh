@@ -1,13 +1,60 @@
 #!/bin/bash
-# Run a Maven command with dashboard updates at start and end.
+# Run a Maven command with dashboard updates and self-healing.
 #
 # Usage:
 #   run-with-progress.sh <phase-name> <maven-command...>             Sequential
 #   run-with-progress.sh --parallel <phase-name> <maven-command...>  Parallel-safe
 #
-# The "in_progress" update is skipped if an early inline curl already
-# set it (e.g., the job-start step). The started timestamp is preserved
-# so duration includes setup time, not just Maven execution.
+# ══════════════════════════════════════════════════════════════════════
+# SELF-HEALING REGISTRY
+# ══════════════════════════════════════════════════════════════════════
+#
+# When a build fails, the script scans the Maven output for known
+# failure signatures. If matched, it repairs the cause and retries
+# once. Each entry documents: what breaks, how we detect it, what
+# we fix, and why it works.
+#
+# To add a new self-healing rule:
+#   1. Add a grep pattern to the diagnose block in run_with_healing()
+#   2. Add the targeted repair (delete only what's broken)
+#   3. Document it here with the same format
+#
+# ── Corrupt JARs ──────────────────────────────────────────────────
+#   Cause:   Artifact transfer between GitHub Actions jobs truncates
+#            the JAR (upload-artifact/download-artifact race, or
+#            network interruption during Maven download).
+#   Detect:  Maven output contains:
+#              "Unexpected end of ZLIB input stream"
+#              "invalid LOC header"
+#              "zip END header not found"
+#              "error reading /path/to/file.jar"
+#   Repair:  Delete the specific corrupt JAR file from ~/.m2/repository.
+#   Retry:   Maven re-downloads the clean copy from the warm cache
+#            or remote repository.
+#
+# ── CDN Resolution Failures ───────────────────────────────────────
+#   Cause:   Maven Central CDN returns 404/503 for artifacts that
+#            exist. Maven caches the failure in .lastUpdated marker
+#            files and won't retry until the update interval elapses.
+#   Detect:  Maven output contains:
+#              "Could not find artifact"
+#              "could not be resolved"
+#              "Plugin not found in any plugin repository"
+#   Repair:  Delete all .lastUpdated files from ~/.m2/repository.
+#            This clears the "don't retry" markers.
+#   Retry:   Maven re-checks all repositories. With -U in MVN_COMMON,
+#            SNAPSHOT metadata is also refreshed.
+#
+# ── Corrupt Jandex Indexes ────────────────────────────────────────
+#   Cause:   Parallel Maven builds (-T 1C) can write partial Jandex
+#            index files. Quarkus reads the truncated index and fails.
+#   Detect:  Maven output contains:
+#              "Corrupt Jandex"
+#              "IllegalArgumentException" near "jandex"
+#   Repair:  Delete all jandex.idx files from ~/.m2/repository/io/casehub.
+#   Retry:   Maven regenerates the index during the next build.
+#
+# ══════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
