@@ -149,18 +149,19 @@ jobs:
           DELTA=$(( CACHE_SIZE_AFTER - CACHE_SIZE_BEFORE ))
           echo "Dependencies verified — $(du -sh ~/.m2/repository | cut -f1) in ${ELAPSED}s (delta: ${DELTA}KB)"
           echo "elapsed=$ELAPSED" >> "$GITHUB_OUTPUT"
+          echo "delta=$DELTA" >> "$GITHUB_OUTPUT"
       - name: Save dependency cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}-${{ github.run_id }}
-      - name: Restart build if download was slow
-        if: steps.download.outputs.elapsed > 300 && steps.download.conclusion == 'success'
+      - name: Restart build if cache was incomplete
+        if: steps.download.outputs.delta > 10240 && steps.download.conclusion == 'success'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          echo "::warning::Dependency download took ${{ steps.download.outputs.elapsed }}s (>5min). Cache is now warm — restarting for a clean run."
+          echo "::warning::Cache grew by ${{ steps.download.outputs.delta }}KB (>10MB) — was incomplete. Restarting with warm cache."
           gh workflow run mvn-all.yml \
             -f test_mode=${{ inputs.test_mode }} \
             -f submodule_update=${{ inputs.submodule_update }} \
