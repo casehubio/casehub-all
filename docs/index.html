@@ -326,11 +326,11 @@ function renderPipe(phases,id,clickFn){
     fan+row(plat.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
     row(phaseBox(conv,clickFn))+conn+
     fan+lvl('L1',L1.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    fan+lvl('L2',L2.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    lvl('L2',L2.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+conn+
     lvl('L3',phaseBox(L3,clickFn))+conn+
     lvl('L4',phaseBox(L4,clickFn))+conn+
     fan+lvl('L5',L5.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    fan+lvl('L6',L6.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
+    lvl('L6',L6.map(g=>grp(g)).join(''),'pipe-parallel')+conn+
     lvl('L7',grp(L7[0]))+conn+
     fan+lvl('L8',L8.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
     lvl('L9',grp(L9[0]))+
