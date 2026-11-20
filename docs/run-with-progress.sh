@@ -33,10 +33,16 @@ trap cleanup EXIT
 # Signal start (won't overwrite existing started timestamp)
 bash docs/update-progress.sh "$MODE" "$PHASE" in_progress 2>/dev/null || true
 
-# Run command, capture output
+# Run command, capture output — retry once on transient Maven Central failures
 set +e
 "$@" 2>&1 | tee "$LOGFILE"
 EXIT_CODE=${PIPESTATUS[0]}
+if [ "$EXIT_CODE" -ne 0 ] && grep -qE "Could not find artifact|could not be resolved|Plugin not found" "$LOGFILE" 2>/dev/null; then
+  echo "::warning::Transient resolution failure — retrying in 10s"
+  sleep 10
+  "$@" 2>&1 | tee "$LOGFILE"
+  EXIT_CODE=${PIPESTATUS[0]}
+fi
 set -e
 
 # Count lines of code per file type (repo dir = phase name)
