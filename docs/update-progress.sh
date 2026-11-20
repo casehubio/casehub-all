@@ -270,9 +270,16 @@ if cur:
             p['status'] = 'failure'
             p['ended'] = '$NOW'
 
+    # Derive conclusion from actual phase results, not workflow status
+    # (workflow may report success when levels were skipped/cancelled)
+    has_failure = any(p.get('status') == 'failure' for p in phases)
+    ran = [p for p in phases if p.get('status') != 'pending']
+    all_ran_success = ran and all(p.get('status') == 'success' for p in ran)
+    conclusion = 'success' if all_ran_success else ('failure' if has_failure else '$CONCLUSION')
+
     entry = {
         'run_id': cur.get('run_id'), 'run_url': cur.get('run_url'),
-        'commit': cur.get('commit'), 'conclusion': '$CONCLUSION',
+        'commit': cur.get('commit'), 'conclusion': conclusion,
         'started': started, 'ended': '$NOW',
         'duration_s': int((e - s).total_seconds()),
         'total_tests': sum(p.get('tests_run', 0) for p in phases),
