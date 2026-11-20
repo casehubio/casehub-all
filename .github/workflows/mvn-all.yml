@@ -133,24 +133,22 @@ jobs:
       - name: Download all dependencies
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          echo "Cache miss — resolving all dependencies"
-          mvn dependency:go-offline -f parent/pom.xml --batch-mode -ntp -U 2>/dev/null || true
-          for repo in platform worker ledger connectors neocortex eidos desiredstate ras qhorus work engine pages agency casehub-langchain4j casehub-mosaic workers claudony ops iot chat-app openclaw devtown aml clinical life drafthouse soc fsitrading quarkmind scaffold; do
-            if [ -f "$repo/pom.xml" ]; then
-              echo "  Resolving $repo..."
-              mvn dependency:resolve dependency:resolve-plugins -f "$repo/pom.xml" --batch-mode -ntp -U 2>/dev/null || true
-            fi
+          echo "Cache miss — resolving dependencies from parent BOM + key repos"
+          mvn dependency:go-offline -f parent/pom.xml --batch-mode -ntp -U || true
+          for repo in platform engine connectors agency work; do
+            echo "  Resolving $repo..."
+            mvn dependency:resolve dependency:resolve-plugins -f "$repo/pom.xml" --batch-mode -ntp -U 2>/dev/null || true
           done
           echo "Dependency resolution complete — $(du -sh ~/.m2/repository | cut -f1) cached"
-        timeout-minutes: 30
+        timeout-minutes: 15
 
   # ════════════════════════════════════════════════════════════════════
   # Phase 0: Prepare — checkout, submodule update, platform base
   # ════════════════════════════════════════════════════════════════════
   prepare:
     name: "Prepare + Platform base"
-    needs: [gate, warm-cache]
-    if: ${{ always() && !cancelled() && needs.gate.result == 'success' && inputs.resume_from == '' }}
+    needs: [gate]
+    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
