@@ -275,10 +275,17 @@ if cur:
     has_failure = any(p.get('status') == 'failure' for p in phases)
     ran = [p for p in phases if p.get('status') != 'pending']
     all_ran_success = ran and all(p.get('status') == 'success' for p in ran)
-    # A valid non-resume green needs at least 10 phases. Fewer means cancelled/incomplete.
-    is_resume = bool(cur.get('resume_from'))
-    min_phases = 3 if is_resume else 10
-    conclusion = 'success' if (all_ran_success and len(ran) >= min_phases) else ('failure' if has_failure or len(ran) < min_phases else '$CONCLUSION')
+    # Derive conclusion: did the build reach the end?
+    # The last phase in the list (fsitrading) must have run. If it's still
+    # pending, the build was cancelled or failed before reaching it.
+    last_phase = phases[-1] if phases else {}
+    reached_end = last_phase.get('status') in ('success', 'failure')
+    if has_failure:
+        conclusion = 'failure'
+    elif reached_end and all_ran_success:
+        conclusion = 'success'
+    else:
+        conclusion = 'failure'
 
     entry = {
         'run_id': cur.get('run_id'), 'run_url': cur.get('run_url'),
