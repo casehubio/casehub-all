@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Engine base slice — foundation modules through runtime.
+  Everything else depends on this. Built first, then slices A/B/C run in parallel.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-engine-aggregator-base</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Engine :: Base</name>
+
+  <modules>
+    <!-- Layer 0: codegen + schema -->
+    <module>../../engine/codegen</module>
+    <module>../../engine/schema</module>
+
+    <!-- Layer 1: api -->
+    <module>../../engine/api</module>
+
+    <!-- Layer 2: core modules -->
+    <module>../../engine/common-core</module>
+    <module>../../engine/common</module>
+    <module>../../engine/common-spring</module>
+    <module>../../engine/ledger-core</module>
+    <module>../../engine/ledger</module>
+    <module>../../engine/ledger-spring</module>
+    <module>../../engine/rest-core</module>
+
+    <!-- Layer 3: persistence + scheduling -->
+    <module>../../engine/persistence-memory</module>
+    <module>../../engine/persistence-jpa-common</module>
+    <module>../../engine/persistence-hibernate</module>
+    <module>../../engine/persistence-spring-jpa</module>
+    <module>../../engine/scheduler-quartz</module>
+    <module>../../engine/scheduler-dbscheduler</module>
+
+    <!-- Layer 3: runtime-core + runtime -->
+    <module>../../engine/runtime-core</module>
+    <module>../../engine/runtime</module>
+    <module>../../engine/runtime-spring</module>
+
+    <!-- Layer 3: support + planning-core (needed by support-core) -->
+    <module>../../engine/planning-core</module>
+    <module>../../engine/engine-support-core</module>
+    <module>../../engine/engine-support-spring</module>
+
+    <!-- Testing infrastructure -->
+    <module>../../engine/testing</module>
+
+    <!-- Annotations (Quarkus extension, needed by annotated examples) -->
+    <module>../../engine/annotations</module>
+
+    <!-- Generator -->
+    <module>../../engine/generator</module>
+  </modules>
+</project>

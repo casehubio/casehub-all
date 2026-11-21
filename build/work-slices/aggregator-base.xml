@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Work base slice — foundation modules through runtime.
+  Built first, then slices A/B run in parallel.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-work-aggregator-base</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Work :: Base</name>
+
+  <modules>
+    <!-- Layer 0: api + test infrastructure -->
+    <module>../../work/api</module>
+    <module>../../work/test-support</module>
+
+    <!-- Layer 1: core + runtime foundation -->
+    <module>../../work/core</module>
+    <module>../../work/runtime-core</module>
+    <module>../../work/work-support-core</module>
+
+    <!-- Layer 2: runtime + deployment -->
+    <module>../../work/runtime</module>
+    <module>../../work/deployment</module>
+
+    <!-- Layer 2: persistence -->
+    <module>../../work/persistence-memory</module>
+    <module>../../work/persistence-mongodb-core</module>
+    <module>../../work/persistence-mongodb</module>
+    <module>../../work/persistence-spring-mongodb</module>
+
+    <!-- Layer 2: annotations -->
+    <module>../../work/annotations</module>
+  </modules>
+</project>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Work slice B — integration (ledger, federation, qhorus, client, examples, spring)
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-work-aggregator-slice-b</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Work :: Slice B (Integration)</name>
+
+  <modules>
+    <!-- Ledger -->
+    <module>../../work/ledger</module>
+
+    <!-- Infrastructure -->
+    <module>../../work/issue-tracker</module>
+    <module>../../work/reports</module>
+    <module>../../work/qhorus</module>
+    <module>../../work/federation</module>
+    <module>../../work/client</module>
+
+    <!-- Spring integration -->
+    <module>../../work/spring-integration-test</module>
+
+    <!-- Examples (integration tests) -->
+    <module>../../work/examples</module>
+  </modules>
+</project>

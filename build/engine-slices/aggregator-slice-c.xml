@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Slice C — All example modules.
+  22 modules, each with its own QuarkusUnitTest deployment.
+  DSL examples depend on api+schema; annotated examples depend on annotations.
+  Independent of slices A and B.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-engine-aggregator-slice-c</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Engine :: Slice C (Examples)</name>
+
+  <modules>
+    <module>../../engine/examples/typed-context</module>
+    <module>../../engine/examples/choreography-annotated</module>
+    <module>../../engine/examples/choreography-dsl</module>
+    <module>../../engine/examples/sequential-annotated</module>
+    <module>../../engine/examples/sequential-dsl</module>
+    <module>../../engine/examples/goap-dsl</module>
+    <module>../../engine/examples/goap-annotated</module>
+    <module>../../engine/examples/cbr-ensemble-dsl</module>
+    <module>../../engine/examples/cbr-ensemble-annotated</module>
+    <module>../../engine/examples/llm-decomposition-dsl</module>
+    <module>../../engine/examples/llm-decomposition-annotated</module>
+    <module>../../engine/examples/humantask-dsl</module>
+    <module>../../engine/examples/humantask-annotated</module>
+    <module>../../engine/examples/subcase-dsl</module>
+    <module>../../engine/examples/subcase-annotated</module>
+    <module>../../engine/examples/a2a-dsl</module>
+    <module>../../engine/examples/a2a-annotated</module>
+    <module>../../engine/examples/mcp-dsl</module>
+    <module>../../engine/examples/mcp-annotated</module>
+    <module>../../engine/examples/incident-response-annotated</module>
+    <module>../../engine/examples/search-rescue-annotated</module>
+    <module>../../engine/examples/aircraft-maintenance-annotated</module>
+    <module>../../engine/examples/warehouse-annotated</module>
+    <module>../../engine/examples/wildfire-response-annotated</module>
+  </modules>
+</project>

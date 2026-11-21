@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Work slice A — features (flow, queues, rest, graphql, progress, ai)
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-work-aggregator-slice-a</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>CaseHub :: Work :: Slice A (Features)</name>
+
+  <modules>
+    <!-- Flow -->
+    <module>../../work/flow</module>
+
+    <!-- Queues -->
+    <module>../../work/queues</module>
+
+    <!-- REST + GraphQL -->
+    <module>../../work/rest</module>
+    <module>../../work/graphql</module>
+
+    <!-- Progress subsystem -->
+    <module>../../work/progress-api</module>
+    <module>../../work/progress-core</module>
+    <module>../../work/progress-runtime</module>
+    <module>../../work/progress-rest</module>
+    <module>../../work/progress-deployment</module>
+    <module>../../work/progress-memory</module>
+
+    <!-- AI -->
+    <module>../../work/ai</module>
+  </modules>
+</project>

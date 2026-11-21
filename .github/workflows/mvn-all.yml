@@ -74,8 +74,8 @@ permissions:
 # L0:   prepare → platform-slices(4) → convergence
 # L1:   [ledger→eidos] | connectors | worker
 # L2:   neocortex | qhorus
-# L3:   work
-# L4:   engine
+# L3:   work-base → work-slices(2)
+# L4:   engine-base → engine-slices(3)
 # L5:   [ras→desiredstate] | [claudony+agency] | [langchain4j+workers]
 # L6:   ops | mosaic  (foundational for apps)
 # L7:   drafthouse  (uses mosaic UI)
@@ -224,8 +224,8 @@ jobs:
                           'Platform convergence',
                           'ledger','eidos','connectors','worker','pages',
                           'neocortex','qhorus',
-                          'work',
-                          'engine',
+                          'Work base','Work A','Work B',
+                          'Engine base','Engine A','Engine B','Engine C',
                           'ras','desiredstate','claudony','agency','casehub-langchain4j','workers',
                           'ops','casehub-mosaic',
                           'drafthouse',
@@ -562,7 +562,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -669,7 +669,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -718,10 +718,10 @@ jobs:
         with: { name: "m2-L2-${{ matrix.repo }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
-  # Level 3: work (needs qhorus from L2)
+  # Level 3: work — base → slices(2)
   # ════════════════════════════════════════════════════════════════════
-  level3:
-    name: "L3: work"
+  work-base:
+    name: "L3: Work base"
     needs: [convergence, level2]
     if: always() && !cancelled() && (needs.level2.result == 'success' || inputs.resume_from == 'L3')
     runs-on: ubuntu-latest
@@ -756,7 +756,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -796,18 +796,73 @@ jobs:
       - name: Build
         run: |
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "work" mvn install -fae -T 1C $SKIP_FLAG -f work/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 45
+          bash docs/run-with-progress.sh --parallel "Work base" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 20
       - uses: actions/upload-artifact@v4
-        with: { name: m2-L3-work, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+        with: { name: m2-L3-work-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+
+  work-slices:
+    name: "L3: Work ${{ matrix.slice }}"
+    needs: [convergence, work-base]
+    if: always() && !cancelled() && needs.work-base.result == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: [a, b]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: actions/setup-java@v4
+        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: m2-deps-${{ runner.os }}-
+      - name: Purge casehub snapshots
+        run: |
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+      - run: |
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
+      - name: "Build slice ${{ matrix.slice }}"
+        run: |
+          SLICE_NAME="Work $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
+          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
+          bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m2-L3-work-slice-${{ matrix.slice }}
+          path: ~/.m2/repository/io/casehub
+          retention-days: 1
+          compression-level: 1
 
   # ════════════════════════════════════════════════════════════════════
-  # Level 4: engine (needs work from L3)
+  # Level 4: engine — base → slices(3)
   # ════════════════════════════════════════════════════════════════════
-  level4:
-    name: "L4: engine"
-    needs: [convergence, level3]
-    if: always() && !cancelled() && (needs.level3.result == 'success' || inputs.resume_from == 'L4')
+  engine-base:
+    name: "L4: Engine base"
+    needs: [convergence, work-slices]
+    if: always() && !cancelled() && (needs.work-slices.result == 'success' || inputs.resume_from == 'L4')
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -840,7 +895,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -863,7 +918,6 @@ jobs:
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
         run: |
-          # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -880,18 +934,73 @@ jobs:
       - name: Build
         run: |
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "engine" mvn install -fae -T 1C $SKIP_FLAG -f engine/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 75
+          bash docs/run-with-progress.sh --parallel "Engine base" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 30
       - uses: actions/upload-artifact@v4
-        with: { name: m2-L4-engine, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+        with: { name: m2-L4-engine-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+
+  engine-slices:
+    name: "L4: Engine ${{ matrix.slice }}"
+    needs: [convergence, engine-base]
+    if: always() && !cancelled() && needs.engine-base.result == 'success'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        slice: [a, b, c]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - uses: actions/setup-java@v4
+        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: m2-deps-${{ runner.os }}-
+      - name: Purge casehub snapshots
+        run: |
+          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+          rm -rf ~/.m2/repository/io/casehub
+          mkdir -p ~/.m2/repository/io/casehub
+          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+      - run: |
+          mvn install -N -f parent/pom.xml --batch-mode -q
+          mvn install -N -f platform/pom.xml --batch-mode -q
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
+      - name: "Build slice ${{ matrix.slice }}"
+        run: |
+          SLICE_NAME="Engine $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
+          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
+          bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
+        timeout-minutes: 45
+      - uses: actions/upload-artifact@v4
+        with:
+          name: m2-L4-engine-slice-${{ matrix.slice }}
+          path: ~/.m2/repository/io/casehub
+          retention-days: 1
+          compression-level: 1
 
   # ════════════════════════════════════════════════════════════════════
   # Level 5: [ras+desiredstate] | [claudony+agency] | [langchain4j+workers]
   # ════════════════════════════════════════════════════════════════════
   level5:
     name: "L5: ${{ matrix.name }}"
-    needs: [convergence, level4]
-    if: always() && !cancelled() && (needs.level4.result == 'success' || inputs.resume_from == 'L5')
+    needs: [convergence, engine-slices]
+    if: always() && !cancelled() && (needs.engine-slices.result == 'success' || inputs.resume_from == 'L5')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -934,7 +1043,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1033,7 +1142,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1123,7 +1232,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1223,7 +1332,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1313,7 +1422,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','work','engine','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
+          phases = ['Prepare + Platform base','Platform A','Platform B','Platform C','Platform D','Platform convergence','ledger','eidos','connectors','worker','pages','neocortex','qhorus','Work base','Work A','Work B','Engine base','Engine A','Engine B','Engine C','ras','desiredstate','claudony','agency','casehub-langchain4j','workers','ops','casehub-mosaic','drafthouse','life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw','scaffold','fsitrading']
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1363,7 +1472,7 @@ jobs:
   # ════════════════════════════════════════════════════════════════════
   finalize:
     name: "Finalize"
-    needs: [prepare, convergence, level1, level2, level3, level4, level5, level6, level7, level8, level9]
+    needs: [prepare, convergence, level1, level2, work-base, work-slices, engine-base, engine-slices, level5, level6, level7, level8, level9]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     env:
@@ -1397,7 +1506,7 @@ jobs:
         if: always()
         run: |
           BUILD_OK=true
-          for result in "${{ needs.prepare.result }}" "${{ needs.convergence.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.level4.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
+          for result in "${{ needs.prepare.result }}" "${{ needs.convergence.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.work-base.result }}" "${{ needs.work-slices.result }}" "${{ needs.engine-base.result }}" "${{ needs.engine-slices.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
             if [ "$result" = "failure" ]; then
               BUILD_OK=false
               break
