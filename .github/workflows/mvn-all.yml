@@ -31,6 +31,7 @@ on:
           - L1
           - L2
           - L3
+          - L4
           - L5
           - L8
         default: ''
@@ -806,7 +807,7 @@ jobs:
   level4:
     name: "L4: engine"
     needs: [convergence, level3]
-    if: always() && !cancelled() && needs.level3.result == 'success'
+    if: always() && !cancelled() && (needs.level3.result == 'success' || inputs.resume_from == 'L4')
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
