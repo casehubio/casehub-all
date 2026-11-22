@@ -5,6 +5,9 @@
 # base:   optional phase before stacks fan out
 # convergence: optional phase after all stacks complete
 # resume: marks valid resume_from targets
+# repos:  optional — repo directories when phase names don't match
+#         (e.g. L0 phases are "Platform A" but the repo is "platform").
+#         Omit when stack entries ARE directory names (most levels).
 #
 # Dashboard rendering rules (derived from structure):
 #   base present        → base shown first, then fan-out to stacks
@@ -15,6 +18,7 @@
 
 levels:
   - id: L0
+    repos: [platform]
     base: Prepare + Platform base
     stacks:
       - [Platform A]
@@ -38,6 +42,7 @@ levels:
 
   - id: L3
     resume: true
+    repos: [work]
     base: Work base
     stacks:
       - [Work A]
@@ -45,6 +50,7 @@ levels:
 
   - id: L4
     resume: true
+    repos: [engine]
     base: Engine base
     stacks:
       - [Engine A]
