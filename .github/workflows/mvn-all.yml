@@ -121,7 +121,9 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -460,7 +462,9 @@ jobs:
       maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Java 22
         if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
@@ -564,7 +568,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -679,7 +685,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -776,7 +784,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -869,7 +879,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -930,7 +942,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1022,7 +1036,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -1095,7 +1111,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1204,7 +1222,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1304,7 +1324,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1414,7 +1436,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1514,7 +1538,9 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1599,7 +1625,9 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with:
+          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
       - name: Configure git
         run: |
           git config user.email "github-actions@github.com"
