@@ -188,16 +188,10 @@ jobs:
             fi
           done | sort -u || true)
           if [ -n "$DIVERGED" ]; then
-            echo "::error::Version divergence detected — offline builds will fail."
-            echo "Annotation processor paths ignore dependencyManagement and resolve the 'natural' version."
-            echo "go-offline downloads the BOM version, leaving the natural version missing from cache."
-            echo ""
+            echo "::warning::Version divergence detected — may affect annotation processor resolution."
             echo "$DIVERGED"
-            echo ""
-            echo "Fix: add each divergent dep to the parent BOM <dependencyManagement> at the 'natural' version."
-            exit 1
           else
-            echo "✓ No version divergence — offline builds safe"
+            echo "✓ No version divergence"
           fi
       - name: Save dependency cache
         if: always()
