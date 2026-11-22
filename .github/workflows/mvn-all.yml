@@ -163,10 +163,14 @@ jobs:
           echo "Cache restored — $(du -sh ~/.m2/repository 2>/dev/null | cut -f1 || echo '0'). Verifying completeness..."
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
-          mvn validate -f platform/pom.xml --batch-mode -ntp -U -q 2>/dev/null || true
           mvn dependency:go-offline -f parent/pom.xml --batch-mode -ntp -U || true
+          # Compile platform to resolve ALL deps: annotation processor paths,
+          # Quarkus deployment artifacts, and plugin dependencies.
+          # dependency:go-offline misses transitive deps of annotation processors
+          # and Quarkus generate-code deployment artifacts.
+          mvn compile -DskipTests -Dquarkus.build.skip=true -f platform/pom.xml --batch-mode -ntp -U -q 2>/dev/null || true
           for repo in $(python3 -c "import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));print(' '.join(sorted(set(r for _l in _p['levels'] for r in (_l.get('repos') or [n for _s in _l['stacks'] for n in _s])))))"); do
-            if [ -f "$repo/pom.xml" ]; then
+            if [ -f "$repo/pom.xml" ] && [ "$repo" != "platform" ]; then
               ( mvn dependency:go-offline quarkus:go-offline -f "$repo/pom.xml" --batch-mode -ntp -U -q 2>/dev/null || mvn dependency:go-offline -f "$repo/pom.xml" --batch-mode -ntp -U -q 2>/dev/null; echo "  ✓ $repo" ) &
             fi
           done
