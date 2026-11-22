@@ -438,7 +438,8 @@ Step timeouts per level:
 
 Setup overhead per job (selective submodule init, cache restore, artifact
 download) adds ~30-60 seconds per job transition. With selective init, each
-job clones only 3 repos instead of 31.
+job clones only 2-5 repos (parent + platform + its build targets) instead
+of all 31.
 
 ## CI Dashboard
 
