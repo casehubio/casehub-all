@@ -167,7 +167,7 @@ jobs:
           mvn dependency:go-offline -f parent/pom.xml --batch-mode -ntp -U || true
           for repo in $(python3 -c "import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));print(' '.join(set(n for _l in _p['levels'] for _s in _l['stacks'] for n in _s)))"); do
             if [ -f "$repo/pom.xml" ]; then
-              ( mvn quarkus:go-offline dependency:resolve-plugins -f "$repo/pom.xml" --batch-mode -ntp -U -q 2>/dev/null || mvn dependency:resolve dependency:resolve-plugins -f "$repo/pom.xml" --batch-mode -ntp -U -q 2>/dev/null; echo "  ✓ $repo" ) &
+              ( mvn dependency:go-offline quarkus:go-offline -f "$repo/pom.xml" --batch-mode -ntp -U -q 2>/dev/null || mvn dependency:go-offline -f "$repo/pom.xml" --batch-mode -ntp -U -q 2>/dev/null; echo "  ✓ $repo" ) &
             fi
           done
           wait
