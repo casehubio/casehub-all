@@ -115,7 +115,7 @@ jobs:
   warm-cache:
     name: "Warm dependency cache"
     needs: [gate]
-    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
+    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' && inputs.test_mode != 'dry' }}
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -413,6 +413,7 @@ jobs:
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download platform base artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         with: { name: m2-platform-base, path: ~/.m2/repository/io/casehub }
 
@@ -509,9 +510,11 @@ jobs:
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download platform artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         with: { pattern: "m2-platform-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: Download Jandex indexes
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         with: { pattern: "jandex-platform-*", path: platform, merge-multiple: true }
       - name: Validate artifacts
@@ -903,6 +906,7 @@ jobs:
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: "Build slice ${{ matrix.slice }}"
@@ -1058,6 +1062,7 @@ jobs:
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
       - name: "Build slice ${{ matrix.slice }}"
