@@ -195,6 +195,11 @@ run_with_healing() {
   return $EXIT_CODE
 }
 
+# Pre-flight cache validation — catch corrupt JARs before Maven hits them
+if [ -f docs/validate-cache.sh ]; then
+  bash docs/validate-cache.sh --heal 2>&1 | tail -3
+fi
+
 set +e
 run_with_healing "$@"
 set -e
