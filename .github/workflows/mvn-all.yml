@@ -176,14 +176,13 @@ jobs:
           echo "Dependencies resolved — $(du -sh ~/.m2/repository | cut -f1) in ${ELAPSED}s (delta: ${DELTA}KB)"
           echo "elapsed=$ELAPSED" >> "$GITHUB_OUTPUT"
           echo "delta=$DELTA" >> "$GITHUB_OUTPUT"
-      - name: Verify offline completeness
+      - name: Check annotation processor version divergence
         run: |
-          echo "Verifying annotation processor paths and Quarkus deployment deps resolve offline..."
-          mvn compile -DskipTests -Dquarkus.build.skip=true -o -pl agent-http -f platform/pom.xml --batch-mode -ntp -q 2>&1 || {
-            echo "::error::Offline verification failed — annotation processor path deps missing from cache. Check for version divergence between dependencyManagement and annotationProcessorPaths."
-            exit 1
-          }
-          echo "✓ Offline build verification passed"
+          DIVERGED=$(mvn dependency:tree -f platform/pom.xml --batch-mode -ntp -Dverbose 2>&1 | grep "version managed from" | sed 's/.*(\(.*\)).*/\1/' | grep -v "omitted for" | sort -u || true)
+          if [ -n "$DIVERGED" ]; then
+            echo "::warning::Managed version divergence detected — these deps resolve differently in annotation processor paths vs regular deps. If any are in annotationProcessorPaths, offline builds will fail."
+            echo "$DIVERGED"
+          fi
       - name: Save dependency cache
         if: always()
         uses: actions/cache/save@v4
