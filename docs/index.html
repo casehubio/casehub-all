@@ -300,44 +300,35 @@ function phaseBox(p,clickFn){
 }
 
 function renderPipe(phases,id,clickFn){
-  const el=document.getElementById(id);if(!el)return;
+  const el=document.getElementById(id);if(!el||!window._pipeline)return;
   const m={};(phases||[]).forEach(p=>m[p.name]=p);
-  const prep=m['Prepare + Platform base'];
-  const plat=['Platform A','Platform B','Platform C','Platform D'].map(n=>m[n]);
-  const conv=m['Platform convergence'];
-  const tall=(groups)=>groups.sort((a,b)=>b.length-a.length);
-  const L1=tall([[m['ledger'],m['eidos']],[m['worker'],m['pages']],[m['connectors']]]);
-  const L2=[m['neocortex'],m['qhorus']];
-  const L3base=m['Work base'], L3slices=['Work A','Work B'].map(n=>m[n]);
-  const L4base=m['Engine base'], L4slices=['Engine A','Engine B','Engine C'].map(n=>m[n]);
-  const L5=tall([[m['claudony']],[m['agency']],[m['ras'],m['desiredstate']],[m['casehub-langchain4j'],m['workers']]]);
-  const L6=tall([[m['ops']],[m['casehub-mosaic']]]);
-  const L7=[[m['drafthouse']]];
-  const L8=tall([[m['devtown'],m['aml'],m['soc']],[m['chat-app'],m['clinical'],m['openclaw']],[m['life']],[m['iot']],[m['quarkmind']]]);
-  const L9=[[m['scaffold'],m['fsitrading']]];
-
+  const tall=(groups)=>[...groups].sort((a,b)=>b.length-a.length);
   const row=(content,cls='pipe-full')=>`<div class="pipe-row ${cls}">${content}</div>`;
   const conn='<div class="pipe-connector"></div>';
   const fan='<div class="pipe-fan"></div>';
   const grp=(g)=>`<div style="flex:1;display:flex;flex-direction:column;gap:2px">${g.map(r=>phaseBox(r,clickFn)).join('')}</div>`;
   const lvl=(label,content,cls='pipe-full')=>`<div class="pipe-level"><span class="lvl-tag">${label}</span><div class="pipe-row ${cls}">${content}</div></div>`;
 
-  el.innerHTML=`<div class="pipe">`+
-    lvl('L0',phaseBox(prep,clickFn))+conn+
-    fan+row(plat.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    row(phaseBox(conv,clickFn))+conn+
-    fan+lvl('L1',L1.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    lvl('L2',L2.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+conn+
-    lvl('L3',phaseBox(L3base,clickFn))+conn+
-    fan+row(L3slices.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    lvl('L4',phaseBox(L4base,clickFn))+conn+
-    fan+row(L4slices.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
-    fan+lvl('L5',L5.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    lvl('L6',L6.map(g=>grp(g)).join(''),'pipe-parallel')+conn+
-    lvl('L7',grp(L7[0]))+conn+
-    fan+lvl('L8',L8.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
-    lvl('L9',grp(L9[0]))+
-    `</div>`;
+  let html='<div class="pipe">';
+  window._pipeline.levels.forEach((level,i)=>{
+    if(i>0) html+=conn;
+    const stacks=level.stacks.map(s=>s.map(n=>m[n]));
+    const sorted=stacks.length>1?tall(stacks):stacks;
+    if(level.base){
+      html+=lvl(level.id,phaseBox(m[level.base],clickFn));
+      html+=conn+fan;
+      html+=row(sorted.map(s=>s.length>1?grp(s):phaseBox(s[0],clickFn)).join(''),'pipe-parallel');
+      html+=fan;
+      if(level.convergence){html+=conn+row(phaseBox(m[level.convergence],clickFn));}
+    }else if(stacks.length>=3){
+      html+=fan+lvl(level.id,sorted.map(s=>grp(s)).join(''),'pipe-parallel')+fan;
+    }else if(stacks.length===2){
+      html+=lvl(level.id,sorted.map(s=>grp(s)).join(''),'pipe-parallel');
+    }else{
+      html+=lvl(level.id,grp(sorted[0]));
+    }
+  });
+  el.innerHTML=html+'</div>';
 }
 
 // ── Detail panel ──────────────────────────────────────────────────
@@ -464,7 +455,7 @@ async function refresh(){
     document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · '+Math.round(POLL_MS/1000)+'s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
 }
-refresh();setInterval(refresh,POLL_MS);
+fetch('pipeline.json').then(r=>r.json()).then(p=>{window._pipeline=p;refresh();setInterval(refresh,POLL_MS);});
 
 // ── Build actions ────────────────────────────────────────────────
 function detectFailedLevel(){

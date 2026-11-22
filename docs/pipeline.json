@@ -1,0 +1,54 @@
+{
+  "levels": [
+    {
+      "id": "L0",
+      "base": "Prepare + Platform base",
+      "stacks": [["Platform A"], ["Platform B"], ["Platform C"], ["Platform D"]],
+      "convergence": "Platform convergence"
+    },
+    {
+      "id": "L1",
+      "resume": true,
+      "stacks": [["ledger", "eidos"], ["connectors"], ["worker", "pages"]]
+    },
+    {
+      "id": "L2",
+      "resume": true,
+      "stacks": [["neocortex"], ["qhorus"]]
+    },
+    {
+      "id": "L3",
+      "resume": true,
+      "base": "Work base",
+      "stacks": [["Work A"], ["Work B"]]
+    },
+    {
+      "id": "L4",
+      "resume": true,
+      "base": "Engine base",
+      "stacks": [["Engine A"], ["Engine B"], ["Engine C"]]
+    },
+    {
+      "id": "L5",
+      "resume": true,
+      "stacks": [["ras", "desiredstate"], ["claudony"], ["agency"], ["casehub-langchain4j", "workers"]]
+    },
+    {
+      "id": "L6",
+      "stacks": [["ops"], ["casehub-mosaic"]]
+    },
+    {
+      "id": "L7",
+      "stacks": [["drafthouse"]]
+    },
+    {
+      "id": "L8",
+      "resume": true,
+      "stacks": [["life"], ["iot"], ["quarkmind"], ["devtown", "aml", "soc"], ["chat-app", "clinical", "openclaw"]]
+    },
+    {
+      "id": "L9",
+      "stacks": [["scaffold", "fsitrading"]]
+    }
+  ]
+}
