@@ -59,16 +59,16 @@ stats = {}
 try:
     mods = re.findall(r'^\[INFO\] [\w. -]+ \.+ (SUCCESS|FAILURE|SKIPPED)', log, re.MULTILINE)
     stats['modules'] = len(mods)
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     stats['tests_run'] = sum(int(m) for m in re.findall(r'Tests run: (\d+)', log))
     stats['tests_failed'] = sum(int(m) for m in re.findall(r'Failures: (\d+)', log)) + sum(int(m) for m in re.findall(r'Errors: (\d+)', log))
     stats['tests_skipped'] = sum(int(m) for m in re.findall(r'Skipped: (\d+)', log))
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try: stats['tests_flaky'] = sum(int(m) for m in re.findall(r'Flakes: (\d+)', log))
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     errors = []
@@ -86,21 +86,21 @@ try:
                         msg = s[:120]; break
                 errors.append({'test': test_name, 'error': msg})
     if errors: stats['test_errors'] = errors[:5]
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     test_lines = re.findall(r'Time elapsed:\s+([0-9.]+)\s*s\s*.*?--\s*in\s+([\w.]+)', log)
     if test_lines:
         by_time = sorted(test_lines, key=lambda x: float(x[0]), reverse=True)
         stats['slowest_tests'] = [{'test': t[1].split('.')[-1], 'seconds': round(float(t[0]),1)} for t in by_time[:5]]
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     mod_lines = re.findall(r'^\[INFO\] ([\w. -]+?) \.+ SUCCESS \[\s*([0-9.]+)\s*s\]', log, re.MULTILINE)
     if mod_lines:
         by_time = sorted(mod_lines, key=lambda x: float(x[1]), reverse=True)
         stats['slowest_modules'] = [{'name': m[0].strip(), 'seconds': round(float(m[1]),1)} for m in by_time[:5]]
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     time_match = re.search(r'Total time:\s+([0-9:.]+)\s*(s|min)', log)
@@ -111,20 +111,20 @@ try:
             stats['maven_time_s'] = int(float(parts[0])) * 60 + (int(float(parts[1])) if len(parts)>1 else 0)
         else:
             stats['maven_time_s'] = int(float(t))
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try: stats['timeouts'] = len(re.findall(r'TimeoutException|timed out', log, re.IGNORECASE))
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     noise = re.compile(r'LogManager|byte-buddy|Overriding managed|Some problems|bootstrap class')
     stats['compilation_warnings'] = len([l for l in log.split('\n') if l.startswith('[WARNING]') and not noise.search(l)])
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     failed_modules = re.findall(r'^\[INFO\] ([\w. -]+?) \.+ FAILURE', log, re.MULTILINE)
     if failed_modules: stats['failed_modules'] = [m.strip() for m in failed_modules]
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     loc_match = re.search(r'\[LOC\] java_src=(\d+) java_test=(\d+) yaml=(\d+) json=(\d+) ts=(\d+) xml=(\d+)', log)
@@ -134,7 +134,7 @@ try:
                'ts': int(loc_match.group(5)), 'xml': int(loc_match.group(6))}
         loc['total'] = sum(loc.values())
         stats['loc'] = loc
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
     corrupt_jars = len(re.findall(r'Corrupt JAR', log))
@@ -142,7 +142,7 @@ try:
     retries = len(re.findall(r'retrying once|retry', log, re.IGNORECASE))
     if corrupt_jars or corrupt_jandex or retries:
         stats['self_healing'] = {'corrupt_jars_deleted': corrupt_jars, 'corrupt_jandex_deleted': corrupt_jandex, 'retries': retries}
-except: pass
+except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 print(json.dumps(stats))
 " 2>/dev/null || echo '{}'
@@ -183,7 +183,7 @@ elif '$STATUS' in ('success', 'failure', 'skipped'):
             s = datetime.fromisoformat(data['started'].replace('Z','+00:00'))
             e = datetime.fromisoformat('$NOW'.replace('Z','+00:00'))
             data['duration_s'] = int((e - s).total_seconds())
-        except: pass
+        except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
     data.update(stats)
 print(json.dumps(data, indent=2))
 ")
@@ -264,7 +264,7 @@ if cur:
                     if p['name'] == pd['name']:
                         p.update({k:v for k,v in pd.items() if k not in ('name','updated')})
                         break
-        except: pass
+        except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
     started = cur.get('started', '$NOW')
     s = datetime.fromisoformat(started.replace('Z','+00:00'))
