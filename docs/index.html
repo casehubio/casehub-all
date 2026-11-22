@@ -161,7 +161,7 @@ a:hover { text-decoration: underline; }
     <label>Test mode</label>
     <select id="opt-test-mode"><option value="skip">skip (compile only)</option><option value="run">run (full tests)</option></select>
     <label>Resume from</label>
-    <select id="opt-resume"><option value="">From start (full build)</option><option value="auto">From last failure (auto-detect)</option><option value="L1">L1 — ledger, eidos, connectors, worker, pages</option><option value="L2">L2 — neocortex, qhorus</option><option value="L3">L3 — work</option><option value="L5">L5 — claudony, agency, ras, workers</option><option value="L8">L8 — apps (life, iot, quarkmind, devtown…)</option></select>
+    <select id="opt-resume"><option value="">From start (full build)</option><option value="auto">From last failure (auto-detect)</option><option value="L1">L1 — ledger, eidos, connectors, worker, pages</option><option value="L2">L2 — neocortex, qhorus</option><option value="L3">L3 — work</option><option value="L4">L4 — engine</option><option value="L5">L5 — claudony, agency, ras, workers</option><option value="L8">L8 — apps (life, iot, quarkmind, devtown…)</option></select>
     <label>Submodule update</label>
     <select id="opt-submodule"><option value="pinned">pinned (committed SHAs)</option><option value="all">all (latest main)</option><option value="list">list (specific repos)</option></select>
     <div class="modal-actions">
@@ -308,8 +308,9 @@ function renderPipe(phases,id,clickFn){
   const tall=(groups)=>groups.sort((a,b)=>b.length-a.length);
   const L1=tall([[m['ledger'],m['eidos']],[m['worker'],m['pages']],[m['connectors']]]);
   const L2=[m['neocortex'],m['qhorus']];
-  const L3=m['work'], L4=m['engine'];
-  const L5=tall([[m['claudony'],m['agency']],[m['ras'],m['desiredstate']],[m['casehub-langchain4j'],m['workers']]]);
+  const L3base=m['Work base'], L3slices=['Work A','Work B'].map(n=>m[n]);
+  const L4base=m['Engine base'], L4slices=['Engine A','Engine B','Engine C'].map(n=>m[n]);
+  const L5=tall([[m['claudony']],[m['agency']],[m['ras'],m['desiredstate']],[m['casehub-langchain4j'],m['workers']]]);
   const L6=tall([[m['ops']],[m['casehub-mosaic']]]);
   const L7=[[m['drafthouse']]];
   const L8=tall([[m['devtown'],m['aml'],m['soc']],[m['chat-app'],m['clinical'],m['openclaw']],[m['life']],[m['iot']],[m['quarkmind']]]);
@@ -327,8 +328,10 @@ function renderPipe(phases,id,clickFn){
     row(phaseBox(conv,clickFn))+conn+
     fan+lvl('L1',L1.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
     lvl('L2',L2.map(r=>phaseBox(r,clickFn)).join(''),'pipe-parallel')+conn+
-    lvl('L3',phaseBox(L3,clickFn))+conn+
-    lvl('L4',phaseBox(L4,clickFn))+conn+
+    lvl('L3',phaseBox(L3base,clickFn))+conn+
+    fan+row(L3slices.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
+    lvl('L4',phaseBox(L4base,clickFn))+conn+
+    fan+row(L4slices.map(s=>phaseBox(s,clickFn)).join(''),'pipe-parallel')+fan+conn+
     fan+lvl('L5',L5.map(g=>grp(g)).join(''),'pipe-parallel')+fan+conn+
     lvl('L6',L6.map(g=>grp(g)).join(''),'pipe-parallel')+conn+
     lvl('L7',grp(L7[0]))+conn+
