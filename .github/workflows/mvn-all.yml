@@ -122,7 +122,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
       - if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
@@ -381,8 +381,11 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform
       - name: Set up Java 22
         if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
@@ -451,8 +454,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform
       - name: Set up Java 22
         if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
@@ -559,8 +565,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -676,8 +685,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform ${{ matrix.repo }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -774,8 +786,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform work
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -868,8 +883,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform work
       - if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -931,8 +949,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform engine
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1024,8 +1045,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform engine
       - if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
@@ -1099,8 +1123,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1209,8 +1236,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1310,8 +1340,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform drafthouse
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1421,8 +1454,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1522,8 +1558,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        if: inputs.test_mode != 'dry'
+        run: git submodule update --init --depth=1 parent platform scaffold fsitrading
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1609,7 +1648,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Configure git
         run: |
