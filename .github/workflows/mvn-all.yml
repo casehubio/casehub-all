@@ -173,9 +173,17 @@ jobs:
           ELAPSED=$(( $(date +%s) - START ))
           CACHE_SIZE_AFTER=$(du -s ~/.m2/repository 2>/dev/null | cut -f1 || echo 0)
           DELTA=$(( CACHE_SIZE_AFTER - CACHE_SIZE_BEFORE ))
-          echo "Dependencies verified — $(du -sh ~/.m2/repository | cut -f1) in ${ELAPSED}s (delta: ${DELTA}KB)"
+          echo "Dependencies resolved — $(du -sh ~/.m2/repository | cut -f1) in ${ELAPSED}s (delta: ${DELTA}KB)"
           echo "elapsed=$ELAPSED" >> "$GITHUB_OUTPUT"
           echo "delta=$DELTA" >> "$GITHUB_OUTPUT"
+      - name: Verify offline completeness
+        run: |
+          echo "Verifying annotation processor paths and Quarkus deployment deps resolve offline..."
+          mvn compile -DskipTests -Dquarkus.build.skip=true -o -pl agent-http -f platform/pom.xml --batch-mode -ntp -q 2>&1 || {
+            echo "::error::Offline verification failed — annotation processor path deps missing from cache. Check for version divergence between dependencyManagement and annotationProcessorPaths."
+            exit 1
+          }
+          echo "✓ Offline build verification passed"
       - name: Save dependency cache
         if: always()
         uses: actions/cache/save@v4
