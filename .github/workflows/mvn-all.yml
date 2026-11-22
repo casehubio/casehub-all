@@ -477,7 +477,7 @@ jobs:
   convergence:
     name: "Platform convergence"
     needs: [prepare, platform-slices]
-    if: inputs.resume_from == ''
+    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
