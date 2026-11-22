@@ -121,8 +121,9 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
-      - uses: actions/setup-java@v4
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - name: Restore dependency cache
         uses: actions/cache/restore@v4
@@ -288,6 +289,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Set up Java 22
+        if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with:
           java-version: '22'
@@ -297,6 +299,7 @@ jobs:
           server-password: GITHUB_TOKEN
 
       - name: Restore Maven cache
+        if: inputs.test_mode != 'dry'
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
@@ -323,6 +326,7 @@ jobs:
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
       - name: Install parent POMs
+        if: inputs.test_mode != 'dry'
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -332,6 +336,7 @@ jobs:
         timeout-minutes: 5
 
       - name: Validate produced JARs
+        if: inputs.test_mode != 'dry'
         run: |
           BAD=0
           while IFS= read -r -d '' jar; do
@@ -343,6 +348,7 @@ jobs:
           if [ "$BAD" -gt 0 ]; then exit 1; fi
 
       - name: Upload platform base .m2 artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with:
           name: m2-platform-base
@@ -351,6 +357,7 @@ jobs:
           compression-level: 1
 
       - name: Upload platform base Jandex indexes
+        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with:
           name: jandex-platform-base
@@ -388,15 +395,18 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up Java 22
+        if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - name: Restore Maven cache
+        if: inputs.test_mode != 'dry'
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Install parent POMs
+        if: inputs.test_mode != 'dry'
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -412,6 +422,7 @@ jobs:
         timeout-minutes: 45
 
       - name: Upload slice .m2 artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with:
           name: m2-platform-slice-${{ matrix.slice }}
@@ -419,6 +430,7 @@ jobs:
           retention-days: 1
           compression-level: 1
       - name: Upload slice Jandex indexes
+        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with:
           name: jandex-platform-slice-${{ matrix.slice }}
@@ -448,11 +460,13 @@ jobs:
       maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Set up Java 22
+        if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - name: Restore Maven cache
+        if: inputs.test_mode != 'dry'
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
@@ -476,6 +490,7 @@ jobs:
           echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
           echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -485,6 +500,7 @@ jobs:
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - name: Install parent POMs
+        if: inputs.test_mode != 'dry'
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
@@ -514,6 +530,7 @@ jobs:
           bash docs/run-with-progress.sh --parallel "Platform convergence" mvn install -T 1C $SKIP_FLAG -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
       - name: Upload convergence artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: m2-ecosystem-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
@@ -547,7 +564,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -579,31 +596,36 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: |
           REPOS="${{ matrix.repos }}"
           if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
       - name: Set up Java 22
+        if: inputs.test_mode != 'dry'
         uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with: { node-version: '22' }
       - name: Enable Corepack
+        if: inputs.test_mode != 'dry'
         run: corepack enable
       - name: Restore Maven cache
+        if: inputs.test_mode != 'dry'
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Restore native library cache
+        if: inputs.test_mode != 'dry'
         uses: actions/cache@v4
         with:
           path: ~/.casehub
           key: casehub-native-${{ runner.os }}-sherpa-${{ hashFiles('connectors/voice-sherpa/src/main/java/**/SherpaLibrary.java') }}
           restore-keys: casehub-native-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -613,11 +635,12 @@ jobs:
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
       - name: Install parent POMs
+        if: inputs.test_mode != 'dry'
         run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download convergence artifacts
-        if: inputs.resume_from == ''
+        if: inputs.resume_from == '' && inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         with: { name: m2-ecosystem-base, path: ~/.m2/repository/io/casehub }
       - name: Build
@@ -628,6 +651,7 @@ jobs:
           done
         timeout-minutes: 35
       - name: Upload artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: "m2-L1-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
@@ -655,7 +679,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -687,19 +711,24 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: git submodule update --remote ${{ matrix.repo }}
-      - uses: actions/setup-java@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/setup-node@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: corepack enable
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        run: corepack enable
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -708,10 +737,12 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
@@ -720,7 +751,9 @@ jobs:
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
           bash docs/run-with-progress.sh --parallel "${{ matrix.repo }}" mvn install -fae -T 1C $SKIP_FLAG -f ${{ matrix.repo }}/pom.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 35
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with: { name: "m2-L2-${{ matrix.repo }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
@@ -743,7 +776,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -775,16 +808,19 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: git submodule update --remote work
-      - uses: actions/setup-java@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -793,10 +829,12 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
@@ -805,7 +843,9 @@ jobs:
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
           bash docs/run-with-progress.sh --parallel "Work base" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with: { name: m2-L3-work-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   work-slices:
@@ -829,15 +869,18 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
-      - uses: actions/setup-java@v4
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
@@ -845,7 +888,8 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
@@ -857,7 +901,9 @@ jobs:
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
           bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 30
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with:
           name: m2-L3-work-slice-${{ matrix.slice }}
           path: ~/.m2/repository/io/casehub
@@ -884,7 +930,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -916,16 +962,19 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: git submodule update --remote engine
-      - uses: actions/setup-java@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
@@ -933,10 +982,12 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
@@ -945,7 +996,9 @@ jobs:
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
           bash docs/run-with-progress.sh --parallel "Engine base" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 30
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with: { name: m2-L4-engine-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   engine-slices:
@@ -969,15 +1022,18 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
-      - uses: actions/setup-java@v4
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
@@ -985,7 +1041,8 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
@@ -997,7 +1054,9 @@ jobs:
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
           bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with:
           name: m2-L4-engine-slice-${{ matrix.slice }}
           path: ~/.m2/repository/io/casehub
@@ -1036,7 +1095,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1068,21 +1127,26 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: |
           REPOS="${{ matrix.repos }}"
           if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
-      - uses: actions/setup-java@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/setup-node@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: corepack enable
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        run: corepack enable
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -1091,10 +1155,12 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
@@ -1104,7 +1170,9 @@ jobs:
             bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS
           done
         timeout-minutes: 25
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with: { name: "m2-L5-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
@@ -1136,7 +1204,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1168,21 +1236,26 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: |
           REPOS="${{ matrix.repos }}"
           if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
-      - uses: actions/setup-java@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/setup-node@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: corepack enable
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        run: corepack enable
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -1191,10 +1264,12 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
@@ -1204,7 +1279,9 @@ jobs:
             bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS ${{ matrix.maven_extra }}
           done
         timeout-minutes: 25
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with: { name: "m2-L6-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
@@ -1227,7 +1304,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1259,19 +1336,24 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: git submodule update --remote drafthouse
-      - uses: actions/setup-java@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/setup-node@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: corepack enable
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        run: corepack enable
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -1280,10 +1362,12 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
@@ -1291,7 +1375,9 @@ jobs:
         run: |
           bash docs/run-with-progress.sh --parallel "drafthouse" mvn install -fae -T 1C -f drafthouse/server/pom.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 25
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with: { name: m2-L7-drafthouse, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
@@ -1328,7 +1414,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1360,21 +1446,26 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: |
           REPOS="${{ matrix.repos }}"
           if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
-      - uses: actions/setup-java@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/setup-node@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - run: corepack enable
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        run: corepack enable
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -1383,10 +1474,12 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
@@ -1396,7 +1489,9 @@ jobs:
             bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS ${{ matrix.maven_extra }}
           done
         timeout-minutes: 30
-      - uses: actions/upload-artifact@v4
+      - if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry'
+        uses: actions/upload-artifact@v4
         with: { name: "m2-L8-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
   # ════════════════════════════════════════════════════════════════════
@@ -1419,7 +1514,7 @@ jobs:
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
         run: |
@@ -1451,17 +1546,20 @@ jobs:
           rm -rf "$TMPDIR"
         continue-on-error: true
       - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned'
+        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
         run: |
           for repo in scaffold fsitrading; do git submodule update --remote "$repo"; done
-      - uses: actions/setup-java@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/setup-java@v4
         with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - uses: actions/cache@v4
+      - if: inputs.test_mode != 'dry'
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Purge casehub snapshots
+        if: inputs.test_mode != 'dry'
         run: |
           # Preserve npm artifact containers — they don't change between levels
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
@@ -1470,10 +1568,12 @@ jobs:
           mkdir -p ~/.m2/repository/io/casehub
           mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
           mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - run: |
+      - if: inputs.test_mode != 'dry'
+        run: |
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
       - name: Download build artifacts
+        if: inputs.test_mode != 'dry'
         uses: actions/download-artifact@v4
         continue-on-error: ${{ inputs.resume_from != '' }}
         with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
@@ -1499,7 +1599,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
     steps:
       - uses: actions/checkout@v4
-        with: { submodules: recursive, token: "${{ secrets.GITHUB_TOKEN }}" }
+        with: { submodules: ${{ inputs.test_mode != 'dry' && 'recursive' || 'false' }}, token: "${{ secrets.GITHUB_TOKEN }}" }
       - name: Configure git
         run: |
           git config user.email "github-actions@github.com"

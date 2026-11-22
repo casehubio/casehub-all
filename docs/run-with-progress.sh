@@ -195,29 +195,12 @@ run_with_healing() {
   return $EXIT_CODE
 }
 
-# Dry run — validate POMs without compiling or testing
+# Dry run — skip Maven entirely, just validate pipeline structure
 if [ "${DRY_RUN:-}" = "true" ]; then
-  # Replace 'mvn install/verify' with 'mvn validate' — checks POM resolution only
-  DRY_CMD=()
-  for arg in "$@"; do
-    case "$arg" in
-      install|verify) DRY_CMD+=("validate") ;;
-      -DskipTests|-Dmaven.test.skip=*|-Dquarkus.build.skip=*|-Dnative.provision.skip=*|-Denforcer.skip=*) ;;
-      -fae|-T) ;;
-      [0-9]*C) ;;
-      *) DRY_CMD+=("$arg") ;;
-    esac
-  done
-  set +e
-  "${DRY_CMD[@]}" 2>&1 | tee "$LOGFILE"
-  EXIT_CODE=${PIPESTATUS[0]}
+  echo "dry run: $PHASE — skipped" | tee "$LOGFILE"
   FINAL_SENT=1
-  if [ "$EXIT_CODE" -eq 0 ]; then
-    bash docs/update-progress.sh "$MODE" "$PHASE" success "$LOGFILE" 2>&1 || true
-  else
-    bash docs/update-progress.sh "$MODE" "$PHASE" failure "$LOGFILE" 2>&1 || true
-  fi
-  exit "$EXIT_CODE"
+  bash docs/update-progress.sh "$MODE" "$PHASE" success "$LOGFILE" 2>&1 || true
+  exit 0
 fi
 
 # Pre-flight cache validation — catch corrupt JARs before Maven hits them
