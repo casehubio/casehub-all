@@ -215,8 +215,8 @@ jobs:
   # ════════════════════════════════════════════════════════════════════
   prepare:
     name: "Prepare + Platform base"
-    needs: [gate]
-    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
+    needs: [gate, warm-cache]
+    if: ${{ always() && !cancelled() && needs.gate.result == 'success' && inputs.resume_from == '' }}
     runs-on: ubuntu-latest
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
