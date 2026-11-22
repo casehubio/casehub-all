@@ -92,10 +92,13 @@ jobs:
   # ════════════════════════════════════════════════════════════════════
   gate:
     name: "Concurrency gate"
-    if: inputs.if_running == 'abort'
     runs-on: ubuntu-latest
+    outputs:
+      mvn-common: ${{ steps.flags.outputs.mvn-common }}
+      maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
       - name: Check for in-progress runs
+        if: inputs.if_running == 'abort'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -108,6 +111,25 @@ jobs:
             exit 1
           fi
           echo "No other runs in progress — proceeding."
+      - name: Compute Maven flags
+        id: flags
+        run: |
+          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
+          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
+            FLAGS="$FLAGS -DskipTests"
+          fi
+          if [ "${{ inputs.quarkus_build }}" != "true" ]; then
+            FLAGS="$FLAGS -Dquarkus.build.skip=true"
+          fi
+          if [ "${{ inputs.enforcer }}" != "true" ]; then
+            FLAGS="$FLAGS -Denforcer.skip=true"
+          fi
+          if [ "${{ inputs.test_mode }}" = "compile" ]; then
+            FLAGS="$FLAGS -Dnative.provision.skip=true"
+          fi
+          echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
+          echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
+          echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
   # ════════════════════════════════════════════════════════════════════
   # Dependency cache — download all third-party deps once, cache between runs
@@ -143,7 +165,7 @@ jobs:
           mvn install -N -f platform/pom.xml --batch-mode -q
           mvn validate -f platform/pom.xml --batch-mode -ntp -U -q 2>/dev/null || true
           mvn dependency:go-offline -f parent/pom.xml --batch-mode -ntp -U || true
-          for repo in platform engine connectors agency work eidos neocortex qhorus pages ledger worker desiredstate ras workers claudony ops casehub-mosaic drafthouse iot chat-app openclaw devtown aml clinical life soc fsitrading quarkmind scaffold casehub-langchain4j; do
+          for repo in $(python3 -c "import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));print(' '.join(set(n for _l in _p['levels'] for _s in _l['stacks'] for n in _s)))"); do
             if [ -f "$repo/pom.xml" ]; then
               ( mvn dependency:resolve dependency:resolve-plugins -f "$repo/pom.xml" --batch-mode -ntp -U -q 2>/dev/null; echo "  ✓ $repo" ) &
             fi
@@ -560,8 +582,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -572,33 +594,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -680,8 +676,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -692,33 +688,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform ${{ matrix.repo }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -781,8 +751,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -793,33 +763,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform work
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -878,8 +822,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -944,8 +888,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -956,33 +900,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform engine
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -1040,8 +958,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1118,8 +1036,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1130,33 +1048,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -1231,8 +1123,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1243,33 +1135,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -1335,8 +1201,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1347,33 +1213,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform drafthouse
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -1449,8 +1289,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1461,33 +1301,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -1553,8 +1367,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1565,33 +1379,7 @@ jobs:
         run: git submodule update --init --depth=1 parent platform scaffold fsitrading
       - name: Initialize dashboard (resume)
         if: inputs.resume_from != ''
-        run: |
-          TMPDIR=$(mktemp -d)
-          curl -sf "$CI_DASHBOARD_URL/progress" > "$TMPDIR/old.json" 2>/dev/null || echo '{}' > "$TMPDIR/old.json"
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          python3 -c "
-          import json
-          old = json.load(open('$TMPDIR/old.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id') and prev['run_id'] != ${GITHUB_RUN_ID}:
-              phases = prev.get('phases', [])
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry = dict(prev, conclusion='failure' if failed else 'success', ended='$NOW',
-                  total_tests=sum(p.get('tests_run',0) for p in phases),
-                  total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
-              history.insert(0, entry)
-          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
-          data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
-          json.dump(data, open('$TMPDIR/body.json','w'))
-          " 2>/dev/null
-          [ -f "$TMPDIR/body.json" ] && curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Init: true" \
-            -d @"$TMPDIR/body.json" > /dev/null || true
-          rm -rf "$TMPDIR"
+        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
         continue-on-error: true
       - name: Pull latest submodules (resume)
         if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
@@ -1724,9 +1512,37 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           RETRY=$(( ${{ inputs.retry_count }} + 1 ))
-          echo "::warning::Build failed (attempt $RETRY/2). Dispatching retry — warm cache will cover previously downloaded deps."
+          RESUME=$(python3 -c "
+          import json, yaml
+          try:
+            progress = json.load(open('/tmp/progress.json'))
+            phases = progress.get('current', {}).get('phases', [])
+            failed = {p['name'] for p in phases if p.get('status') == 'failure'}
+            if not failed:
+              print('')
+            else:
+              pipeline = yaml.safe_load(open('docs/pipeline.yaml'))
+              for lv in pipeline['levels']:
+                if not lv.get('resume'): continue
+                all_names = set()
+                if 'base' in lv: all_names.add(lv['base'])
+                for s in lv['stacks']:
+                  all_names.update(s)
+                if 'convergence' in lv: all_names.add(lv['convergence'])
+                if failed & all_names:
+                  print(lv['id']); break
+              else:
+                print('')
+          except: print('')
+          " 2>/dev/null)
+          if [ -n "$RESUME" ]; then
+            echo "::warning::Build failed at $RESUME (attempt $RETRY/2). Resuming from $RESUME."
+          else
+            echo "::warning::Build failed (attempt $RETRY/2). Full rebuild."
+          fi
           gh workflow run mvn-all.yml \
             -f test_mode=${{ inputs.test_mode }} \
             -f submodule_update=${{ inputs.submodule_update }} \
             -f submodule_list="${{ inputs.submodule_list }}" \
-            -f retry_count="$RETRY"
+            -f retry_count="$RETRY" \
+            -f resume_from="$RESUME"
