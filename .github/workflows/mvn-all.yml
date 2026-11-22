@@ -399,7 +399,7 @@ jobs:
   # ════════════════════════════════════════════════════════════════════
   platform-slices:
     name: "Platform slice ${{ matrix.slice }}"
-    if: inputs.resume_from == ''
+    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
     needs: prepare
     runs-on: ubuntu-latest
     strategy:
