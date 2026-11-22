@@ -198,7 +198,7 @@ jobs:
   # ════════════════════════════════════════════════════════════════════
   prepare:
     name: "Prepare + Platform base"
-    needs: [gate]
+    needs: [gate, warm-cache]
     if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
     runs-on: ubuntu-latest
     env:
@@ -320,7 +320,7 @@ jobs:
       - name: Configure Maven flags
         id: flags
         run: |
-          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
+          FLAGS="--batch-mode -ntp -o -Dquarkus.http.test-port=0"
           if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
             FLAGS="$FLAGS -DskipTests"
           fi
@@ -495,7 +495,7 @@ jobs:
       - name: Configure Maven flags
         id: flags
         run: |
-          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
+          FLAGS="--batch-mode -ntp -o -Dquarkus.http.test-port=0"
           if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
             FLAGS="$FLAGS -DskipTests"
           fi
