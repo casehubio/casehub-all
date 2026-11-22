@@ -760,7 +760,6 @@ jobs:
           bash docs/run-with-progress.sh --parallel "${{ matrix.repo }}" mvn install -fae -T 1C $SKIP_FLAG -f ${{ matrix.repo }}/pom.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 35
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: "m2-L2-${{ matrix.repo }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
@@ -854,7 +853,6 @@ jobs:
           bash docs/run-with-progress.sh --parallel "Work base" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: m2-L3-work-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
@@ -914,7 +912,6 @@ jobs:
           bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 30
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with:
           name: m2-L3-work-slice-${{ matrix.slice }}
@@ -1011,7 +1008,6 @@ jobs:
           bash docs/run-with-progress.sh --parallel "Engine base" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 30
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: m2-L4-engine-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
@@ -1071,7 +1067,6 @@ jobs:
           bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 45
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with:
           name: m2-L4-engine-slice-${{ matrix.slice }}
@@ -1189,7 +1184,6 @@ jobs:
           done
         timeout-minutes: 25
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: "m2-L5-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
@@ -1300,7 +1294,6 @@ jobs:
           done
         timeout-minutes: 25
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: "m2-L6-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
@@ -1398,7 +1391,6 @@ jobs:
           bash docs/run-with-progress.sh --parallel "drafthouse" mvn install -fae -T 1C -f drafthouse/server/pom.xml $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 25
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: m2-L7-drafthouse, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
@@ -1514,7 +1506,6 @@ jobs:
           done
         timeout-minutes: 30
       - if: inputs.test_mode != 'dry'
-        if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: "m2-L8-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
