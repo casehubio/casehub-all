@@ -241,7 +241,7 @@ print(json.dumps(data, indent=2))
         [ -z "$phase_display_name" ] && continue
         phase_name=$(echo "$phase_display_name" | tr ' :+/()' '------' | tr '[:upper:]' '[:lower:]')
         curl -sf "$WORKER_URL/phase-${RUN_ID}-${phase_name}" > "$TMPDIR/phases/${phase_name}.json" 2>/dev/null || echo "{}" > "$TMPDIR/phases/${phase_name}.json"
-      done < <(python3 -c "import json;_p=json.load(open('$SCRIPT_DIR/pipeline.json'));print('\n'.join(n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g))")
+      done < <(python3 -c "import yaml;_p=yaml.safe_load(open('$SCRIPT_DIR/pipeline.yaml'));print('\n'.join(n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g))")
     fi
 
     python3 -c "
@@ -315,7 +315,7 @@ json.dump(data, open('$TMPDIR/result.json', 'w'))
         phase_name=$(echo "$phase_display_name" | tr ' :+/()' '------' | tr '[:upper:]' '[:lower:]')
         curl -sf -X DELETE "$WORKER_URL/phase-${RUN_ID}-${phase_name}" \
           -H "Authorization: Bearer $WORKER_TOKEN" > /dev/null 2>&1 || true
-      done < <(python3 -c "import json;_p=json.load(open('$SCRIPT_DIR/pipeline.json'));print('\n'.join(n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g))")
+      done < <(python3 -c "import yaml;_p=yaml.safe_load(open('$SCRIPT_DIR/pipeline.yaml'));print('\n'.join(n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g))")
     fi
     rm -rf "$TMPDIR"
 

@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       test_mode:
-        description: "skip = compile only (no run), compile = compile only (no run), run = compile + run"
+        description: "dry = POM validate only (no compile), skip = compile (no tests), run = compile + test"
         type: choice
         options:
+          - dry
           - skip
           - compile
           - run
@@ -182,6 +183,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
     outputs:
       mvn-common: ${{ steps.flags.outputs.mvn-common }}
       maven-args: ${{ steps.flags.outputs.maven-args }}
@@ -376,6 +378,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.prepare.outputs.mvn-common }}
       MAVEN_ARGS: ${{ needs.prepare.outputs.maven-args }}
     steps:
@@ -439,6 +442,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
     outputs:
       mvn-common: ${{ steps.flags.outputs.mvn-common }}
       maven-args: ${{ steps.flags.outputs.maven-args }}
@@ -538,6 +542,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -562,7 +567,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -645,6 +650,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -669,7 +675,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -732,6 +738,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -756,7 +763,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -817,6 +824,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -871,6 +879,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -895,7 +904,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -955,6 +964,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -1021,6 +1031,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -1045,7 +1056,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1120,6 +1131,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -1144,7 +1156,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1210,6 +1222,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -1234,7 +1247,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1310,6 +1323,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -1334,7 +1348,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null
@@ -1400,6 +1414,7 @@ jobs:
       CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
       MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}{3}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '', (inputs.test_mode == 'compile') && ' -Dnative.provision.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || inputs.maven_args }}
     steps:
@@ -1424,7 +1439,7 @@ jobs:
                   total_tests=sum(p.get('tests_run',0) for p in phases),
                   total_modules=sum(p.get('modules',0) for p in phases), phases=phases)
               history.insert(0, entry)
-          _p=json.load(open('docs/pipeline.json'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
+          import yaml;_p=yaml.safe_load(open('docs/pipeline.yaml'));phases=[n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g]
           data = {'current':{'run_id':${GITHUB_RUN_ID},'run_url':'$RUN_URL','commit':'${GITHUB_SHA:0:7}','started':'$NOW','resume_from':'${{ inputs.resume_from }}','phases':[{'name':p,'status':'pending'} for p in phases]},'history':history[:200],'_archives':old.get('_archives',[])}
           json.dump(data, open('$TMPDIR/body.json','w'))
           " 2>/dev/null

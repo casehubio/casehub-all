@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CaseHub CI Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
 <style>
 :root {
   --bg: #0d1117; --surface: #161b22; --surface2: #1c2128; --border: #30363d;
@@ -455,7 +456,7 @@ async function refresh(){
     document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · '+Math.round(POLL_MS/1000)+'s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
 }
-fetch('pipeline.json').then(r=>r.json()).then(p=>{window._pipeline=p;refresh();setInterval(refresh,POLL_MS);});
+fetch('pipeline.yaml').then(r=>r.text()).then(t=>{window._pipeline=jsyaml.load(t);refresh();setInterval(refresh,POLL_MS);});
 
 // ── Build actions ────────────────────────────────────────────────
 function detectFailedLevel(){
