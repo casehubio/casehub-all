@@ -176,12 +176,23 @@ jobs:
           echo "Dependencies resolved — $(du -sh ~/.m2/repository | cut -f1) in ${ELAPSED}s (delta: ${DELTA}KB)"
           echo "elapsed=$ELAPSED" >> "$GITHUB_OUTPUT"
           echo "delta=$DELTA" >> "$GITHUB_OUTPUT"
-      - name: Check annotation processor version divergence
+      - name: Check offline safety — version divergence
         run: |
-          DIVERGED=$(mvn dependency:tree -f platform/pom.xml --batch-mode -ntp -Dverbose 2>&1 | grep "version managed from" | sed 's/.*(\(.*\)).*/\1/' | grep -v "omitted for" | sort -u || true)
+          echo "Scanning for deps where managed version ≠ natural version..."
+          DIVERGED=$(mvn dependency:tree -f platform/pom.xml --batch-mode -ntp -Dverbose 2>&1 | grep -oP '\S+:\S+:jar:\S+:\S+ \(version managed from \S+\)' | while read -r line; do
+            managed=$(echo "$line" | grep -oP 'jar:\K[^:]+')
+            natural=$(echo "$line" | grep -oP 'from \K\S+' | tr -d ')')
+            if [ "$managed" != "$natural" ]; then
+              artifact=$(echo "$line" | grep -oP '^\S+:\S+')
+              echo "  $artifact: BOM=$managed, natural=$natural — add to parent BOM at $natural"
+            fi
+          done | sort -u || true)
           if [ -n "$DIVERGED" ]; then
-            echo "::warning::Managed version divergence detected — these deps resolve differently in annotation processor paths vs regular deps. If any are in annotationProcessorPaths, offline builds will fail."
+            echo "::warning::Version divergence detected. Annotation processor paths ignore dependencyManagement and resolve the 'natural' version. If go-offline only downloads the BOM version, offline builds break."
             echo "$DIVERGED"
+            echo "Fix: add each divergent dep to the parent BOM <dependencyManagement> at the 'natural' version."
+          else
+            echo "✓ No version divergence — offline builds safe"
           fi
       - name: Save dependency cache
         if: always()
