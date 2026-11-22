@@ -53,7 +53,8 @@
     <module>../../platform/agent-simulation-core</module>
     <module>../../platform/simulation-config-core</module>
     <module>../../platform/simulation-config</module>
-    <module>../../platform/memory-simulation-core</module>
+    <!-- memory-simulation-core moved to L2 — depends on neocortex-cognitive-api -->
+    <!-- <module>../../platform/memory-simulation-core</module> -->
     <module>../../platform/platform-simulation-core</module>
     <module>../../platform/simulation-testing</module>
     <module>../../platform/simulation-starter</module>

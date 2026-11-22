@@ -139,7 +139,7 @@ jobs:
     needs: [gate]
     if: ${{ !failure() && !cancelled() && inputs.resume_from == '' && inputs.test_mode != 'dry' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -566,7 +566,7 @@ jobs:
       - name: "Platform: full rebuild"
         run: |
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "Platform convergence" mvn install -T 1C $SKIP_FLAG -f platform/pom.xml $MVN_COMMON $MAVEN_ARGS
+          bash docs/run-with-progress.sh --parallel "Platform convergence" mvn install -T 1C $SKIP_FLAG -f platform/pom.xml -pl '!memory-simulation-core' $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
       - name: Upload convergence artifacts
         if: inputs.test_mode != 'dry'
