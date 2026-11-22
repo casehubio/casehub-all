@@ -140,11 +140,8 @@ if $HEAL && [ $((CORRUPT + MISSING)) -gt 0 ]; then
   find "$M2_REPO" -name "*.lastUpdated" -delete 2>/dev/null || true
   echo "  Cleared .lastUpdated markers"
 
-  if [ ${#MISSING_ARTIFACTS[@]:-0} -gt 0 ]; then
-    echo "  Re-resolving ${#MISSING_ARTIFACTS[@]} missing artifacts..."
-    # Note: casehub SNAPSHOTs come from level artifacts, not Maven Central.
-    # This heal step only fixes third-party deps. Casehub artifacts are
-    # restored via actions/download-artifact in the workflow.
+  if [ "$MISSING" -gt 0 ]; then
+    echo "  $MISSING casehub artifacts missing (expected — restored via level artifacts)"
   fi
 
   echo "  Healed: ${HEALED} corrupt JARs removed"
