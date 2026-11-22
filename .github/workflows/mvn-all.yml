@@ -1008,8 +1008,10 @@ jobs:
         include:
           - name: "ras, desiredstate"
             repos: "ras desiredstate"
-          - name: "claudony, agency"
-            repos: "claudony agency"
+          - name: "claudony"
+            repos: "claudony"
+          - name: "agency"
+            repos: "agency"
           - name: "casehub-langchain4j, workers"
             repos: "casehub-langchain4j workers"
     env:
