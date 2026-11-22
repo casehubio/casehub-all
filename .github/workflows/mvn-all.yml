@@ -214,7 +214,7 @@ jobs:
   # ════════════════════════════════════════════════════════════════════
   prepare:
     name: "Prepare + Platform base"
-    needs: [gate, warm-cache]
+    needs: [gate]
     if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
     runs-on: ubuntu-latest
     env:
