@@ -160,9 +160,9 @@ a:hover { text-decoration: underline; }
   <div class="build-modal-content">
     <h3 id="modal-title">Trigger Build</h3>
     <label>Test mode</label>
-    <select id="opt-test-mode"><option value="skip">skip (compile only)</option><option value="run">run (full tests)</option></select>
+    <select id="opt-test-mode"><option value="dry">dry (pipeline only)</option><option value="skip">skip (compile only)</option><option value="compile">compile (no tests)</option><option value="run">run (full tests)</option></select>
     <label>Resume from</label>
-    <select id="opt-resume"><option value="">From start (full build)</option><option value="auto">From last failure (auto-detect)</option><option value="L1">L1 — ledger, eidos, connectors, worker, pages</option><option value="L2">L2 — neocortex, qhorus</option><option value="L3">L3 — work</option><option value="L4">L4 — engine</option><option value="L5">L5 — claudony, agency, ras, workers</option><option value="L8">L8 — apps (life, iot, quarkmind, devtown…)</option></select>
+    <select id="opt-resume"><option value="">From start (full build)</option><option value="auto">From last failure (auto-detect)</option></select>
     <label>Submodule update</label>
     <select id="opt-submodule"><option value="pinned">pinned (committed SHAs)</option><option value="all">all (latest main)</option><option value="list">list (specific repos)</option></select>
     <div class="modal-actions">
@@ -456,23 +456,34 @@ async function refresh(){
     document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · '+Math.round(POLL_MS/1000)+'s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
 }
-fetch('pipeline.yaml').then(r=>r.text()).then(t=>{window._pipeline=jsyaml.load(t);refresh();setInterval(refresh,POLL_MS);});
+fetch('pipeline.yaml').then(r=>{if(!r.ok)throw new Error('pipeline.yaml: '+r.status);return r.text();}).then(t=>{
+  window._pipeline=jsyaml.load(t);
+  const sel=document.getElementById('opt-resume');
+  for(const lv of window._pipeline.levels){
+    if(!lv.resume)continue;
+    const names=lv.stacks.flat().join(', ');
+    const opt=document.createElement('option');opt.value=lv.id;opt.textContent=lv.id+' — '+names;
+    sel.appendChild(opt);
+  }
+  refresh();setInterval(refresh,POLL_MS);
+}).catch(e=>{document.getElementById('refresh-info').textContent='Failed to load pipeline: '+e.message;});
 
 // ── Build actions ────────────────────────────────────────────────
 function detectFailedLevel(){
   const phases=(window._data?.current||window._data?.history?.[0])?.phases||[];
   const failed=phases.filter(p=>p.status==='failure').map(p=>p.name);
-  if(!failed.length)return '';
-  const levelMap={'Prepare + Platform base':'','Platform A':'','Platform B':'','Platform C':'','Platform D':'','Platform convergence':'',
-    'ledger':'L1','eidos':'L1','connectors':'L1','worker':'L1','pages':'L1',
-    'neocortex':'L2','qhorus':'L2','work':'L3','engine':'L3',
-    'ras':'L5','desiredstate':'L5','claudony':'L5','agency':'L5','casehub-langchain4j':'L5','workers':'L5',
-    'ops':'L5','casehub-mosaic':'L5','drafthouse':'L5',
-    'life':'L8','iot':'L8','quarkmind':'L8','devtown':'L8','aml':'L8','soc':'L8',
-    'chat-app':'L8','clinical':'L8','openclaw':'L8','scaffold':'L8','fsitrading':'L8'};
+  if(!failed.length||!window._pipeline)return '';
+  const levelMap={};
+  const resumeOrder=[];
+  for(const lv of window._pipeline.levels){
+    const id=lv.resume?lv.id:'';
+    if(lv.base)levelMap[lv.base]=id;
+    for(const s of lv.stacks)for(const n of s)levelMap[n]=id;
+    if(lv.convergence)levelMap[lv.convergence]=id;
+    if(lv.resume)resumeOrder.push(lv.id);
+  }
   const levels=failed.map(n=>levelMap[n]).filter(Boolean);
-  const order=['L1','L2','L3','L5','L8'];
-  for(const l of order){if(levels.includes(l))return l;}
+  for(const l of resumeOrder){if(levels.includes(l))return l;}
   return '';
 }
 function getToken(){return localStorage.getItem('gh-ci-token')||'';}

@@ -5,6 +5,13 @@
 # base:   optional phase before stacks fan out
 # convergence: optional phase after all stacks complete
 # resume: marks valid resume_from targets
+#
+# Dashboard rendering rules (derived from structure):
+#   base present        → base shown first, then fan-out to stacks
+#   convergence present → convergence shown after stacks fan-in
+#   3+ stacks           → rendered with fan connectors (visual spread)
+#   2 stacks            → parallel, no fan connectors
+#   1 stack             → single column
 
 levels:
   - id: L0

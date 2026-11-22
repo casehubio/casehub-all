@@ -222,20 +222,7 @@ jobs:
                         'commit': '${GITHUB_SHA:0:7}', 'started': '$NOW',
                         'resume_from': '${{ inputs.resume_from }}' or None,
                         'retry_count': ${{ inputs.retry_count || 0 }},
-                        'phases': [
-                          {'name': 'Prepare + Platform base', 'status': 'in_progress', 'started': '$NOW'},
-                        ] + [{'name': p, 'status': 'pending'} for p in [
-                          'Platform A','Platform B','Platform C','Platform D',
-                          'Platform convergence',
-                          'ledger','eidos','connectors','worker','pages',
-                          'neocortex','qhorus',
-                          'Work base','Work A','Work B',
-                          'Engine base','Engine A','Engine B','Engine C',
-                          'ras','desiredstate','claudony','agency','casehub-langchain4j','workers',
-                          'ops','casehub-mosaic',
-                          'drafthouse',
-                          'life','iot','quarkmind','devtown','aml','soc','chat-app','clinical','openclaw',
-                          'scaffold','fsitrading']]},
+                        'phases': (lambda ps: [dict(ps[0], status='in_progress', started='$NOW')] + ps[1:])([{'name':p,'status':'pending'} for p in (lambda _p: [n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g])(yaml.safe_load(open('docs/pipeline.yaml')))])},
             'history': history[:200],
             '_archives': old.get('_archives', [])
           }
