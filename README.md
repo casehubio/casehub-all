@@ -86,15 +86,28 @@ ecosystem.
 ### The Build Cycle
 
 ```
-1. Checkout casehub-all (with submodule pointers from last green build)
-2. Update submodules (mode-dependent — see submodule_update input)
-3. Check dependency graph for cycles (docs/check-cycles.py)
-4. Record SHA manifest                     ← log exact SHAs for reproducibility
-5. Build platform (base → 4 parallel slices → convergence)
-6. Build ecosystem (L1–L9 in dependency order, with parallelism within levels)
-7. If green: git add -u && git commit && git push  ← advance pointers
-8. If failed: auto-retry with resume_from at the failed level (max 2 retries)
+1. Gate: compute MVN_COMMON flags (once, referenced by all jobs)
+2. Warm cache (ONLINE): quarkus:go-offline + dependency:resolve for all repos
+3. Checkout casehub-all + selective submodule init (only repos each job builds)
+4. Update submodules (mode-dependent — see submodule_update input)
+5. Check dependency graph for cycles (docs/check-cycles.py)
+6. Record SHA manifest                     ← log exact SHAs for reproducibility
+7. Build platform (base → 4 parallel slices → convergence)  ← OFFLINE (-o)
+8. Build ecosystem (L1–L9 in dependency order, parallel)    ← OFFLINE (-o)
+9. If green: git add -u && git commit && git push  ← advance pointers
+10. If failed: auto-retry with resume_from at the failed level (max 2 retries)
 ```
+
+**Offline builds:** The warm-cache job is the ONLY job that talks to Maven
+Central. It runs BEFORE prepare (not in parallel) and uses `quarkus:go-offline`
+to fetch Quarkus bootstrap artifacts that standard `dependency:resolve` misses.
+All subsequent build jobs (prepare, convergence, L1–L9) run with `-o` (offline
+mode) — Maven never touches remote repositories during builds. This eliminates
+CDN 429 rate-limiting failures.
+
+**Selective submodule init:** Each job clones only `parent`, `platform`, and
+the repos it builds (via `git submodule update --init --depth=1`). An L8
+quarkmind job clones 3 repos instead of 31, saving ~90 seconds per job.
 
 Step 2 depends on the `submodule_update` input:
 - **`pinned`** (default): use committed SHAs — deterministic, no surprises
@@ -128,7 +141,7 @@ deterministically. Useful for bisecting cross-repo regressions.
 
 ### Resuming from a Level
 
-The `resume_from` input (choice type: `L1`, `L2`, `L3`, `L5`, `L8`) skips
+The `resume_from` input (choice type: `L1`, `L2`, `L3`, `L4`, `L5`, `L8`) skips
 earlier phases. For example, `resume_from=L3` skips platform, L1, and L2,
 jumping straight to L3 (work). This works because:
 
@@ -219,7 +232,12 @@ build to catch cycle regressions.
 
 ### 10-Level Parallel Pipeline
 
-The workflow uses **15+ GitHub Actions jobs** organized into 10 dependency
+The pipeline topology is defined in **`docs/pipeline.yaml`** — a single
+source of truth. The dashboard, workflow phases, and progress scripts all
+derive from this file. To change topology: edit pipeline.yaml; everything
+else updates automatically.
+
+The workflow uses **20+ GitHub Actions jobs** organized into 10 dependency
 levels. Repos at the same level build in parallel on separate runners.
 Artifacts are passed between levels via `actions/upload-artifact` /
 `actions/download-artifact`.
@@ -231,11 +249,11 @@ L1:  [ledger→eidos] | connectors | [worker+pages]       (3 parallel jobs)
        │
 L2:  neocortex | qhorus                                   (2 parallel jobs)
        │
-L3:  work                                                  (1 job)
+L3:  work-base → work-slices(×2)                          (base + 2 parallel)
        │
-L4:  engine                                                (1 job)
+L4:  engine-base → engine-slices(×3)                      (base + 3 parallel)
        │
-L5:  [ras+desiredstate] | [claudony+agency] | [langchain4j+workers]  (3 parallel)
+L5:  [ras+desiredstate] | claudony | agency | [langchain4j+workers]  (4 parallel)
        │
 L6:  ops | casehub-mosaic                                  (2 parallel jobs)
        │
@@ -260,9 +278,9 @@ build sequentially within a single runner — the `→` indicates build order,
 | L0 | platform (base, 4 slices, convergence) | Foundation for everything |
 | L1 | ledger, eidos, connectors, worker, pages | Depend only on platform |
 | L2 | neocortex, qhorus | Need eidos (L1), connectors (L1) |
-| L3 | work | Needs qhorus (L2) |
-| L4 | engine | Needs work (L3), neocortex (L2), qhorus (L2) |
-| L5 | ras, desiredstate, claudony, agency, casehub-langchain4j, workers | Need engine (L4) |
+| L3 | work (base + 2 slices) | Needs qhorus (L2) |
+| L4 | engine (base + 3 slices) | Needs work (L3), neocortex (L2), qhorus (L2) |
+| L5 | ras, desiredstate, claudony, agency, casehub-langchain4j, workers | Need engine (L4). Claudony and agency in separate jobs. |
 | L6 | ops, casehub-mosaic | Foundational infra — ops needs desiredstate (L5), mosaic needs agency (L5) |
 | L7 | drafthouse | Needs mosaic (L6) for UI |
 | L8 | life, iot, quarkmind, devtown, aml, soc, chat-app, clinical, openclaw | Apps — need mosaic (L6) or drafthouse (L7) |
@@ -276,8 +294,8 @@ per bundle — fast enough not to bottleneck, but long enough to amortize setup.
 
 - **L1:** ledger+eidos bundled (eidos depends on ledger, ~15 min combined);
   connectors alone (~15 min); worker+pages bundled (~11 min combined)
-- **L5:** ras+desiredstate (desiredstate depends on ras); claudony+agency
-  (similar CDI infra); langchain4j+workers (both small)
+- **L5:** ras+desiredstate (desiredstate depends on ras); claudony and agency
+  in separate jobs (split for parallelism); langchain4j+workers (both small)
 - **L8:** Apps bundled by dependency similarity: devtown+aml+soc (all need
   mosaic+agency); chat-app+clinical+openclaw (all need mosaic)
 - **L9:** scaffold+fsitrading bundled (both need ops, both small)
@@ -394,6 +412,7 @@ Previously skipped tests that have been **re-enabled** (root causes fixed):
 
 | Mode | Critical path | Total wall-clock |
 |------|--------------|-----------------|
+| `test_mode=dry` (pipeline only) | No Maven — just checkout + dashboard init + echo per job | **~4 min** |
 | `test_mode=skip` (compile only) | L0 ~5m → L1 ~3m → L2 ~2m → L3 ~2m → L4 ~2m → L5 ~2m → L6 ~2m → L7 ~1m → L8 ~2m → L9 ~1m | **~22 min** |
 | `test_mode=run` (full tests) | L0 ~17m → L1 ~15m → L2 ~16m → L3 ~27m → L4 ~22m → L5 ~8m → L6 ~12m → L7 ~6m → L8 ~18m → L9 ~13m | **~150 min** |
 
@@ -417,8 +436,9 @@ Step timeouts per level:
 | L8 | 30m | iot (~18m) or quarkmind (~16m) |
 | L9 | 30m | fsitrading (~13m) |
 
-Setup overhead per job (checkout, cache restore, artifact download) adds ~1-2
-minutes per job transition.
+Setup overhead per job (selective submodule init, cache restore, artifact
+download) adds ~30-60 seconds per job transition. With selective init, each
+job clones only 3 repos instead of 31.
 
 ## CI Dashboard
 
@@ -431,18 +451,21 @@ enforcement.
 
 | Component | Location |
 |-----------|----------|
-| Dashboard HTML | `docs/index.html` (single-file HTML+CSS+JS, no frameworks) |
+| Pipeline topology | `docs/pipeline.yaml` (single source of truth — levels, stacks, resume points) |
+| Dashboard HTML | `docs/index.html` (HTML+CSS+JS, loads js-yaml from CDN for pipeline.yaml) |
 | Data store | Cloudflare Worker + KV at `casehub-ci-dashboard.casehub.workers.dev` |
 | Worker source | `docs/worker/src/index.js` |
+| Dashboard init | `docs/init-dashboard.sh` (archives previous run, creates fresh phase list from pipeline.yaml) |
 | Update script | `docs/update-progress.sh` (phase-file, phase, finish commands) |
-| Maven wrapper | `docs/run-with-progress.sh` (start/end updates per phase) |
+| Maven wrapper | `docs/run-with-progress.sh` (start/end updates, self-healing, timing) |
 | Auth | `CI_DASHBOARD_TOKEN` org secret (write token for Worker) |
 
 ### How Updates Flow
 
-1. **Init (before checkout):** The prepare job's first step creates the
-   `current` object in KV with all phases set to `pending`. This uses
-   `X-Init: true` to establish run_id ownership.
+1. **Init:** `docs/init-dashboard.sh` creates the `current` object in KV
+   with all phases (derived from `docs/pipeline.yaml`) set to `pending`.
+   Uses `X-Init: true` to establish run_id ownership. Called by both the
+   prepare job and by resume-mode level jobs.
 
 2. **Phase start (each job):** Parallel phases write to their own KV keys
    (`phase-{runId}-{name}`) to avoid contention. Sequential phases update
@@ -497,7 +520,8 @@ aggregate lines, and error messages. Each parser section is wrapped in
 | `compilation_warnings` | `[WARNING]` lines (noise filtered) | `45` |
 | `slowest_modules` | Top 5 by time from reactor summary | `[{name, seconds}]` |
 | `slowest_tests` | Top 5 by time from surefire output | `[{test, seconds}]` |
-| `self_healing` | Corrupt JAR/Jandex deletions + retries | `{corrupt_jars: 3, retries: 1}` |
+| `self_healing` | `[HEAL]` structured line with failure classes | `{classes: "corrupt_jar,cdn_resolution"}` |
+| `phase_elapsed_s` | `[TIMING]` line from run-with-progress.sh | `245` |
 | `failed_modules` | Reactor `FAILURE` lines | `["casehub-engine"]` |
 | `test_errors` | Top 5 test failures with error message (120 char) | `[{test, error}]` |
 | `maven_time_s` | `Total time:` line | `2700` |
@@ -688,16 +712,19 @@ The `mvn-all.yml` workflow is parameterised via `workflow_dispatch` inputs:
 
 | Input | Type | Default | Effect |
 |-------|------|---------|--------|
-| `test_mode` | choice | `skip` | `skip` = compile tests but don't run (`-DskipTests`); `compile` = compile tests only (`-DskipTests`); `run` = compile + execute tests. Note: uses `-DskipTests` (not `-Dmaven.test.skip=true`) so test-jar artifacts are still produced for downstream deps. |
+| `test_mode` | choice | `skip` | `dry` = pipeline structure only (no Maven, no submodules, ~4 min); `skip` = compile production + test code, skip execution (`-DskipTests`); `compile` = same as skip + skip native provisioning; `run` = compile + execute tests. All modes except dry run offline (`-o`). |
 | `quarkus_build` | boolean | `false` | When true, runs Quarkus augmentation (produces runner JARs). Leave false — the deadlock makes this unsafe with `-T 1C`. |
 | `enforcer` | boolean | `false` | When true, runs Maven enforcer plugin. |
 | `maven_args` | string | (empty) | Escape hatch for additional Maven flags. Passed via `GITHUB_ENV` to prevent shell injection. |
-| `resume_from` | choice | (empty) | Resume from: `L1`, `L2`, `L3`, `L5`, or `L8`. Skips prepare + platform + earlier levels; downstream levels use cached `.m2`. |
+| `resume_from` | choice | (empty) | Resume from: `L1`, `L2`, `L3`, `L4`, `L5`, or `L8`. Skips prepare + platform + earlier levels; downstream levels use cached `.m2`. Auto-retry detects the first failed level and passes this automatically. |
 | `submodule_update` | choice | `pinned` | `pinned` = use committed SHAs (deterministic); `all` = pull latest main for all repos; `list` = pull latest only for repos named in `submodule_list`. |
 | `submodule_list` | string | (empty) | Comma-separated repo names to update (only when `submodule_update=list`). E.g. `engine,aml,claudony`. |
 | `retry_count` | number | `0` | Auto-retry counter. Set automatically by the retry step — do not set manually. Max 2 retries. |
 
 ```bash
+# Pipeline validation only — no Maven, no submodules (~4 min)
+gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=dry
+
 # Default (compile-only, pinned SHAs, no tests)
 gh workflow run mvn-all.yml --repo casehubio/casehub-all
 
@@ -714,9 +741,10 @@ gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f sub
 gh workflow run mvn-all.yml --repo casehubio/casehub-all -f test_mode=run -f resume_from=L3
 ```
 
-`MVN_COMMON` is assembled dynamically from inputs in the "Configure Maven
-flags" step. `maven_args` is set as the `MAVEN_ARGS` environment variable
-(not interpolated directly) and logged via `::notice::`.
+`MVN_COMMON` is computed once in the gate job and referenced by all level
+jobs via `needs.gate.outputs.mvn-common`. Prepare and convergence compute
+their own flags (identical logic). The `-o` (offline) flag is included in
+all computed flags — builds never access remote repositories.
 
 ## Known Limitations
 
@@ -755,10 +783,10 @@ or corrupted casehub snapshot JARs. On full runs (no `resume_from`), a purge
 step (`rm -rf ~/.m2/repository/io/casehub`) runs in every job before
 downloading fresh artifacts from the current run. On resumed runs, the purge
 is skipped — Maven resolves from the cached `.m2` plus GitHub Packages.
-Levels that build from source (convergence) regenerate everything fresh.
-This defense-in-depth approach handles both stale cache entries and artifact
-download corruption on full runs, while allowing resumed runs to use cached
-state from a prior green build.
+
+All build jobs run offline (`-o`), so stale third-party cache entries won't
+trigger unexpected remote downloads. The warm-cache job (the only online job)
+ensures the cache is populated before any build starts.
 
 ### Pointer advance race
 The finalize job advances submodule pointers and pushes on success. If two runs
@@ -873,10 +901,11 @@ the run gets the old submodule pointers. Always push first, then dispatch.
 1. Add to `parent/build/modules-core.csv` or `modules-applications.csv`
 2. Run `python3 parent/build/sync-deps.py` to validate
 3. Add as submodule in casehub-all
-4. Add to the appropriate level in `mvn-all.yml` (determine level from dependencies)
-5. Add the phase name to the `init` step's phases list and the `finish` command's
-   phase cleanup list in `update-progress.sh`
+4. Add to the appropriate level and stack in `docs/pipeline.yaml`
+   (dashboard, phases, and progress scripts derive from this automatically)
+5. Add a matrix entry in the appropriate level job in `mvn-all.yml`
 6. Run `python3 scripts/reconcile-submodules.py` in casehub-all
+7. Test with `test_mode=dry` to verify pipeline structure (~4 min)
 
 ## File Map
 
@@ -905,11 +934,14 @@ platform/
   aggregator-convergence.xml      — historical — convergence now uses platform/pom.xml directly
 
 casehub-all/
-  .github/workflows/mvn-all.yml   — 10-level parallel pipeline (15+ jobs, parameterised)
+  .github/workflows/mvn-all.yml   — 10-level parallel pipeline (20+ jobs, parameterised)
   docs/
-    index.html                    — CI dashboard (single-file HTML+CSS+JS, no frameworks)
+    pipeline.yaml                 — pipeline topology (single source of truth for levels, stacks, resume)
+    index.html                    — CI dashboard (HTML+CSS+JS, loads js-yaml CDN for pipeline.yaml)
+    init-dashboard.sh             — dashboard init script (archives previous run, creates phases from pipeline.yaml)
     update-progress.sh            — Cloudflare Worker updater (phase-file, phase, finish commands)
-    run-with-progress.sh          — Maven wrapper with start/end dashboard updates
+    run-with-progress.sh          — Maven wrapper with self-healing, timing, dry-run support
+    validate-cache.sh             — pre-flight cache validation (detects corrupt JARs before Maven)
     check-cycles.py               — dependency graph cycle detection (Kahn's algorithm)
     worker/
       src/index.js                — Cloudflare Worker (KV store with run_id ownership)
