@@ -23,15 +23,21 @@
     <module>../../engine/engine-support-core</module>
     <module>../../engine/ledger</module>
     <module>../../engine/ledger-core</module>
+    <module>../../engine/ledger-spring</module>
     <module>../../engine/persistence-hibernate</module>
     <module>../../engine/persistence-jpa-common</module>
     <module>../../engine/persistence-memory</module>
     <module>../../engine/planning</module>
     <module>../../engine/planning-core</module>
+    <module>../../engine/planning-spring</module>
     <module>../../engine/react</module>
+    <module>../../engine/resilience</module>
     <module>../../engine/resilience-core</module>
+    <module>../../engine/resilience-spring</module>
+    <module>../../engine/rest-core</module>
     <module>../../engine/runtime</module>
     <module>../../engine/runtime-core</module>
+    <module>../../engine/runtime-spring</module>
     <module>../../engine/scheduler-quartz</module>
     <module>../../engine/schema</module>
   </modules>

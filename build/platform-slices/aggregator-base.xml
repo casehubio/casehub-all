@@ -22,9 +22,18 @@
     <module>../../platform/agent-api</module>
     <module>../../platform/agent-claude</module>
     <module>../../platform/agent-claude-core</module>
+    <module>../../platform/agent-codex</module>
+    <module>../../platform/agent-codex-core</module>
+    <module>../../platform/agent-config</module>
     <module>../../platform/agent-config-core</module>
     <module>../../platform/agent-gate-core</module>
+    <module>../../platform/agent-gemini</module>
+    <module>../../platform/agent-gemini-cli</module>
+    <module>../../platform/agent-gemini-cli-core</module>
+    <module>../../platform/agent-gemini-core</module>
+    <module>../../platform/agent-ollama</module>
     <module>../../platform/agent-ollama-core</module>
+    <module>../../platform/agent-openai</module>
     <module>../../platform/agent-openai-core</module>
     <module>../../platform/agent-router</module>
     <module>../../platform/agent-router-core</module>
@@ -33,6 +42,7 @@
     <module>../../platform/agent-session</module>
     <module>../../platform/agent-session-core</module>
     <module>../../platform/agent-simulation-core</module>
+    <module>../../platform/agent-spring</module>
     <module>../../platform/callback-api</module>
     <module>../../platform/callback-client</module>
     <module>../../platform/callback-client-core</module>
@@ -100,6 +110,9 @@
     <module>../../platform/registration-api</module>
     <module>../../platform/registration-core</module>
     <module>../../platform/registration-spring</module>
+    <module>../../platform/registry-jpa</module>
+    <module>../../platform/registry-jpa-common</module>
+    <module>../../platform/registry-spring-jpa</module>
     <module>../../platform/scim</module>
     <module>../../platform/scim-core</module>
     <module>../../platform/scim-spring</module>

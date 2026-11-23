@@ -17,31 +17,28 @@
   <modules>
     <module>../../platform/acl-jpa</module>
     <module>../../platform/agent-gate</module>
+    <module>../../platform/confirmation-generator</module>
     <module>../../platform/delivery-tracking-jpa</module>
     <module>../../platform/digest-jpa</module>
-    <module>../../platform/graphql</module>
-    <module>../../platform/graphql-client</module>
     <module>../../platform/label-inmem</module>
     <module>../../platform/label-inmem-core</module>
-    <module>../../platform/llm-config-vertex</module>
-    <module>../../platform/mcp-server</module>
-    <module>../../platform/mcp-spring-generator</module>
+    <module>../../platform/memory-simulation-core</module>
     <module>../../platform/notifications</module>
     <module>../../platform/notifications-core</module>
     <module>../../platform/oidc</module>
-    <module>../../platform/persistence-spring-mongodb</module>
+    <module>../../platform/platform-pdf</module>
     <module>../../platform/platform-simulation-core</module>
+    <module>../../platform/platform-view-inmem</module>
     <module>../../platform/playbook-runner</module>
-    <module>../../platform/playbooks</module>
-    <module>../../platform/registry-client</module>
-    <module>../../platform/registry-client-quarkus</module>
+    <module>../../platform/plugin-catalog-api</module>
+    <module>../../platform/plugin-catalog-core</module>
     <module>../../platform/schema-generator</module>
     <module>../../platform/simulation-generator</module>
     <module>../../platform/simulation-starter</module>
     <module>../../platform/simulation-testing</module>
+    <module>../../platform/spring-generator</module>
     <module>../../platform/subscriptions-jpa</module>
+    <module>../../platform/user-inmem</module>
     <module>../../platform/yaml-plugin-processor</module>
-    <module>../../platform/yaml-statemachine-generator</module>
-    <module>../../platform/yaml-test</module>
   </modules>
 </project>

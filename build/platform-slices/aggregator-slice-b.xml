@@ -15,35 +15,31 @@
   <name>CaseHub :: Platform :: Slice B</name>
 
   <modules>
-    <module>../../platform/acl-worker</module>
-    <module>../../platform/acl-worker-core</module>
-    <module>../../platform/acl-worker-spring</module>
+    <module>../../platform/agent-react-core</module>
     <module>../../platform/callback</module>
     <module>../../platform/callback-inmem</module>
     <module>../../platform/config</module>
     <module>../../platform/config-core</module>
-    <module>../../platform/confirmation</module>
-    <module>../../platform/confirmation-core</module>
-    <module>../../platform/confirmation-generator</module>
-    <module>../../platform/confirmation-spring</module>
     <module>../../platform/credentials-quarkus</module>
     <module>../../platform/datasource-inmem</module>
     <module>../../platform/datasource-inmem-core</module>
     <module>../../platform/endpoints-config</module>
     <module>../../platform/endpoints-config-core</module>
     <module>../../platform/generator-parent</module>
+    <module>../../platform/graphql</module>
+    <module>../../platform/graphql-client</module>
     <module>../../platform/graphql-spring-generator</module>
     <module>../../platform/mcp-standalone-test</module>
-    <module>../../platform/memory-simulation-core</module>
     <module>../../platform/notifications-jpa</module>
     <module>../../platform/persistence-mongodb</module>
-    <module>../../platform/platform-pdf</module>
-    <module>../../platform/platform-view-inmem</module>
+    <module>../../platform/platform-signing</module>
     <module>../../platform/registration</module>
-    <module>../../platform/rest-client-simulation-generator</module>
-    <module>../../platform/spring-generator</module>
+    <module>../../platform/registry-client</module>
+    <module>../../platform/registry-client-quarkus</module>
+    <module>../../platform/rest-spring-generator</module>
     <module>../../platform/subscriptions</module>
     <module>../../platform/subscriptions-inmem</module>
     <module>../../platform/subscriptions-inmem-core</module>
+    <module>../../platform/yaml-codegen</module>
   </modules>
 </project>

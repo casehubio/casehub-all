@@ -15,25 +15,19 @@
   <name>CaseHub :: Engine :: Slice A</name>
 
   <modules>
-    <module>../../engine/engine-support-spring</module>
-    <module>../../engine/examples/cbr-ensemble-annotated</module>
-    <module>../../engine/examples/goap-annotated</module>
-    <module>../../engine/examples/humantask-dsl</module>
-    <module>../../engine/examples/mcp-dsl</module>
-    <module>../../engine/examples/search-rescue-annotated</module>
-    <module>../../engine/examples/sequential-annotated</module>
-    <module>../../engine/examples/subcase-annotated</module>
-    <module>../../engine/examples/typed-context</module>
-    <module>../../engine/examples/wildfire-response-annotated</module>
-    <module>../../engine/ledger-spring</module>
-    <module>../../engine/persistence-spring-jpa</module>
-    <module>../../engine/planning-spring</module>
-    <module>../../engine/resilience</module>
-    <module>../../engine/resilience-spring</module>
-    <module>../../engine/rest</module>
-    <module>../../engine/rest-core</module>
-    <module>../../engine/runtime-spring</module>
-    <module>../../engine/spring-integration-test</module>
-    <module>../../engine/testing</module>
+    <module>../../engine/a2a</module>
+    <module>../../engine/annotations</module>
+    <module>../../engine/casehub-engine-inbound</module>
+    <module>../../engine/engine-ai</module>
+    <module>../../engine/examples/a2a-dsl</module>
+    <module>../../engine/examples/aircraft-maintenance-annotated</module>
+    <module>../../engine/examples/choreography-annotated</module>
+    <module>../../engine/examples/humantask-annotated</module>
+    <module>../../engine/examples/llm-decomposition-dsl</module>
+    <module>../../engine/examples/mcp-annotated</module>
+    <module>../../engine/examples/sequential-dsl</module>
+    <module>../../engine/generator</module>
+    <module>../../engine/queue</module>
+    <module>../../engine/work-adapter</module>
   </modules>
 </project>

@@ -186,6 +186,30 @@ def assign_modules(modules, dependents, deps_of, n_slices, repo_dir):
         if len(dependents.get(mod, set())) > 2:
             base.add(mod)
 
+    # Spring/REST/GraphQL/MCP generators read Jandex indexes from sibling
+    # target/ dirs via FILESYSTEM PATH, not Maven dependency. They MUST be
+    # in the same Maven invocation as their paired Quarkus module. Force
+    # all generator-using modules and their Quarkus pairs into base.
+    for mod in modules:
+        mod_dir = os.path.join(repo_dir, mod)
+        pom_path = os.path.join(mod_dir, 'pom.xml')
+        if not os.path.isfile(pom_path):
+            continue
+        try:
+            tree = ET.parse(pom_path)
+            for plugin in tree.findall('.//m:plugin', NS):
+                aid = plugin.find('m:artifactId', NS)
+                if aid is not None and aid.text and 'generator' in aid.text:
+                    # This module uses a generator — force it and its deps
+                    # into base so the Jandex index is available on the
+                    # same filesystem
+                    base.add(mod)
+                    for dep in deps_of.get(mod, set()):
+                        base.add(dep)
+                    break
+        except ET.ParseError:
+            pass
+
     # Pull transitive deps of base modules into base
     changed = True
     while changed:

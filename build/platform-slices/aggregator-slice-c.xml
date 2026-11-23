@@ -17,29 +17,26 @@
   <modules>
     <module>../../platform/acl-admin</module>
     <module>../../platform/acl-inmem</module>
-    <module>../../platform/agent-react-core</module>
+    <module>../../platform/callback-generator</module>
     <module>../../platform/challenge-jpa</module>
     <module>../../platform/challenge-jpa-common</module>
     <module>../../platform/challenge-spring-jpa</module>
+    <module>../../platform/confirmation</module>
+    <module>../../platform/confirmation-core</module>
+    <module>../../platform/confirmation-spring</module>
     <module>../../platform/datasource-jpa</module>
     <module>../../platform/event-simulation</module>
     <module>../../platform/governance-spring</module>
+    <module>../../platform/llm-config-bedrock</module>
     <module>../../platform/mcp</module>
     <module>../../platform/mcp-dispatch</module>
     <module>../../platform/notification-settings-jpa</module>
     <module>../../platform/persistence-jpa</module>
-    <module>../../platform/platform-observability</module>
-    <module>../../platform/platform-signing</module>
+    <module>../../platform/persistence-spring-mongodb</module>
     <module>../../platform/platform-view-jpa</module>
-    <module>../../platform/plugin-catalog-api</module>
-    <module>../../platform/plugin-catalog-core</module>
     <module>../../platform/preferences-editor</module>
-    <module>../../platform/registry-inmem</module>
-    <module>../../platform/registry-inmem-core</module>
-    <module>../../platform/registry-jpa</module>
-    <module>../../platform/registry-jpa-common</module>
-    <module>../../platform/registry-spring-jpa</module>
-    <module>../../platform/rest-spring-generator</module>
-    <module>../../platform/yaml-codegen</module>
+    <module>../../platform/rest-client-simulation-generator</module>
+    <module>../../platform/user-jpa</module>
+    <module>../../platform/yaml-step-testing</module>
   </modules>
 </project>

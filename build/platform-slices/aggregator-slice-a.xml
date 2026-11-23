@@ -15,19 +15,12 @@
   <name>CaseHub :: Platform :: Slice A</name>
 
   <modules>
-    <module>../../platform/agent-codex</module>
-    <module>../../platform/agent-codex-core</module>
-    <module>../../platform/agent-config</module>
-    <module>../../platform/agent-gemini</module>
-    <module>../../platform/agent-gemini-cli</module>
-    <module>../../platform/agent-gemini-cli-core</module>
-    <module>../../platform/agent-gemini-core</module>
+    <module>../../platform/acl-worker</module>
+    <module>../../platform/acl-worker-core</module>
+    <module>../../platform/acl-worker-spring</module>
     <module>../../platform/agent-http</module>
     <module>../../platform/agent-http-core</module>
     <module>../../platform/agent-http-spring</module>
-    <module>../../platform/agent-ollama</module>
-    <module>../../platform/agent-openai</module>
-    <module>../../platform/agent-spring</module>
     <module>../../platform/authn</module>
     <module>../../platform/authn-core</module>
     <module>../../platform/authn-inmem</module>
@@ -40,10 +33,15 @@
     <module>../../platform/authn-webauthn-jpa</module>
     <module>../../platform/authn-webauthn-jpa-common</module>
     <module>../../platform/authn-webauthn-spring-jpa</module>
-    <module>../../platform/callback-generator</module>
     <module>../../platform/drift-detection</module>
-    <module>../../platform/llm-config-bedrock</module>
+    <module>../../platform/llm-config-vertex</module>
+    <module>../../platform/mcp-server</module>
+    <module>../../platform/mcp-spring-generator</module>
+    <module>../../platform/platform-observability</module>
     <module>../../platform/playbook-runner-spring</module>
+    <module>../../platform/playbooks</module>
+    <module>../../platform/registry-inmem</module>
+    <module>../../platform/registry-inmem-core</module>
     <module>../../platform/session-jpa</module>
     <module>../../platform/session-jpa-common</module>
     <module>../../platform/session-spring-jpa</module>
@@ -60,8 +58,7 @@
     <module>../../platform/streams-poll</module>
     <module>../../platform/streams-poll-core</module>
     <module>../../platform/streams-spring</module>
-    <module>../../platform/user-inmem</module>
-    <module>../../platform/user-jpa</module>
-    <module>../../platform/yaml-step-testing</module>
+    <module>../../platform/yaml-statemachine-generator</module>
+    <module>../../platform/yaml-test</module>
   </modules>
 </project>
