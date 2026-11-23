@@ -7,6 +7,9 @@
 # Usage: bash docs/verify-artifacts.sh <repo> [repo2 ...]
 #   Each repo's dependencies are checked against ~/.m2/repository/io/casehub/
 #
+# Skips intra-repo modules — a multi-module repo's own modules are built
+# together, not downloaded from prior levels.
+#
 # Resume mode (RESUME_FROM env var set):
 #   Missing artifacts are expected — prior levels were skipped, so their
 #   artifacts come from GitHub Packages at build time, not from run uploads.
@@ -25,6 +28,7 @@ RESUME="${RESUME_FROM:-}"
 MISSING=0
 CORRUPT=0
 VERIFIED=0
+SKIPPED_INTERNAL=0
 
 echo "=== Artifact verification (mode: ${RESUME:+resume}${RESUME:-full}) ==="
 
@@ -33,15 +37,28 @@ for repo in "$@"; do
   [ -f "$pom" ] || continue
 
   deps=$(python3 -c "
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET, os
 ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
 try:
     tree = ET.parse('$pom')
+    # Collect this repo's own module artifactIds to skip
+    own_modules = set()
+    for mod in tree.findall('.//m:modules/m:module', ns):
+        if mod.text:
+            mod_pom = os.path.join('$repo', mod.text, 'pom.xml')
+            if os.path.isfile(mod_pom):
+                try:
+                    mtree = ET.parse(mod_pom)
+                    aid = mtree.find('m:artifactId', ns)
+                    if aid is not None and aid.text:
+                        own_modules.add(aid.text)
+                except: pass
     for dep in tree.findall('.//m:dependencies/m:dependency', ns):
         g = dep.find('m:groupId', ns)
         a = dep.find('m:artifactId', ns)
         if g is not None and a is not None and g.text == 'io.casehub':
-            print(a.text)
+            if a.text not in own_modules:
+                print(a.text)
 except: pass
 " 2>/dev/null)
 
