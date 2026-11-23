@@ -214,6 +214,11 @@ if [ "${DRY_RUN:-}" = "true" ]; then
   exit 0
 fi
 
+# Pre-flight: verify required artifacts from prior levels
+if [ -f docs/verify-artifacts.sh ] && [ -d "$PHASE" ] && [ -f "$PHASE/pom.xml" ]; then
+  bash docs/verify-artifacts.sh "$PHASE" 2>&1 | tail -5
+fi
+
 # Pre-flight cache validation — catch corrupt JARs before Maven hits them
 if [ -f docs/validate-cache.sh ]; then
   bash docs/validate-cache.sh --heal 2>&1 | tail -3

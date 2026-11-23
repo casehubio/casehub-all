@@ -64,7 +64,9 @@ a:hover { text-decoration: underline; }
 .phase.failure .name { color: var(--red); }
 .phase.in_progress { background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25); animation: pulse 2s ease-in-out infinite; }
 .phase.pending { background: rgba(107,114,128,0.06); border: 1px solid rgba(107,114,128,0.12); color: var(--muted); }
-.phase.skipped { background: rgba(107,114,128,0.03); border: 1px solid rgba(107,114,128,0.08); color: var(--dim); }
+.phase.verified { background: rgba(59,130,246,0.12); border: 1px solid rgba(59,130,246,0.25); }
+.phase.verified .name { color: var(--blue); }
+.phase.skipped { background: rgba(107,114,128,0.03); border: 1px dashed rgba(107,114,128,0.12); color: var(--dim); }
 @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.5} }
 .fail-detail { color: var(--red); font-size: 8px; font-weight: 600; margin-top: 1px; }
 
@@ -279,7 +281,12 @@ function lineChart(el,data,opts={}){
 // ── Pipeline renderer ─────────────────────────────────────────────
 function phaseBox(p,clickFn){
   if(!p){console.warn('Phase not found in API data:',name);return'<div class="phase pending"><div class="name">?</div></div>';}
-  const dur=p.status==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
+  // Resumed phases: pending with no data = skipped, success with no tests = verified (from cache)
+  const isResumed=window._currentRun&&window._currentRun.resume_from;
+  let displayStatus=p.status;
+  if(isResumed&&p.status==='pending'&&!p.started)displayStatus='skipped';
+  if(isResumed&&p.status==='success'&&!p.tests_run&&!p.modules&&p.duration_s!=null&&p.duration_s<5)displayStatus='verified';
+  const dur=displayStatus==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
   const parts=[];
   if(p.modules)parts.push(p.modules+' mod');
   if(p.tests_run)parts.push(p.tests_run+' tests');
@@ -288,9 +295,10 @@ function phaseBox(p,clickFn){
   const loc=p.loc;
   const locStr=loc?fmtLoc(loc.total):'';
   const sh=p.self_healing,healed=sh&&(sh.corrupt_jars_deleted||sh.corrupt_jandex_deleted||sh.retries);
-  return`<div class="phase ${p.status}" ${clickFn?`onclick="${clickFn}('${p.name}')"`:''}>`+
+  const label=displayStatus==='verified'?'cached':displayStatus==='skipped'?'skipped':'';
+  return`<div class="phase ${displayStatus}" ${clickFn?`onclick="${clickFn}('${p.name}')"`:''}>`+
     `<div class="name">${p.name}</div>`+
-    `<div class="info">${dur||'—'}</div>`+
+    `<div class="info">${label||dur||'—'}</div>`+
     (parts.length?`<div class="info">${parts.join(' · ')}</div>`:'')+
     (locStr?`<div class="info loc-info">${locStr}</div>`:'')+
     (p.status==='failure'&&p.test_errors?p.test_errors.slice(0,2).map(e=>`<div class="fail-detail" title="${(e.error||'').replace(/"/g,'&quot;')}">${e.test}: ${(e.error||'').slice(0,50)}</div>`).join(''):
@@ -452,6 +460,7 @@ async function refresh(){
       detectTransitions(data.current.phases);
     }
     window._data=data;
+    window._currentRun=data.current;
     renderCurrent(data.current,data.history);renderStats(data.history);renderCharts(data.history);renderHistory(data.history);
     document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · '+Math.round(POLL_MS/1000)+'s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
