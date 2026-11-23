@@ -242,7 +242,7 @@ jobs:
           WORKER="${CI_DASHBOARD_URL}"
           curl -sf "$WORKER/progress" 2>/dev/null > /tmp/old-progress.json || echo '{}' > /tmp/old-progress.json
           python3 -c "
-          import json, sys
+          import json, sys, yaml
           from datetime import datetime, timezone
           old = json.load(open('/tmp/old-progress.json'))
           history = old.get('history', [])
