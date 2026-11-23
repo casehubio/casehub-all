@@ -7,24 +7,31 @@
 # Usage: bash docs/verify-artifacts.sh <repo> [repo2 ...]
 #   Each repo's dependencies are checked against ~/.m2/repository/io/casehub/
 #
-# For resumed levels, also outputs a marker file for dashboard colouring:
-#   /tmp/artifact-status.json — {"verified": true, "source": "cache"}
+# Resume mode (RESUME_FROM env var set):
+#   Missing artifacts are expected — prior levels were skipped, so their
+#   artifacts come from GitHub Packages at build time, not from run uploads.
+#   Missing → warning (exit 0). Corrupt → still hard fail (exit 1).
+#
+# Full build mode (RESUME_FROM empty or unset):
+#   Missing artifacts mean the upload/download chain is broken.
+#   Missing → hard fail (exit 1). Corrupt → hard fail (exit 1).
+#
+# Dashboard marker: /tmp/artifact-status.json
 
 set -euo pipefail
 
 M2_CASEHUB="${M2_REPO:-$HOME/.m2/repository}/io/casehub"
+RESUME="${RESUME_FROM:-}"
 MISSING=0
 CORRUPT=0
 VERIFIED=0
 
-echo "=== Artifact verification ==="
+echo "=== Artifact verification (mode: ${RESUME:+resume}${RESUME:-full}) ==="
 
-# Check each repo's dependencies exist as installed artifacts
 for repo in "$@"; do
   pom="$repo/pom.xml"
   [ -f "$pom" ] || continue
 
-  # Extract casehub dependencies from the POM
   deps=$(python3 -c "
 import xml.etree.ElementTree as ET
 ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
@@ -46,7 +53,6 @@ except: pass
       continue
     fi
 
-    # Check at least one JAR exists and is valid
     jar=$(find "$dir" -name "*.jar" -not -name "*-sources.jar" -not -name "*-javadoc.jar" | head -1)
     if [ -z "$jar" ]; then
       echo "  MISSING JAR: $artifact (directory exists but no JAR)"
@@ -54,7 +60,6 @@ except: pass
       continue
     fi
 
-    # ZIP header check
     magic=$(xxd -l4 -p "$jar" 2>/dev/null || echo "")
     if [ "$magic" != "504b0304" ]; then
       echo "  CORRUPT: $artifact ($jar)"
@@ -68,19 +73,25 @@ done
 
 echo "  verified=$VERIFIED missing=$MISSING corrupt=$CORRUPT"
 
-# Write status for dashboard
 if [ $((MISSING + CORRUPT)) -eq 0 ]; then
   echo '{"verified":true,"source":"cache","count":'$VERIFIED'}' > /tmp/artifact-status.json
   echo "=== All artifacts verified ==="
   exit 0
+fi
+
+echo '{"verified":false,"missing":'$MISSING',"corrupt":'$CORRUPT'}' > /tmp/artifact-status.json
+
+if [ "$CORRUPT" -gt 0 ]; then
+  echo "::error::Artifact verification failed: $MISSING missing, $CORRUPT corrupt"
+  echo "::error::Corrupt artifacts will cause build failures."
+  exit 1
+fi
+
+if [ -n "$RESUME" ]; then
+  echo "::warning::$MISSING artifacts missing (resume mode — Maven resolves from GitHub Packages)"
+  exit 0
 else
-  echo '{"verified":false,"missing":'$MISSING',"corrupt":'$CORRUPT'}' > /tmp/artifact-status.json
-  if [ "$CORRUPT" -gt 0 ]; then
-    echo "::error::Artifact verification failed: $MISSING missing, $CORRUPT corrupt"
-    echo "::error::Cannot proceed — corrupt artifacts will cause build failures."
-    exit 1
-  else
-    echo "::warning::Artifact verification: $MISSING missing (will resolve from GitHub Packages)"
-    exit 0
-  fi
+  echo "::error::Artifact verification failed: $MISSING missing"
+  echo "::error::Upload/download chain broken — run a full build to rebuild."
+  exit 1
 fi
