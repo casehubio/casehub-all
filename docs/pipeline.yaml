@@ -8,6 +8,10 @@
 # repos:  optional — repo directories when phase names don't match
 #         (e.g. L0 phases are "Platform A" but the repo is "platform").
 #         Omit when stack entries ARE directory names (most levels).
+# slices: when set, generate-slices.py auto-assigns modules to N parallel
+#         aggregator POMs at build time. Replaces static slice assignments.
+#         Requires repos: [single-repo]. Base modules (depended on by others)
+#         are assigned automatically — no manual base/slice split needed.
 #
 # Dashboard rendering rules (derived from structure):
 #   base present        → base shown first, then fan-out to stacks
@@ -19,6 +23,7 @@
 levels:
   - id: L0
     repos: [platform]
+    slices: 4
     base: Prepare + Platform base
     stacks:
       - [Platform A]
@@ -43,6 +48,7 @@ levels:
   - id: L3
     resume: true
     repos: [work]
+    slices: 2
     base: Work base
     stacks:
       - [Work A]
@@ -51,6 +57,7 @@ levels:
   - id: L4
     resume: true
     repos: [engine]
+    slices: 3
     base: Engine base
     stacks:
       - [Engine A]
