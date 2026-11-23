@@ -15,20 +15,10 @@
   <name>CaseHub :: Work :: Base</name>
 
   <modules>
-    <module>../../work/ai</module>
     <module>../../work/api</module>
-    <module>../../work/client</module>
     <module>../../work/core</module>
-    <module>../../work/deployment</module>
     <module>../../work/issue-tracker</module>
-    <module>../../work/ledger</module>
     <module>../../work/persistence-memory</module>
-    <module>../../work/persistence-mongodb-core</module>
-    <module>../../work/persistence-spring-mongodb</module>
-    <module>../../work/progress-api</module>
-    <module>../../work/progress-core</module>
-    <module>../../work/progress-memory</module>
-    <module>../../work/progress-runtime</module>
     <module>../../work/queues</module>
     <module>../../work/rest</module>
     <module>../../work/runtime</module>

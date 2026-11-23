@@ -15,11 +15,13 @@
   <name>CaseHub :: Work :: Slice A</name>
 
   <modules>
-    <module>../../work/annotations</module>
+    <module>../../work/ai</module>
+    <module>../../work/client</module>
+    <module>../../work/deployment</module>
+    <module>../../work/examples</module>
     <module>../../work/federation</module>
     <module>../../work/flow</module>
-    <module>../../work/graphql</module>
-    <module>../../work/progress-rest</module>
-    <module>../../work/reports</module>
+    <module>../../work/ledger</module>
+    <module>../../work/qhorus</module>
   </modules>
 </project>

@@ -15,23 +15,31 @@
   <name>CaseHub :: Platform :: Slice C</name>
 
   <modules>
-    <module>../../platform/acl-jpa</module>
-    <module>../../platform/acl-worker-spring</module>
-    <module>../../platform/callback-generator</module>
+    <module>../../platform/acl-admin</module>
+    <module>../../platform/acl-inmem</module>
+    <module>../../platform/agent-react-core</module>
+    <module>../../platform/challenge-jpa</module>
+    <module>../../platform/challenge-jpa-common</module>
     <module>../../platform/challenge-spring-jpa</module>
-    <module>../../platform/confirmation-spring</module>
-    <module>../../platform/digest-jpa</module>
-    <module>../../platform/label-inmem</module>
+    <module>../../platform/datasource-jpa</module>
+    <module>../../platform/event-simulation</module>
+    <module>../../platform/governance-spring</module>
+    <module>../../platform/mcp</module>
     <module>../../platform/mcp-dispatch</module>
     <module>../../platform/notification-settings-jpa</module>
-    <module>../../platform/oidc</module>
+    <module>../../platform/persistence-jpa</module>
     <module>../../platform/platform-observability</module>
-    <module>../../platform/platform-pdf</module>
-    <module>../../platform/platform-view-inmem</module>
-    <module>../../platform/session-jpa</module>
-    <module>../../platform/spring-generator</module>
-    <module>../../platform/spring-integration-test</module>
-    <module>../../platform/streams-kafka</module>
-    <module>../../platform/yaml-plugin-processor</module>
+    <module>../../platform/platform-signing</module>
+    <module>../../platform/platform-view-jpa</module>
+    <module>../../platform/plugin-catalog-api</module>
+    <module>../../platform/plugin-catalog-core</module>
+    <module>../../platform/preferences-editor</module>
+    <module>../../platform/registry-inmem</module>
+    <module>../../platform/registry-inmem-core</module>
+    <module>../../platform/registry-jpa</module>
+    <module>../../platform/registry-jpa-common</module>
+    <module>../../platform/registry-spring-jpa</module>
+    <module>../../platform/rest-spring-generator</module>
+    <module>../../platform/yaml-codegen</module>
   </modules>
 </project>

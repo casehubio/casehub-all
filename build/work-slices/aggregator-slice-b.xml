@@ -15,10 +15,18 @@
   <name>CaseHub :: Work :: Slice B</name>
 
   <modules>
-    <module>../../work/examples</module>
+    <module>../../work/annotations</module>
+    <module>../../work/graphql</module>
     <module>../../work/persistence-mongodb</module>
+    <module>../../work/persistence-mongodb-core</module>
+    <module>../../work/persistence-spring-mongodb</module>
+    <module>../../work/progress-api</module>
+    <module>../../work/progress-core</module>
     <module>../../work/progress-deployment</module>
-    <module>../../work/qhorus</module>
+    <module>../../work/progress-memory</module>
+    <module>../../work/progress-rest</module>
+    <module>../../work/progress-runtime</module>
+    <module>../../work/reports</module>
     <module>../../work/spring-integration-test</module>
   </modules>
 </project>

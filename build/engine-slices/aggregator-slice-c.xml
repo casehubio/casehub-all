@@ -15,20 +15,20 @@
   <name>CaseHub :: Engine :: Slice C</name>
 
   <modules>
-    <module>../../engine/engine-ai</module>
-    <module>../../engine/examples/a2a-dsl</module>
-    <module>../../engine/examples/aircraft-maintenance-annotated</module>
-    <module>../../engine/examples/cbr-ensemble-annotated</module>
-    <module>../../engine/examples/choreography-annotated</module>
-    <module>../../engine/examples/humantask-annotated</module>
-    <module>../../engine/examples/llm-decomposition-dsl</module>
-    <module>../../engine/examples/mcp-annotated</module>
-    <module>../../engine/examples/sequential-dsl</module>
-    <module>../../engine/flow</module>
-    <module>../../engine/generator</module>
-    <module>../../engine/queue</module>
-    <module>../../engine/rest</module>
-    <module>../../engine/spring-integration-test</module>
-    <module>../../engine/watchdog</module>
+    <module>../../engine/a2a</module>
+    <module>../../engine/actor-state</module>
+    <module>../../engine/eidos-routing</module>
+    <module>../../engine/examples/a2a-annotated</module>
+    <module>../../engine/examples/cbr-ensemble-dsl</module>
+    <module>../../engine/examples/choreography-dsl</module>
+    <module>../../engine/examples/goap-dsl</module>
+    <module>../../engine/examples/incident-response-annotated</module>
+    <module>../../engine/examples/llm-decomposition-annotated</module>
+    <module>../../engine/examples/subcase-dsl</module>
+    <module>../../engine/examples/warehouse-annotated</module>
+    <module>../../engine/graphql</module>
+    <module>../../engine/work-adapter</module>
+    <module>../../engine/work-cloudevent</module>
+    <module>../../engine/yaml-cbr</module>
   </modules>
 </project>

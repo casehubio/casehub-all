@@ -160,26 +160,95 @@ def build_dependency_graph(repo_dir, modules):
     return artifact_to_module, dependents, deps_of
 
 
-def find_base_modules(modules, dependents, deps_of):
-    """Find modules that must build first (the "base" set).
+def assign_modules(modules, dependents, deps_of, n_slices, repo_dir):
+    """Assign modules to base + N slices with balanced distribution.
 
-    A module is "base" if at least one other module depends on it AND
-    it has dependents in multiple future slices. In practice: anything
-    with dependents goes to base, to ensure slices can build independently.
+    Strategy:
+    1. Base = modules depended on by many others (threshold: >2 direct
+       dependents within the repo). These are foundational — platform-api,
+       testing, config-core, etc. Also includes their transitive deps.
+    2. After removing base, find connected components in the remaining graph.
+    3. Bin-pack components into N slices by total estimated time.
+
+    Why connected components: modules in the same component depend on each
+    other, so they MUST be in the same slice (slices run on separate runners
+    and can't share artifacts). By packing whole components, we guarantee
+    each slice is self-contained (plus base).
+
+    The dependent-count threshold (>2) is a balance knob: lower = smaller
+    base + more components, higher = larger base + fewer but bigger components.
+    With platform's tree, >2 gives a reasonable split.
     """
+    # Step 1: identify base — modules with many dependents (shared by many)
+    # Threshold: a module with >2 direct dependents is "foundational"
     base = set()
     for mod in modules:
-        if dependents.get(mod):
+        if len(dependents.get(mod, set())) > 2:
             base.add(mod)
-            # Also pull in transitive deps of base modules — if A is base
-            # and A depends on B, B must also be in base
-            queue = list(deps_of.get(mod, set()))
-            while queue:
-                dep = queue.pop()
+
+    # Pull transitive deps of base modules into base
+    changed = True
+    while changed:
+        changed = False
+        for mod in list(base):
+            for dep in deps_of.get(mod, set()):
                 if dep not in base:
                     base.add(dep)
-                    queue.extend(deps_of.get(dep, set()))
-    return base
+                    changed = True
+
+    # Step 2: remaining modules — find connected components
+    # Two modules are connected if one depends on the other (intra-remaining)
+    remaining = [m for m in modules if m not in base]
+    if not remaining:
+        return base, [[] for _ in range(n_slices)], [0.0] * n_slices
+
+    # Build adjacency for remaining modules only
+    adj = defaultdict(set)
+    for mod in remaining:
+        for dep in deps_of.get(mod, set()):
+            if dep in remaining and dep != mod:
+                adj[mod].add(dep)
+                adj[dep].add(mod)
+        for child in dependents.get(mod, set()):
+            if child in remaining and child != mod:
+                adj[mod].add(child)
+                adj[child].add(mod)
+
+    # Find connected components via BFS
+    visited = set()
+    components = []
+    for mod in remaining:
+        if mod in visited:
+            continue
+        component = []
+        queue = [mod]
+        while queue:
+            m = queue.pop()
+            if m in visited:
+                continue
+            visited.add(m)
+            component.append(m)
+            for neighbor in adj.get(m, set()):
+                if neighbor not in visited:
+                    queue.append(neighbor)
+        components.append(component)
+
+    # Step 3: bin-pack components into N slices by total estimated time
+    comp_times = []
+    for comp in components:
+        total = sum(estimate_build_time(os.path.join(repo_dir, m)) for m in comp)
+        comp_times.append((comp, total))
+    comp_times.sort(key=lambda x: x[1], reverse=True)
+
+    slices = [[] for _ in range(n_slices)]
+    slice_times = [0.0] * n_slices
+
+    for comp, time in comp_times:
+        lightest = min(range(n_slices), key=lambda i: slice_times[i])
+        slices[lightest].extend(comp)
+        slice_times[lightest] += time
+
+    return base, slices, slice_times
 
 
 def topo_sort(modules, deps_of):
@@ -280,21 +349,11 @@ def process_level(level, repo_root, output_dir, dry_run=False):
     # 2. Build dependency graph
     artifact_to_module, dependents, deps_of = build_dependency_graph(repo_dir, modules)
 
-    # 3. Find base modules (depended on by others)
-    base_modules = find_base_modules(modules, dependents, deps_of)
-    slice_modules = [m for m in modules if m not in base_modules]
+    # 3. Assign modules: small base (shared deps) + balanced slices
+    base_modules, slices, slice_times = assign_modules(
+        modules, dependents, deps_of, n_slices, repo_dir)
 
-    # 4. Estimate build times for slice modules
-    modules_with_times = []
-    for mod in slice_modules:
-        mod_dir = os.path.join(repo_dir, mod)
-        time_est = estimate_build_time(mod_dir)
-        modules_with_times.append((mod, time_est))
-
-    # 5. Bin-pack into N slices
-    slices = bin_pack(modules_with_times, n_slices)
-
-    # 6. Build result
+    # 4. Build result
     result = {
         'level': level_id,
         'repo': repo_name,
@@ -304,25 +363,23 @@ def process_level(level, repo_root, output_dir, dry_run=False):
         'slices': {},
     }
 
-    total_time = sum(t for _, t in modules_with_times)
-    mean_time = total_time / n_slices if n_slices > 0 else 0
+    total_slice_time = sum(slice_times)
+    mean_time = total_slice_time / n_slices if n_slices > 0 else 0
+    base_time = sum(estimate_build_time(os.path.join(repo_dir, m)) for m in base_modules)
 
     # Print summary
     print(f'\n  {level_id} ({repo_name}): {len(modules)} modules → '
-          f'base({len(base_modules)}) + {n_slices} slices')
-    print(f'    base: {len(base_modules)} modules')
+          f'base({len(base_modules)}, est {base_time:.0f} min) + {n_slices} slices')
 
     for i, slice_mods in enumerate(slices):
         label = SLICE_LABELS[i]
-        slice_time = sum(t for _, t in modules_with_times if _  in [m for m in slice_mods])
-        slice_time = sum(estimate_build_time(os.path.join(repo_dir, m)) for m in slice_mods)
         result['slices'][label] = sorted(slice_mods)
         print(f'    slice {label}: {len(slice_mods)} modules, '
-              f'est {slice_time:.1f} min')
+              f'est {slice_times[i]:.1f} min')
 
         # Warn if imbalanced (>30% heavier than mean)
-        if mean_time > 0 and slice_time > mean_time * 1.3:
-            print(f'    ⚠ slice {label} is {slice_time/mean_time:.0%} of mean '
+        if mean_time > 0 and slice_times[i] > mean_time * 1.3:
+            print(f'    ⚠ slice {label} is {slice_times[i]/mean_time:.0%} of mean '
                   f'— consider increasing slice count')
 
     if dry_run:

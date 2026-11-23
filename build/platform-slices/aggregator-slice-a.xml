@@ -15,23 +15,53 @@
   <name>CaseHub :: Platform :: Slice A</name>
 
   <modules>
+    <module>../../platform/agent-codex</module>
+    <module>../../platform/agent-codex-core</module>
+    <module>../../platform/agent-config</module>
+    <module>../../platform/agent-gemini</module>
+    <module>../../platform/agent-gemini-cli</module>
+    <module>../../platform/agent-gemini-cli-core</module>
+    <module>../../platform/agent-gemini-core</module>
     <module>../../platform/agent-http</module>
+    <module>../../platform/agent-http-core</module>
+    <module>../../platform/agent-http-spring</module>
+    <module>../../platform/agent-ollama</module>
+    <module>../../platform/agent-openai</module>
+    <module>../../platform/agent-spring</module>
+    <module>../../platform/authn</module>
+    <module>../../platform/authn-core</module>
+    <module>../../platform/authn-inmem</module>
+    <module>../../platform/authn-social-core</module>
+    <module>../../platform/authn-social-jpa</module>
+    <module>../../platform/authn-social-jpa-common</module>
+    <module>../../platform/authn-social-spring-jpa</module>
+    <module>../../platform/authn-spring</module>
+    <module>../../platform/authn-webauthn-core</module>
     <module>../../platform/authn-webauthn-jpa</module>
-    <module>../../platform/endpoints-config</module>
-    <module>../../platform/event-simulation</module>
-    <module>../../platform/graphql-client</module>
-    <module>../../platform/llm-config-vertex</module>
-    <module>../../platform/mcp-standalone-test</module>
-    <module>../../platform/notifications-jpa</module>
-    <module>../../platform/persistence-spring-mongodb</module>
+    <module>../../platform/authn-webauthn-jpa-common</module>
+    <module>../../platform/authn-webauthn-spring-jpa</module>
+    <module>../../platform/callback-generator</module>
+    <module>../../platform/drift-detection</module>
+    <module>../../platform/llm-config-bedrock</module>
     <module>../../platform/playbook-runner-spring</module>
-    <module>../../platform/preferences-editor</module>
-    <module>../../platform/registration</module>
-    <module>../../platform/registry-spring-jpa</module>
-    <module>../../platform/rest-client-simulation-generator</module>
+    <module>../../platform/session-jpa</module>
+    <module>../../platform/session-jpa-common</module>
+    <module>../../platform/session-spring-jpa</module>
+    <module>../../platform/spring-boot-starter-agent</module>
+    <module>../../platform/spring-boot-starter-authn</module>
+    <module>../../platform/spring-boot-starter-streams</module>
+    <module>../../platform/spring-integration-test</module>
+    <module>../../platform/streams-amqp</module>
+    <module>../../platform/streams-amqp-core</module>
+    <module>../../platform/streams-camel</module>
+    <module>../../platform/streams-camel-core</module>
+    <module>../../platform/streams-kafka</module>
+    <module>../../platform/streams-kafka-core</module>
     <module>../../platform/streams-poll</module>
-    <module>../../platform/subscriptions-jpa</module>
-    <module>../../platform/yaml-codegen</module>
+    <module>../../platform/streams-poll-core</module>
+    <module>../../platform/streams-spring</module>
+    <module>../../platform/user-inmem</module>
+    <module>../../platform/user-jpa</module>
     <module>../../platform/yaml-step-testing</module>
   </modules>
 </project>
