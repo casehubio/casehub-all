@@ -1,25 +1,32 @@
 #!/usr/bin/env bash
-# verify-artifacts.sh — check that required casehub artifacts are present
+# verify-artifacts.sh — pre-flight check for casehub artifacts before Maven build
 #
-# Called after actions/download-artifact to verify completeness before building.
-# Exits 0 if all required artifacts found, exits 1 with details if any missing.
+# Called by run-with-progress.sh after actions/download-artifact, before mvn.
+# Catches missing or corrupt JARs early with a clear error, instead of letting
+# Maven fail deep in compilation with an opaque classpath message.
 #
 # Usage: bash docs/verify-artifacts.sh <repo> [repo2 ...]
-#   Each repo's dependencies are checked against ~/.m2/repository/io/casehub/
 #
-# Skips intra-repo modules — a multi-module repo's own modules are built
-# together, not downloaded from prior levels.
+# Two modes, controlled by RESUME_FROM env var (set in workflow top-level env):
 #
-# Resume mode (RESUME_FROM env var set):
-#   Missing artifacts are expected — prior levels were skipped, so their
-#   artifacts come from GitHub Packages at build time, not from run uploads.
-#   Missing → warning (exit 0). Corrupt → still hard fail (exit 1).
+#   Full build (RESUME_FROM empty):
+#     All casehub artifacts should be present — uploaded by prior levels in this
+#     run. Missing = broken upload/download chain → hard fail.
 #
-# Full build mode (RESUME_FROM empty or unset):
-#   Missing artifacts mean the upload/download chain is broken.
-#   Missing → hard fail (exit 1). Corrupt → hard fail (exit 1).
+#   Resume build (RESUME_FROM set):
+#     Prior levels were skipped, so their artifacts weren't uploaded in this run.
+#     Maven resolves them from GitHub Packages at build time. Missing = expected
+#     → warning only. Corrupt = still hard fail (GP served a bad JAR).
 #
-# Dashboard marker: /tmp/artifact-status.json
+# Intra-repo module handling:
+#   Multi-module repos (e.g. desiredstate) list their own sub-modules as
+#   io.casehub dependencies in dependencyManagement. These are built together
+#   in the same Maven invocation, not downloaded from prior levels. We walk
+#   ALL subdirectories (not just first-level <modules>) because repos like
+#   desiredstate have nested modules (annotations/spring/) whose artifactIds
+#   wouldn't be found by only checking the root POM's <modules> list.
+#
+# Dashboard marker: writes /tmp/artifact-status.json for progress reporting.
 
 set -euo pipefail
 
@@ -28,7 +35,6 @@ RESUME="${RESUME_FROM:-}"
 MISSING=0
 CORRUPT=0
 VERIFIED=0
-SKIPPED_INTERNAL=0
 
 echo "=== Artifact verification (mode: ${RESUME:+resume}${RESUME:-full}) ==="
 
@@ -36,11 +42,18 @@ for repo in "$@"; do
   pom="$repo/pom.xml"
   [ -f "$pom" ] || continue
 
+  # Extract cross-repo casehub dependencies (excluding this repo's own modules).
+  # We walk the entire repo directory tree for pom.xml files to collect ALL
+  # descendant artifactIds — needed because repos have nested multi-module
+  # structures (e.g. desiredstate/annotations/spring/ is a sub-module of
+  # desiredstate/annotations/, not a direct child of desiredstate/).
   deps=$(python3 -c "
 import xml.etree.ElementTree as ET, os
 ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
 try:
     tree = ET.parse('$pom')
+    # Collect artifactIds from every pom.xml under this repo — these are
+    # intra-repo modules that Maven builds together, not cross-repo deps.
     own_modules = set()
     for root, dirs, files in os.walk('$repo'):
         if 'pom.xml' in files and root != '$repo':
@@ -50,6 +63,7 @@ try:
                 if aid is not None and aid.text:
                     own_modules.add(aid.text)
             except: pass
+    # Print only cross-repo deps (not in own_modules)
     for dep in tree.findall('.//m:dependencies/m:dependency', ns):
         g = dep.find('m:groupId', ns)
         a = dep.find('m:artifactId', ns)
@@ -74,6 +88,8 @@ except: pass
       continue
     fi
 
+    # ZIP magic number check — catches corrupt downloads (truncated, empty
+    # central directory) before Maven tries to read the JAR as a classpath entry.
     magic=$(xxd -l4 -p "$jar" 2>/dev/null || echo "")
     if [ "$magic" != "504b0304" ]; then
       echo "  CORRUPT: $artifact ($jar)"
@@ -95,12 +111,17 @@ fi
 
 echo '{"verified":false,"missing":'$MISSING',"corrupt":'$CORRUPT'}' > /tmp/artifact-status.json
 
+# Corrupt artifacts always block — Maven will fail with ZipException anyway,
+# and the error from here is clearer than a compiler error 5 minutes later.
 if [ "$CORRUPT" -gt 0 ]; then
   echo "::error::Artifact verification failed: $MISSING missing, $CORRUPT corrupt"
   echo "::error::Corrupt artifacts will cause build failures."
   exit 1
 fi
 
+# Missing artifacts: in resume mode, Maven resolves from GitHub Packages
+# at build time (the warm cache or GP has them). In full build mode, missing
+# means the upload/download chain between levels is broken.
 if [ -n "$RESUME" ]; then
   echo "::warning::$MISSING artifacts missing (resume mode — Maven resolves from GitHub Packages)"
   exit 0
