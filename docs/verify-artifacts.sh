@@ -41,18 +41,15 @@ import xml.etree.ElementTree as ET, os
 ns = {'m': 'http://maven.apache.org/POM/4.0.0'}
 try:
     tree = ET.parse('$pom')
-    # Collect this repo's own module artifactIds to skip
     own_modules = set()
-    for mod in tree.findall('.//m:modules/m:module', ns):
-        if mod.text:
-            mod_pom = os.path.join('$repo', mod.text, 'pom.xml')
-            if os.path.isfile(mod_pom):
-                try:
-                    mtree = ET.parse(mod_pom)
-                    aid = mtree.find('m:artifactId', ns)
-                    if aid is not None and aid.text:
-                        own_modules.add(aid.text)
-                except: pass
+    for root, dirs, files in os.walk('$repo'):
+        if 'pom.xml' in files and root != '$repo':
+            try:
+                mtree = ET.parse(os.path.join(root, 'pom.xml'))
+                aid = mtree.find('m:artifactId', ns)
+                if aid is not None and aid.text:
+                    own_modules.add(aid.text)
+            except: pass
     for dep in tree.findall('.//m:dependencies/m:dependency', ns):
         g = dep.find('m:groupId', ns)
         a = dep.find('m:artifactId', ns)
