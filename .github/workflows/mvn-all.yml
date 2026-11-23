@@ -69,7 +69,6 @@ permissions:
   packages: read
   actions: write
 
-# ════════════════════════════════════════════════════════════════════
 # Architecture: dependency-optimized parallel pipeline (10 levels)
 #
 # L0:   prepare → platform-slices(4) → convergence
@@ -83,13 +82,10 @@ permissions:
 # L8:   life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]  (apps)
 # L9:   [scaffold+fsitrading]  (need ops)
 # fin:  dashboard finish + pointer advance
-# ════════════════════════════════════════════════════════════════════
 
 jobs:
 
-  # ════════════════════════════════════════════════════════════════════
   # Gate: abort this run if another is already in progress (default)
-  # ════════════════════════════════════════════════════════════════════
   gate:
     name: "Concurrency gate"
     runs-on: ubuntu-latest
@@ -131,9 +127,7 @@ jobs:
           echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
           echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
 
-  # ════════════════════════════════════════════════════════════════════
   # Dependency cache — download all third-party deps once, cache between runs
-  # ════════════════════════════════════════════════════════════════════
   warm-cache:
     name: "Warm dependency cache"
     needs: [gate]
@@ -215,9 +209,7 @@ jobs:
             echo "::notice::Cache verified — delta ${DELTA:-0}KB"
           fi
 
-  # ════════════════════════════════════════════════════════════════════
   # Phase 0: Prepare — checkout, submodule update, platform base
-  # ════════════════════════════════════════════════════════════════════
   prepare:
     name: "Prepare + Platform base"
     needs: [gate, warm-cache]
@@ -399,9 +391,7 @@ jobs:
           compression-level: 0
           if-no-files-found: ignore
 
-  # ════════════════════════════════════════════════════════════════════
   # Phase 1: Platform slices — 4 parallel jobs
-  # ════════════════════════════════════════════════════════════════════
   platform-slices:
     name: "Platform slice ${{ matrix.slice }}"
     if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
@@ -476,9 +466,7 @@ jobs:
           compression-level: 0
           if-no-files-found: ignore
 
-  # ════════════════════════════════════════════════════════════════════
   # Phase 2: Platform convergence — full rebuild from source
-  # ════════════════════════════════════════════════════════════════════
   convergence:
     name: "Platform convergence"
     needs: [prepare, platform-slices]
@@ -578,9 +566,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: m2-ecosystem-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 1: [ledger→eidos] | connectors | worker (3 parallel)
-  # ════════════════════════════════════════════════════════════════════
   level1:
     name: "L1: ${{ matrix.name }}"
     needs: convergence
@@ -678,9 +664,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: "m2-L1-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 2: neocortex | qhorus (2 parallel — both need eidos from L1)
-  # ════════════════════════════════════════════════════════════════════
   level2:
     name: "L2: ${{ matrix.repo }}"
     needs: [convergence, level1]
@@ -757,9 +741,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: "m2-L2-${{ matrix.repo }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 3: work — base → slices(2)
-  # ════════════════════════════════════════════════════════════════════
   work-base:
     name: "L3: Work base"
     needs: [convergence, level2]
@@ -894,9 +876,7 @@ jobs:
           retention-days: 1
           compression-level: 1
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 4: engine — base → slices(3)
-  # ════════════════════════════════════════════════════════════════════
   engine-base:
     name: "L4: Engine base"
     needs: [convergence, work-slices]
@@ -1030,9 +1010,7 @@ jobs:
           retention-days: 1
           compression-level: 1
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 5: [ras+desiredstate] | [claudony+agency] | [langchain4j+workers]
-  # ════════════════════════════════════════════════════════════════════
   level5:
     name: "L5: ${{ matrix.name }}"
     needs: [convergence, engine-slices]
@@ -1120,9 +1098,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: "m2-L5-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 6: ops | casehub-mosaic (foundational — ops for infra, mosaic for UI)
-  # ════════════════════════════════════════════════════════════════════
   level6:
     name: "L6: ${{ matrix.name }}"
     needs: [convergence, level5]
@@ -1207,9 +1183,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: "m2-L6-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 7: drafthouse (needs mosaic from L6)
-  # ════════════════════════════════════════════════════════════════════
   level7:
     name: "L7: drafthouse"
     needs: [convergence, level6]
@@ -1281,9 +1255,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: m2-L7-drafthouse, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 8: Apps — life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]
-  # ════════════════════════════════════════════════════════════════════
   level8:
     name: "L8: ${{ matrix.name }}"
     needs: [convergence, level7]
@@ -1373,9 +1345,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: "m2-L8-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
-  # ════════════════════════════════════════════════════════════════════
   # Level 9: scaffold + fsitrading (both need ops from L6)
-  # ════════════════════════════════════════════════════════════════════
   level9:
     name: "L9: scaffold, fsitrading"
     needs: [convergence, level8]
@@ -1442,9 +1412,7 @@ jobs:
           done
         timeout-minutes: 30
 
-  # ════════════════════════════════════════════════════════════════════
   # Finalize — dashboard + pointer advance
-  # ════════════════════════════════════════════════════════════════════
   finalize:
     name: "Finalize"
     needs: [prepare, convergence, level1, level2, work-base, work-slices, engine-base, engine-slices, level5, level6, level7, level8, level9]
