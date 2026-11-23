@@ -75,8 +75,12 @@ if [ $((MISSING + CORRUPT)) -eq 0 ]; then
   exit 0
 else
   echo '{"verified":false,"missing":'$MISSING',"corrupt":'$CORRUPT'}' > /tmp/artifact-status.json
-  echo "::error::Artifact verification failed: $MISSING missing, $CORRUPT corrupt"
-  echo "::error::Cannot proceed — required artifacts from prior levels are incomplete."
-  echo "::error::Run a full build (no resume) to rebuild missing artifacts."
-  exit 1
+  if [ "$CORRUPT" -gt 0 ]; then
+    echo "::error::Artifact verification failed: $MISSING missing, $CORRUPT corrupt"
+    echo "::error::Cannot proceed — corrupt artifacts will cause build failures."
+    exit 1
+  else
+    echo "::warning::Artifact verification: $MISSING missing (will resolve from GitHub Packages)"
+    exit 0
+  fi
 fi
