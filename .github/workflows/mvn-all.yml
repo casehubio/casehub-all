@@ -230,6 +230,11 @@ jobs:
       mvn-common: ${{ steps.flags.outputs.mvn-common }}
       maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Initialize CI dashboard
         run: |
           NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -277,11 +282,6 @@ jobs:
           CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
           CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
         continue-on-error: true
-
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check dependency graph for cycles
         run: python3 docs/check-cycles.py
