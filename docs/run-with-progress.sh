@@ -206,8 +206,20 @@ run_with_healing() {
   return $EXIT_CODE
 }
 
-# Dry run — skip Maven entirely, just validate pipeline structure
+# Announce build mode — visible in GitHub Actions step output so observers
+# can tell at a glance whether this phase is running tests, compiling only,
+# or doing a dry run. Without this, you have to dig into MVN_COMMON flags.
 if [ "${DRY_RUN:-}" = "true" ]; then
+  BUILD_MODE="dry-run"
+elif echo "${MVN_COMMON:-} $*" | grep -q "DskipTests"; then
+  BUILD_MODE="compile-only"
+else
+  BUILD_MODE="compile+test"
+fi
+echo "::notice::[$PHASE] mode=$BUILD_MODE"
+
+# Dry run — skip Maven entirely, just validate pipeline structure
+if [ "$BUILD_MODE" = "dry-run" ]; then
   echo "dry run: $PHASE — skipped" | tee "$LOGFILE"
   FINAL_SENT=1
   bash docs/update-progress.sh "$MODE" "$PHASE" success "$LOGFILE" 2>&1 || true
