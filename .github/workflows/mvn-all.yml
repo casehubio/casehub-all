@@ -230,10 +230,20 @@ jobs:
       mvn-common: ${{ steps.flags.outputs.mvn-common }}
       maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
+      # Shallow checkout without submodules — only init what this step needs
+      # (parent + platform). Full recursive checkout was 65s for 30+ repos
+      # that prepare never touches.
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
+          submodules: false
           token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Init submodules
+        run: |
+          git submodule update --init --depth=1 parent platform
+          # Full init only when submodule_update needs all repos
+          if [ "${{ inputs.submodule_update }}" = "all" ]; then
+            git submodule update --init --depth=1
+          fi
 
       - name: Initialize CI dashboard
         run: |
