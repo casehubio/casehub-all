@@ -158,6 +158,8 @@ jobs:
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Verify and complete dependencies
         id: download
+        timeout-minutes: 20
+        continue-on-error: true
         run: |
           START=$(date +%s)
           CACHE_SIZE_BEFORE=$(du -s ~/.m2/repository 2>/dev/null | cut -f1 || echo 0)
@@ -199,7 +201,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}-${{ github.run_id }}
+          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
       - name: Report cache status
         if: always()
         run: |
