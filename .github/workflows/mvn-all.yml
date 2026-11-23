@@ -601,7 +601,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -695,7 +695,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -770,7 +770,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -841,7 +841,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -907,7 +907,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -977,7 +977,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -1055,7 +1055,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -1142,7 +1142,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -1220,7 +1220,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -1308,7 +1308,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
@@ -1386,7 +1386,7 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
       MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
