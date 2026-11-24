@@ -91,3 +91,6 @@
 [submodule "pages"]
 	path = pages
 	url = https://github.com/casehubio/casehub-pages.git
+[submodule "distributions"]
+	path = distributions
+	url = https://github.com/casehubio/distributions.git
