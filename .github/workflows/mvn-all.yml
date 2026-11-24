@@ -387,8 +387,9 @@ jobs:
           # Dynamic slicing puts 124 modules in base. Some @QuarkusTest modules
           # have 50+ tests that legitimately take >5 min per surefire fork.
           # The parent POM's forkedProcessTimeoutInSeconds=300 is too tight.
-          bash docs/run-with-progress.sh --parallel "Prepare + Platform base" mvn install -T 1C -DforkedProcessTimeoutInSeconds=600 -f build/platform-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 5
+          bash docs/run-with-progress.sh --parallel "Prepare + Platform base" mvn install -T 1C -f build/platform-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
+        # Dynamic slicing: 124 modules in base (was 3 static). Tests take ~15 min.
+        timeout-minutes: 20
 
       - name: Validate produced JARs
         if: inputs.test_mode != 'dry'
