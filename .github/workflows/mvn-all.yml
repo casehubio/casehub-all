@@ -142,9 +142,9 @@ jobs:
     if: ${{ !failure() && !cancelled() && inputs.resume_from == '' && inputs.test_mode != 'dry' }}
     runs-on: ubuntu-latest
     # Dynamic slicing puts 124 modules in platform base (was 3 static).
-    # Base (~10 min) + convergence (~10 min) + setup (~5 min) = ~25 min.
-    # 35 min gives headroom for slow runners.
-    timeout-minutes: 35
+    # Base (~15 min) + convergence (~10 min) + setup (~5 min) = ~30 min.
+    # JBoss 503s add overhead; 45 min gives headroom.
+    timeout-minutes: 45
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -389,7 +389,8 @@ jobs:
           # The parent POM's forkedProcessTimeoutInSeconds=300 is too tight.
           bash docs/run-with-progress.sh --parallel "Prepare + Platform base" mvn install -T 1C -f build/platform-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
         # Dynamic slicing: 124 modules in base (was 3 static). Tests take ~15 min.
-        timeout-minutes: 20
+        # JBoss Nexus 503s add ~10-50s per SNAPSHOT metadata lookup — need headroom.
+        timeout-minutes: 30
 
       - name: Validate produced JARs
         if: inputs.test_mode != 'dry'
