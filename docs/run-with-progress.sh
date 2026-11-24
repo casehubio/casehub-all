@@ -97,6 +97,16 @@
 
 set -euo pipefail
 
+# Block JBoss Nexus snapshots in CI — casehub has no artifacts there.
+# JBoss 503s add ~10-50s per SNAPSHOT metadata lookup across 124+ modules.
+# Mirror redirects to Maven Central which returns 404 instantly.
+if [ "${CI:-}" = "true" ] && [ ! -f /tmp/.jboss-blocked ]; then
+  if grep -q '</settings>' ~/.m2/settings.xml 2>/dev/null; then
+    sed -i 's|</settings>|<mirrors><mirror><id>block-jboss</id><mirrorOf>jboss-snapshots</mirrorOf><url>https://repo.maven.apache.org/maven2</url></mirror></mirrors></settings>|' ~/.m2/settings.xml
+    touch /tmp/.jboss-blocked
+  fi
+fi
+
 MODE="phase"
 if [ "${1:-}" = "--parallel" ]; then
   MODE="phase-file"
