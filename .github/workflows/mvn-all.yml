@@ -1530,33 +1530,25 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           RETRY=$(( ${{ inputs.retry_count }} + 1 ))
-          RESUME=$(python3 -c "
-          import json, yaml
-          try:
-            progress = json.load(open('/tmp/progress.json'))
-            phases = progress.get('current', {}).get('phases', [])
-            failed = {p['name'] for p in phases if p.get('status') == 'failure'}
-            if not failed:
-              print('')
-            else:
-              pipeline = yaml.safe_load(open('docs/pipeline.yaml'))
-              for lv in pipeline['levels']:
-                if not lv.get('resume'): continue
-                all_names = set()
-                if 'base' in lv: all_names.add(lv['base'])
-                for s in lv['stacks']:
-                  all_names.update(s)
-                if 'convergence' in lv: all_names.add(lv['convergence'])
-                if failed & all_names:
-                  print(lv['id']); break
-              else:
-                print('')
-          except: print('')
-          " 2>/dev/null)
+          # Determine which level to resume from using needs.<job>.result.
+          # Previous implementation read /tmp/progress.json which doesn't
+          # exist on the Finalize runner — always fell back to full rebuild.
+          # This version uses the job results directly from the workflow.
+          RESUME=""
+          if [ "${{ needs.level9.result }}" = "failure" ]; then RESUME="L8"
+          elif [ "${{ needs.level8.result }}" = "failure" ]; then RESUME="L8"
+          elif [ "${{ needs.level7.result }}" = "failure" ]; then RESUME="L5"
+          elif [ "${{ needs.level6.result }}" = "failure" ]; then RESUME="L5"
+          elif [ "${{ needs.level5.result }}" = "failure" ]; then RESUME="L5"
+          elif [ "${{ needs.engine-slices.result }}" = "failure" ] || [ "${{ needs.engine-base.result }}" = "failure" ]; then RESUME="L4"
+          elif [ "${{ needs.work-slices.result }}" = "failure" ] || [ "${{ needs.work-base.result }}" = "failure" ]; then RESUME="L3"
+          elif [ "${{ needs.level2.result }}" = "failure" ]; then RESUME="L2"
+          elif [ "${{ needs.level1.result }}" = "failure" ]; then RESUME="L1"
+          fi
           if [ -n "$RESUME" ]; then
             echo "::warning::Build failed at $RESUME (attempt $RETRY/2). Resuming from $RESUME."
           else
-            echo "::warning::Build failed (attempt $RETRY/2). Full rebuild."
+            echo "::warning::Build failed at L0 (attempt $RETRY/2). Full rebuild required."
           fi
           gh workflow run mvn-all.yml \
             -f test_mode=${{ inputs.test_mode }} \
