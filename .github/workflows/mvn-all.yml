@@ -555,10 +555,19 @@ jobs:
           echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
           echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
           echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -669,10 +678,19 @@ jobs:
           path: ~/.casehub
           key: casehub-native-${{ runner.os }}-sherpa-${{ hashFiles('connectors/voice-sherpa/src/main/java/**/SherpaLibrary.java') }}
           restore-keys: casehub-native-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -749,10 +767,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -817,10 +844,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -884,9 +920,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -955,9 +1001,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -1020,9 +1076,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -1110,10 +1176,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -1195,10 +1270,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -1269,10 +1353,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -1357,10 +1450,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -1427,10 +1529,19 @@ jobs:
           path: ~/.m2/repository
           key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
           restore-keys: m2-deps-${{ runner.os }}-
+      - name: Restore casehub snapshot cache
+        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry'
+        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
         run: |
-          # Preserve npm artifact containers — they don't change between levels
+          # Full builds purge to ensure fresh from-source artifacts per level.
+          # Resume builds skip purge — casehub snapshot cache provides artifacts
+          # from the last successful build, avoiding slow GitHub Packages resolution.
           mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
           mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
           rm -rf ~/.m2/repository/io/casehub
@@ -1518,6 +1629,22 @@ jobs:
             git pull --rebase origin main || true
             git push
           }
+      - name: Download all build artifacts for cache
+        if: steps.result.outputs.build_ok == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "m2-*"
+          path: ~/.m2/repository/io/casehub
+          merge-multiple: true
+      - name: Save casehub snapshot cache
+        if: steps.result.outputs.build_ok == 'true'
+        uses: actions/cache/save@v4
+        with:
+          # Cached casehub SNAPSHOTs from successful builds. Resume builds
+          # restore this instead of purging+downloading — avoids 30+ min
+          # GitHub Packages SNAPSHOT metadata resolution.
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
       - name: Build summary
         if: always()
         run: |
