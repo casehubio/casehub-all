@@ -141,11 +141,19 @@ run_with_healing() {
   EXIT_CODE=${PIPESTATUS[0]}
   [ "$EXIT_CODE" -eq 0 ] && return 0
 
-  # ── Code failures — these are real, don't retry ──────────────────
-  if grep -qE "COMPILATION ERROR" "$LOGFILE" 2>/dev/null &&
-     grep -qE "cannot find symbol|does not exist|is not abstract|cannot access|incompatible types" "$LOGFILE" 2>/dev/null; then
-    echo "::error::[$PHASE] Compilation failure — code fix required"
-    return $EXIT_CODE
+  # ── Corrupt JARs masquerading as compilation errors ───────────────
+  # ZipException in a dependency JAR causes "cannot access" compilation
+  # errors. Check for this BEFORE the code-failure classification so
+  # corrupt JARs are treated as infrastructure, not code failures.
+  if grep -qE "ZipException|zip END header not found|invalid LOC header" "$LOGFILE" 2>/dev/null; then
+    echo "::warning::[$PHASE] Corrupt JAR detected — treating as infrastructure failure"
+  else
+    # ── Code failures — these are real, don't retry ──────────────────
+    if grep -qE "COMPILATION ERROR" "$LOGFILE" 2>/dev/null &&
+       grep -qE "cannot find symbol|does not exist|is not abstract|cannot access|incompatible types" "$LOGFILE" 2>/dev/null; then
+      echo "::error::[$PHASE] Compilation failure — code fix required"
+      return $EXIT_CODE
+    fi
   fi
   if grep -qE "Tests run:.*Failures: [1-9]|Tests run:.*Errors: [1-9]" "$LOGFILE" 2>/dev/null; then
     echo "::error::[$PHASE] Test failure — code fix required"
