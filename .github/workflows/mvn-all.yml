@@ -977,7 +977,9 @@ jobs:
         run: |
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
           bash docs/run-with-progress.sh --parallel "Engine base" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 30
+        # Resume mode resolves casehub SNAPSHOTs from GitHub Packages (slow).
+        # Full builds take ~10 min; resumes can take ~30 min for GP resolution.
+        timeout-minutes: 45
       - if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: m2-L4-engine-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
