@@ -832,7 +832,10 @@ jobs:
         run: |
           SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
           bash docs/run-with-progress.sh --parallel "Work base" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 20
+        # Dynamic slicing puts more modules in base than the old static split.
+        # 20 min was enough for 5 static base modules; 10 dynamic base modules
+        # with Quarkus integration tests need 30 min.
+        timeout-minutes: 30
       - if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with: { name: m2-L3-work-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
