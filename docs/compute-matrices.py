@@ -96,34 +96,23 @@ def main():
 
     pipeline = load_pipeline(args.pipeline)
 
-    outputs = {}
+    matrices = {}
+    timeouts = {}
     for level in pipeline.get('levels', []):
         level_id = level['id']
         key = level_id.lower()
 
         if level.get('slices') and level_id != 'L0':
-            outputs[f'{key}-slice-matrix'] = json.dumps(build_matrix(level))
+            matrices[key] = build_matrix(level)
+        elif not level.get('slices'):
+            matrices[key] = build_matrix(level)
 
-        if not level.get('slices'):
-            outputs[f'{key}-matrix'] = json.dumps(build_matrix(level))
+        timeouts[key] = level.get('timeout', 30)
 
-        timeout = level.get('timeout', 30)
-        outputs[f'{key}-timeout'] = str(timeout)
-
-    outputs['resume-levels'] = json.dumps(build_resume_levels(pipeline))
-    outputs['all-repos'] = ' '.join(build_all_repos(pipeline))
-
-    # Job name list for finalize needs: chain
-    job_names = []
-    for level in pipeline.get('levels', []):
-        lid = level['id']
-        num = lid[1:]
-        if level.get('slices') and lid != 'L0':
-            repo = level['repos'][0]
-            job_names.extend([f'{repo}-base', f'{repo}-slices'])
-        else:
-            job_names.append(f'level{num}')
-    outputs['job-names'] = json.dumps(job_names)
+    outputs = {
+        'matrices': json.dumps(matrices),
+        'timeouts': json.dumps(timeouts),
+    }
 
     if args.preview:
         for key, value in sorted(outputs.items()):

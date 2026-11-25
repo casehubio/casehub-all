@@ -232,20 +232,8 @@ jobs:
     outputs:
       mvn-common: ${{ steps.flags.outputs.mvn-common }}
       maven-args: ${{ steps.flags.outputs.maven-args }}
-      l1-matrix: ${{ steps.matrices.outputs.l1-matrix }}
-      l2-matrix: ${{ steps.matrices.outputs.l2-matrix }}
-      l5-matrix: ${{ steps.matrices.outputs.l5-matrix }}
-      l6-matrix: ${{ steps.matrices.outputs.l6-matrix }}
-      l7-matrix: ${{ steps.matrices.outputs.l7-matrix }}
-      l8-matrix: ${{ steps.matrices.outputs.l8-matrix }}
-      l9-matrix: ${{ steps.matrices.outputs.l9-matrix }}
-      l1-timeout: ${{ steps.matrices.outputs.l1-timeout }}
-      l2-timeout: ${{ steps.matrices.outputs.l2-timeout }}
-      l5-timeout: ${{ steps.matrices.outputs.l5-timeout }}
-      l6-timeout: ${{ steps.matrices.outputs.l6-timeout }}
-      l7-timeout: ${{ steps.matrices.outputs.l7-timeout }}
-      l8-timeout: ${{ steps.matrices.outputs.l8-timeout }}
-      l9-timeout: ${{ steps.matrices.outputs.l9-timeout }}
+      matrices: ${{ steps.matrices.outputs.matrices }}
+      timeouts: ${{ steps.matrices.outputs.timeouts }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -676,10 +664,10 @@ jobs:
     needs: [config, convergence]
     if: always() && !cancelled() && (inputs.resume_from == '' || inputs.resume_from == 'L1')
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.config.outputs.l1-timeout) }}
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l1 }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l1-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l1 }}
     steps:
       - uses: ./.github/actions/build-level
         with:
@@ -697,10 +685,10 @@ jobs:
     needs: [config, convergence, level1]
     if: always() && !cancelled() && (needs.level1.result == 'success' || inputs.resume_from == 'L2')
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.config.outputs.l2-timeout) }}
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l2 }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l2-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l2 }}
     steps:
       - uses: ./.github/actions/build-level
         with:
@@ -740,7 +728,7 @@ jobs:
     timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l3-slice-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l3 }}
     steps:
       - uses: ./.github/actions/build-sliced-level
         with:
@@ -782,7 +770,7 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l4-slice-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l4 }}
     steps:
       - uses: ./.github/actions/build-sliced-level
         with:
@@ -802,10 +790,10 @@ jobs:
     needs: [config, convergence, engine-slices]
     if: always() && !cancelled() && (needs.engine-slices.result == 'success' || inputs.resume_from == 'L5')
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.config.outputs.l5-timeout) }}
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l5 }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l5-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l5 }}
     steps:
       - uses: ./.github/actions/build-level
         with:
@@ -823,10 +811,10 @@ jobs:
     needs: [config, convergence, level5]
     if: always() && !cancelled() && needs.level5.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.config.outputs.l6-timeout) }}
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l6 }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l6-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l6 }}
     steps:
       - uses: ./.github/actions/build-level
         with:
@@ -845,10 +833,10 @@ jobs:
     needs: [config, convergence, level6]
     if: always() && !cancelled() && needs.level6.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.config.outputs.l7-timeout) }}
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l7 }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l7-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l7 }}
     steps:
       - uses: ./.github/actions/build-level
         with:
@@ -867,10 +855,10 @@ jobs:
     needs: [config, convergence, level7]
     if: always() && !cancelled() && (needs.level7.result == 'success' || inputs.resume_from == 'L8')
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.config.outputs.l8-timeout) }}
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l8 }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l8-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l8 }}
     steps:
       - uses: ./.github/actions/build-level
         with:
@@ -889,10 +877,10 @@ jobs:
     needs: [config, convergence, level8]
     if: always() && !cancelled() && needs.level8.result == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.config.outputs.l9-timeout) }}
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l9 }}
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.l9-matrix) }}
+      matrix: ${{ fromJSON(needs.config.outputs.matrices).l9 }}
     steps:
       - uses: ./.github/actions/build-level
         with:
