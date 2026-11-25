@@ -28,7 +28,7 @@ export default {
               if (pd) {
                 const phase = JSON.parse(pd);
                 if (phase.name) {
-                  const match = data.current.phases.find(pp => pp.name === phase.name);
+                  const match = data.current.phases.find(pp => pp.name.toLowerCase() === phase.name.toLowerCase());
                   if (match) Object.assign(match, { ...phase, name: match.name });
                 }
               }

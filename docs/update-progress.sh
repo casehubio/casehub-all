@@ -210,7 +210,7 @@ data = json.loads(sys.stdin.read())
 stats = json.loads('''$STATS''')
 if data.get('current'):
     for p in data['current']['phases']:
-        if p['name'] == '$NAME':
+        if p['name'].lower() == '$NAME'.lower():
             p['status'] = '$STATUS'
             p['_written_at'] = '$NOW'
             if '$STATUS' == 'in_progress':
@@ -261,7 +261,7 @@ if cur:
             pd = json.load(open(f))
             if pd.get('name'):
                 for p in cur.get('phases', []):
-                    if p['name'] == pd['name']:
+                    if p['name'].lower() == pd['name'].lower():
                         p.update({k:v for k,v in pd.items() if k not in ('name','updated')})
                         break
         except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
