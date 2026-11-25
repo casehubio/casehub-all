@@ -1,0 +1,139 @@
+name: 'Build Level'
+description: 'Shared build steps for a casehub-all pipeline level'
+
+inputs:
+  repos:
+    description: 'Space-separated list of repos to build'
+    required: true
+  level:
+    description: 'Level identifier (L1, L2, etc.) for artifact naming'
+    required: true
+  name:
+    description: 'Display name for dashboard and artifact naming'
+    required: true
+  pom-overrides:
+    description: 'JSON dict of repo→pom path overrides'
+    default: '{}'
+  maven-extra:
+    description: 'Extra Maven args for this matrix entry'
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: false
+        token: ${{ env.GITHUB_TOKEN }}
+
+    - name: Init submodules
+      if: env.DRY_RUN != 'true'
+      shell: bash
+      run: git submodule update --init --depth=1 parent platform ${{ inputs.repos }}
+
+    - name: Initialize dashboard (resume)
+      if: env.RESUME_FROM != ''
+      shell: bash
+      run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "$RESUME_FROM" ${{ github.event.inputs.retry_count || 0 }}
+      continue-on-error: true
+
+    - name: Pull latest submodules (resume)
+      if: env.RESUME_FROM != '' && github.event.inputs.submodule_update != 'pinned' && env.DRY_RUN != 'true'
+      shell: bash
+      run: |
+        REPOS="${{ inputs.repos }}"
+        if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
+
+    - name: Set up Java 22
+      if: env.DRY_RUN != 'true'
+      uses: actions/setup-java@v4
+      with:
+        java-version: '22'
+        distribution: 'temurin'
+        server-id: github
+        server-username: GITHUB_ACTOR
+        server-password: GITHUB_TOKEN
+
+    - name: Set up Node 22
+      if: env.DRY_RUN != 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Enable Corepack
+      if: env.DRY_RUN != 'true'
+      shell: bash
+      run: corepack enable
+
+    - name: Restore Maven cache
+      if: env.DRY_RUN != 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
+        restore-keys: m2-deps-${{ runner.os }}-
+
+    - name: Restore casehub snapshot cache
+      if: env.DRY_RUN != 'true' && env.RESUME_FROM != ''
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.m2/repository/io/casehub
+        key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+        restore-keys: m2-casehub-${{ runner.os }}-
+
+    - name: Purge casehub snapshots
+      if: env.DRY_RUN != 'true' && env.RESUME_FROM == ''
+      shell: bash
+      run: |
+        # Full builds purge to ensure fresh from-source artifacts per level.
+        # Resume builds skip purge — casehub snapshot cache provides artifacts
+        # from the last successful build, avoiding slow GitHub Packages resolution.
+        mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+        mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+        rm -rf ~/.m2/repository/io/casehub
+        mkdir -p ~/.m2/repository/io/casehub
+        mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+        mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+
+    - name: Install parent POMs
+      if: env.DRY_RUN != 'true'
+      shell: bash
+      run: |
+        mvn install -N -f parent/pom.xml --batch-mode -q
+        mvn install -N -f platform/pom.xml --batch-mode -q
+
+    - name: Download build artifacts
+      if: env.DRY_RUN != 'true'
+      uses: actions/download-artifact@v4
+      continue-on-error: ${{ env.RESUME_FROM != '' }}
+      with:
+        pattern: "m2-*"
+        path: ~/.m2/repository/io/casehub
+        merge-multiple: true
+
+    - name: Build
+      shell: bash
+      run: |
+        SKIP_FLAG=""
+        TEST_MODE="${{ github.event.inputs.test_mode }}"
+        if [ "$TEST_MODE" = "skip" ] || [ "$TEST_MODE" = "compile" ]; then
+          SKIP_FLAG="-DskipTests"
+        fi
+        OVERRIDES='${{ inputs.pom-overrides }}'
+        for repo in ${{ inputs.repos }}; do
+          POM="$repo/pom.xml"
+          if [ "$OVERRIDES" != "{}" ]; then
+            OVERRIDE=$(echo "$OVERRIDES" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$repo',''))" 2>/dev/null || true)
+            if [ -n "$OVERRIDE" ]; then POM="$OVERRIDE"; fi
+          fi
+          bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C $SKIP_FLAG -f $POM $MVN_COMMON $MAVEN_ARGS ${{ inputs.maven-extra }}
+        done
+
+    - name: Upload artifacts
+      if: env.DRY_RUN != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: "m2-${{ inputs.level }}-${{ inputs.name }}"
+        path: ~/.m2/repository/io/casehub
+        retention-days: 1
+        compression-level: 1

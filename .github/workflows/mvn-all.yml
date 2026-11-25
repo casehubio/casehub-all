@@ -220,6 +220,58 @@ jobs:
             echo "::notice::Cache verified — delta ${DELTA:-0}KB"
           fi
 
+  # Config: always runs (even on resume), reads pipeline.yaml, outputs matrices
+  config:
+    name: "Build config"
+    needs: [gate]
+    if: always() && !cancelled() && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      mvn-common: ${{ steps.flags.outputs.mvn-common }}
+      maven-args: ${{ steps.flags.outputs.maven-args }}
+      l1-matrix: ${{ steps.matrices.outputs.l1-matrix }}
+      l2-matrix: ${{ steps.matrices.outputs.l2-matrix }}
+      l5-matrix: ${{ steps.matrices.outputs.l5-matrix }}
+      l6-matrix: ${{ steps.matrices.outputs.l6-matrix }}
+      l7-matrix: ${{ steps.matrices.outputs.l7-matrix }}
+      l8-matrix: ${{ steps.matrices.outputs.l8-matrix }}
+      l9-matrix: ${{ steps.matrices.outputs.l9-matrix }}
+      l1-timeout: ${{ steps.matrices.outputs.l1-timeout }}
+      l2-timeout: ${{ steps.matrices.outputs.l2-timeout }}
+      l5-timeout: ${{ steps.matrices.outputs.l5-timeout }}
+      l6-timeout: ${{ steps.matrices.outputs.l6-timeout }}
+      l7-timeout: ${{ steps.matrices.outputs.l7-timeout }}
+      l8-timeout: ${{ steps.matrices.outputs.l8-timeout }}
+      l9-timeout: ${{ steps.matrices.outputs.l9-timeout }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            docs/pipeline.yaml
+            docs/compute-matrices.py
+          sparse-checkout-cone-mode: false
+      - name: Compute matrices from pipeline.yaml
+        id: matrices
+        run: python3 docs/compute-matrices.py >> "$GITHUB_OUTPUT"
+      - name: Compute Maven flags
+        id: flags
+        run: |
+          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
+          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
+            FLAGS="$FLAGS -DskipTests"
+          fi
+          if [ "${{ inputs.quarkus_build }}" != "true" ]; then
+            FLAGS="$FLAGS -Dquarkus.build.skip=true"
+          fi
+          if [ "${{ inputs.enforcer }}" != "true" ]; then
+            FLAGS="$FLAGS -Denforcer.skip=true"
+          fi
+          echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
+          echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
+      - name: Validate pipeline consistency
+        run: python3 docs/check-pipeline-consistency.py || echo "::warning::Pipeline consistency check found issues"
+        continue-on-error: true
+
   # Phase 0: Prepare — checkout, submodule update, platform base
   prepare:
     name: "Prepare + Platform base"
@@ -611,22 +663,20 @@ jobs:
         uses: actions/upload-artifact@v4
         with: { name: m2-ecosystem-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
 
-  # Level 1: [ledger→eidos] | connectors | worker (3 parallel)
+  # Levels 1-9: data-driven from pipeline.yaml via config job outputs.
+  # Shared build steps live in .github/actions/build-level/action.yml.
+  # To change repo assignments, edit docs/pipeline.yaml — matrices are
+  # computed at runtime by docs/compute-matrices.py.
+
   level1:
     name: "L1: ${{ matrix.name }}"
-    needs: convergence
+    needs: [config, convergence]
     if: always() && !cancelled() && (inputs.resume_from == '' || inputs.resume_from == 'L1')
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.l1-timeout) }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: "ledger, eidos"
-            repos: "ledger eidos"
-          - name: connectors
-            repos: connectors
-          - name: worker, pages
-            repos: worker pages
+      matrix: ${{ fromJSON(needs.config.outputs.l1-matrix) }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -635,99 +685,24 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: |
-          REPOS="${{ matrix.repos }}"
-          if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
-      - name: Set up Java 22
-        if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - name: Set up Node 22
-        uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - name: Enable Corepack
-        if: inputs.test_mode != 'dry'
-        run: corepack enable
-      - name: Restore Maven cache
-        if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore native library cache
-        if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.casehub
-          key: casehub-native-${{ runner.os }}-sherpa-${{ hashFiles('connectors/voice-sherpa/src/main/java/**/SherpaLibrary.java') }}
-          restore-keys: casehub-native-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - name: Install parent POMs
-        if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download convergence artifacts
-        if: inputs.resume_from == '' && inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        with: { name: m2-ecosystem-base, path: ~/.m2/repository/io/casehub }
-      - name: Build
-        run: |
-          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          for repo in ${{ matrix.repos }}; do
-            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C $SKIP_FLAG -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS
-          done
-        timeout-minutes: 35
-      - name: Upload artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: "m2-L1-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+          repos: ${{ matrix.repos }}
+          level: L1
+          name: ${{ matrix.name }}
 
-  # Level 2: neocortex | qhorus (2 parallel — both need eidos from L1)
   level2:
-    name: "L2: ${{ matrix.repo }}"
-    needs: [convergence, level1]
+    name: "L2: ${{ matrix.name }}"
+    needs: [config, convergence, level1]
     if: always() && !cancelled() && (needs.level1.result == 'success' || inputs.resume_from == 'L2')
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.l2-timeout) }}
     strategy:
       fail-fast: false
-      matrix:
-        repo: [neocortex, qhorus]
+      matrix: ${{ fromJSON(needs.config.outputs.l2-matrix) }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -736,78 +711,19 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform ${{ matrix.repo }}
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: git submodule update --remote ${{ matrix.repo }}
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - if: inputs.test_mode != 'dry'
-        run: corepack enable
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        continue-on-error: ${{ inputs.resume_from != '' }}
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Build
-        run: |
-          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "${{ matrix.repo }}" mvn install -fae -T 1C $SKIP_FLAG -f ${{ matrix.repo }}/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 35
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: "m2-L2-${{ matrix.repo }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+          repos: ${{ matrix.repos }}
+          level: L2
+          name: ${{ matrix.name }}
 
   # Level 3: work — base → slices(2)
   work-base:
     name: "L3: Work base"
-    needs: [convergence, level2]
+    needs: [config, convergence, level2]
     if: always() && !cancelled() && (needs.level2.result == 'success' || inputs.resume_from == 'L3')
     runs-on: ubuntu-latest
     env:
@@ -818,8 +734,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -886,7 +802,7 @@ jobs:
 
   work-slices:
     name: "L3: Work ${{ matrix.slice }}"
-    needs: [convergence, work-base]
+    needs: [config, convergence, work-base]
     if: always() && !cancelled() && needs.work-base.result == 'success'
     runs-on: ubuntu-latest
     strategy:
@@ -901,8 +817,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -964,7 +880,7 @@ jobs:
   # Level 4: engine — base → slices(3)
   engine-base:
     name: "L4: Engine base"
-    needs: [convergence, work-slices]
+    needs: [config, convergence, work-slices]
     if: always() && !cancelled() && (needs.work-slices.result == 'success' || inputs.resume_from == 'L4')
     runs-on: ubuntu-latest
     env:
@@ -975,8 +891,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1042,7 +958,7 @@ jobs:
 
   engine-slices:
     name: "L4: Engine ${{ matrix.slice }}"
-    needs: [convergence, engine-base]
+    needs: [config, convergence, engine-base]
     if: always() && !cancelled() && needs.engine-base.result == 'success'
     runs-on: ubuntu-latest
     strategy:
@@ -1057,8 +973,8 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1117,24 +1033,15 @@ jobs:
           retention-days: 1
           compression-level: 1
 
-  # Level 5: [ras+desiredstate] | [claudony+agency] | [langchain4j+workers]
   level5:
     name: "L5: ${{ matrix.name }}"
-    needs: [convergence, engine-slices]
+    needs: [config, convergence, engine-slices]
     if: always() && !cancelled() && (needs.engine-slices.result == 'success' || inputs.resume_from == 'L5')
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.l5-timeout) }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: "ras, desiredstate"
-            repos: "ras desiredstate"
-          - name: "claudony"
-            repos: "claudony"
-          - name: "agency"
-            repos: "agency"
-          - name: "casehub-langchain4j, workers"
-            repos: "casehub-langchain4j workers"
+      matrix: ${{ fromJSON(needs.config.outputs.l5-matrix) }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -1143,92 +1050,24 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: |
-          REPOS="${{ matrix.repos }}"
-          if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - if: inputs.test_mode != 'dry'
-        run: corepack enable
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        continue-on-error: ${{ inputs.resume_from != '' }}
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Build
-        run: |
-          for repo in ${{ matrix.repos }}; do
-            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS
-          done
-        timeout-minutes: 25
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: "m2-L5-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+          repos: ${{ matrix.repos }}
+          level: L5
+          name: ${{ matrix.name }}
 
-  # Level 6: ops | casehub-mosaic (foundational — ops for infra, mosaic for UI)
   level6:
     name: "L6: ${{ matrix.name }}"
-    needs: [convergence, level5]
+    needs: [config, convergence, level5]
     if: always() && !cancelled() && needs.level5.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.l6-timeout) }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: ops
-            repos: ops
-          - name: casehub-mosaic
-            repos: casehub-mosaic
-            maven_extra: "-pl !npm-packages"
+      matrix: ${{ fromJSON(needs.config.outputs.l6-matrix) }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -1237,178 +1076,25 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: |
-          REPOS="${{ matrix.repos }}"
-          if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - if: inputs.test_mode != 'dry'
-        run: corepack enable
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        continue-on-error: ${{ inputs.resume_from != '' }}
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Build
-        run: |
-          for repo in ${{ matrix.repos }}; do
-            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS ${{ matrix.maven_extra }}
-          done
-        timeout-minutes: 25
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: "m2-L6-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+          repos: ${{ matrix.repos }}
+          level: L6
+          name: ${{ matrix.name }}
+          maven-extra: ${{ matrix.maven_extra }}
 
-  # Level 7: drafthouse (needs mosaic from L6)
   level7:
-    name: "L7: drafthouse"
-    needs: [convergence, level6]
+    name: "L7: ${{ matrix.name }}"
+    needs: [config, convergence, level6]
     if: always() && !cancelled() && needs.level6.result == 'success'
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform drafthouse
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: git submodule update --remote drafthouse
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - if: inputs.test_mode != 'dry'
-        run: corepack enable
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        continue-on-error: ${{ inputs.resume_from != '' }}
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Build
-        run: |
-          bash docs/run-with-progress.sh --parallel "drafthouse" mvn install -fae -T 1C -f drafthouse/server/pom.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 25
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: m2-L7-drafthouse, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
-
-  # Level 8: Apps — life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]
-  level8:
-    name: "L8: ${{ matrix.name }}"
-    needs: [convergence, level7]
-    if: always() && !cancelled() && (needs.level7.result == 'success' || inputs.resume_from == 'L8')
-    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.l7-timeout) }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: life
-            repos: life
-          - name: iot
-            repos: iot
-          - name: quarkmind
-            repos: quarkmind
-          - name: "devtown, aml, soc"
-            repos: "devtown aml soc"
-          - name: "chat-app, clinical, openclaw"
-            repos: "chat-app clinical openclaw"
+      matrix: ${{ fromJSON(needs.config.outputs.l7-matrix) }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -1417,83 +1103,52 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform ${{ matrix.repos }}
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: |
-          REPOS="${{ matrix.repos }}"
-          if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-node@v4
-        with: { node-version: '22' }
-      - if: inputs.test_mode != 'dry'
-        run: corepack enable
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        continue-on-error: ${{ inputs.resume_from != '' }}
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Build
-        run: |
-          for repo in ${{ matrix.repos }}; do
-            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS ${{ matrix.maven_extra }}
-          done
-        timeout-minutes: 30
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: "m2-L8-${{ matrix.name }}", path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+          repos: ${{ matrix.repos }}
+          level: L7
+          name: ${{ matrix.name }}
+          pom-overrides: ${{ matrix.pom_overrides || '{}' }}
 
-  # Level 9: scaffold + fsitrading (both need ops from L6)
+  level8:
+    name: "L8: ${{ matrix.name }}"
+    needs: [config, convergence, level7]
+    if: always() && !cancelled() && (needs.level7.result == 'success' || inputs.resume_from == 'L8')
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.l8-timeout) }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.config.outputs.l8-matrix) }}
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.GH_PAT }}
+      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MAVEN_OPTS: '-Xmx4g'
+      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+    steps:
+      - uses: ./.github/actions/build-level
+        with:
+          repos: ${{ matrix.repos }}
+          level: L8
+          name: ${{ matrix.name }}
+          maven-extra: ${{ matrix.maven_extra }}
+
   level9:
-    name: "L9: scaffold, fsitrading"
-    needs: [convergence, level8]
+    name: "L9: ${{ matrix.name }}"
+    needs: [config, convergence, level8]
     if: always() && !cancelled() && needs.level8.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.l9-timeout) }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.config.outputs.l9-matrix) }}
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
@@ -1502,72 +1157,19 @@ jobs:
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.gate.outputs.mvn-common || format('--batch-mode -ntp -Dquarkus.http.test-port=0{0}{1}{2}', (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && ' -DskipTests' || '', inputs.quarkus_build != 'true' && ' -Dquarkus.build.skip=true' || '', inputs.enforcer != 'true' && ' -Denforcer.skip=true' || '') }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.gate.outputs.maven-args }}
+      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform scaffold fsitrading
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: |
-          for repo in scaffold fsitrading; do git submodule update --remote "$repo"; done
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        continue-on-error: ${{ inputs.resume_from != '' }}
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Build
-        run: |
-          for repo in scaffold fsitrading; do
-            bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C -f $repo/pom.xml $MVN_COMMON $MAVEN_ARGS
-          done
-        timeout-minutes: 30
+          repos: ${{ matrix.repos }}
+          level: L9
+          name: ${{ matrix.name }}
 
   # Finalize — dashboard + pointer advance
   finalize:
     name: "Finalize"
-    needs: [prepare, convergence, level1, level2, work-base, work-slices, engine-base, engine-slices, level5, level6, level7, level8, level9]
+    needs: [config, prepare, convergence, level1, level2, work-base, work-slices, engine-base, engine-slices, level5, level6, level7, level8, level9]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     env:
