@@ -30,7 +30,11 @@ def load_phases(pipeline_path):
         if 'base' in level:
             phases.append(level['base'])
         for stack in level.get('stacks', []):
-            phases.append(stack if isinstance(stack, str) else ', '.join(stack))
+            if isinstance(stack, str):
+                phases.append(stack)
+            else:
+                for repo in stack:
+                    phases.append(repo)
         if 'convergence' in level:
             phases.append(level['convergence'])
     return phases
