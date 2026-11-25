@@ -78,7 +78,10 @@ export default {
         }
       }
 
-      await env.KV.put(key, body);
+      // Phase files get a 24h TTL — per-build ephemeral data that self-expires.
+      // Avoids needing DELETE operations (free tier: 1,000/day limit).
+      const kvOptions = key.startsWith('phase-') ? { expirationTtl: 86400 } : {};
+      await env.KV.put(key, body, kvOptions);
 
       if (key === 'progress' || key.startsWith('phase-')) {
         const cache = caches.default;
@@ -89,14 +92,9 @@ export default {
       return new Response('ok', { headers: corsHeaders() });
     }
 
-    if (request.method === 'DELETE') {
-      const token = request.headers.get('Authorization')?.replace('Bearer ', '');
-      if (token !== env.WRITE_TOKEN) {
-        return new Response('Unauthorized', { status: 401 });
-      }
-      await env.KV.delete(key);
-      return new Response('ok', { headers: corsHeaders() });
-    }
+    // DELETE endpoint removed — phase files self-expire via KV TTL.
+    // No client needs explicit deletes. This avoids the free-tier
+    // 1,000 delete/day limit that caused 429 errors.
 
     if (request.method === 'POST' && key.startsWith('github/')) {
       const ghToken = request.headers.get('X-GitHub-Token');
