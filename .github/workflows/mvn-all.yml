@@ -77,7 +77,7 @@ env:
 
 # Architecture: dependency-optimized parallel pipeline (10 levels)
 #
-# L0:   prepare → platform-slices(4) → convergence
+# L0:   prepare (platform — single job)
 # L1:   [ledger→eidos] | connectors | worker
 # L2:   neocortex | qhorus
 # L3:   work-base → work-slices(2)
@@ -118,8 +118,7 @@ jobs:
     if: ${{ !failure() && !cancelled() && inputs.resume_from == '' && inputs.test_mode != 'dry' }}
     runs-on: ubuntu-latest
     # Dynamic slicing puts 124 modules in platform base (was 3 static).
-    # Base (~15 min) + convergence (~10 min) + setup (~5 min) = ~30 min.
-    # 35 min gives headroom for slow runners.
+    # Warm cache downloads third-party deps in parallel. 35 min timeout.
     timeout-minutes: 35
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -325,13 +324,9 @@ jobs:
           mvn install -N -f parent/pom.xml --batch-mode -q
           mvn install -N -f platform/pom.xml --batch-mode -q
 
-      - name: "Platform: base"
+      - name: "Platform: build"
         run: |
-          # Dynamic slicing puts 124 modules in base. Some @QuarkusTest modules
-          # have 50+ tests that legitimately take >5 min per surefire fork.
-          # The parent POM's forkedProcessTimeoutInSeconds=300 is too tight.
-          bash docs/run-with-progress.sh --parallel "Prepare + Platform base" mvn install -T 1C -f build/platform-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
-        # Dynamic slicing: 124 modules in base (was 3 static). Tests take ~15 min.
+          bash docs/run-with-progress.sh --parallel "platform" mvn install -T 1C -f platform/pom.xml -pl '!memory-simulation-core' $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
 
       - name: Validate produced JARs
@@ -346,194 +341,14 @@ jobs:
           done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
           if [ "$BAD" -gt 0 ]; then exit 1; fi
 
-      - name: Upload platform base .m2 artifacts
+      - name: Upload platform artifacts
         if: inputs.test_mode != 'dry'
         uses: actions/upload-artifact@v4
         with:
-          name: m2-platform-base
-          path: ~/.m2/repository/io/casehub/casehub-platform*
-          retention-days: 1
-          compression-level: 1
-
-      - name: Upload platform base Jandex indexes
-        if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with:
-          name: jandex-platform-base
-          path: platform/*/target/classes/META-INF/jandex.idx
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: ignore
-
-  # Phase 1: Platform slices — 4 parallel jobs
-  platform-slices:
-    name: "Platform slice ${{ matrix.slice }}"
-    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
-    needs: prepare
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        slice: [a, b, c, d]
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.prepare.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.prepare.outputs.maven-args }}
-    steps:
-
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform
-      - name: Set up Java 22
-        if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - name: Restore Maven cache
-        if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Install parent POMs
-        if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download platform base artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        with: { name: m2-platform-base, path: ~/.m2/repository/io/casehub }
-
-      - name: "Build slice ${{ matrix.slice }}"
-        run: |
-          SLICE_NAME="Platform $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
-          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -T 1C $SKIP_FLAG -f build/platform-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 45
-
-      - name: Upload slice .m2 artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with:
-          name: m2-platform-slice-${{ matrix.slice }}
-          path: ~/.m2/repository/io/casehub/casehub-platform*
-          retention-days: 1
-          compression-level: 1
-      - name: Upload slice Jandex indexes
-        if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with:
-          name: jandex-platform-slice-${{ matrix.slice }}
-          path: platform/*/target/classes/META-INF/jandex.idx
-          retention-days: 1
-          compression-level: 0
-          if-no-files-found: ignore
-
-  # Phase 2: Platform convergence — full rebuild from source
-  convergence:
-    name: "Platform convergence"
-    needs: [prepare, platform-slices]
-    if: ${{ !failure() && !cancelled() && inputs.resume_from == '' }}
-    runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-    outputs:
-      mvn-common: ${{ steps.flags.outputs.mvn-common }}
-      maven-args: ${{ steps.flags.outputs.maven-args }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform
-      - name: Set up Java 22
-        if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - name: Restore Maven cache
-        if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Configure Maven flags
-        id: flags
-        run: bash docs/compute-mvn-flags.sh --env "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
+          name: m2-L0-platform
           path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - name: Install parent POMs
-        if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download platform artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        with: { pattern: "m2-platform-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Download Jandex indexes
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        with: { pattern: "jandex-platform-*", path: platform, merge-multiple: true }
-      - name: Validate artifacts
-        run: |
-          CORRUPT=0
-          while IFS= read -r -d '' jar; do
-            if ! jar tf "$jar" > /dev/null 2>&1; then
-              echo "::warning::Corrupt JAR (deleted): $jar"; rm -f "$jar"; CORRUPT=$((CORRUPT+1))
-            fi
-          done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
-          while IFS= read -r -d '' idx; do
-            if [ ! -s "$idx" ] || ! python3 -c "f=open('$idx','rb');m=f.read(2);f.close();exit(0 if m==b'\\xca\\xfe' else 1)" 2>/dev/null; then
-              echo "::warning::Corrupt Jandex (deleted): $idx"; rm -f "$idx"; CORRUPT=$((CORRUPT+1))
-            fi
-          done < <(find platform -name 'jandex.idx' -print0)
-          if [ "$CORRUPT" -gt 0 ]; then echo "::warning::$CORRUPT corrupt artifact(s) deleted"; fi
-      - name: "Platform: full rebuild"
-        run: |
-          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "Platform convergence" mvn install -T 1C $SKIP_FLAG -f platform/pom.xml -pl '!memory-simulation-core' $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 20
-      - name: Upload convergence artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: m2-ecosystem-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+          retention-days: 1
+          compression-level: 1
 
   # Levels 1-9: data-driven from pipeline.yaml via config job outputs.
   # Shared build steps live in .github/actions/build-level/action.yml.
@@ -542,7 +357,7 @@ jobs:
 
   level1:
     name: "L1: ${{ matrix.name }}"
-    needs: [config, convergence]
+    needs: [config, prepare]
     if: always() && !cancelled() && (inputs.resume_from == '' || inputs.resume_from == 'L1')
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l1 }}
@@ -561,12 +376,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
 
   level2:
     name: "L2: ${{ matrix.name }}"
-    needs: [config, convergence, level1]
+    needs: [config, prepare, level1]
     if: always() && !cancelled() && (needs.level1.result == 'success' || inputs.resume_from == 'L2')
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l2 }}
@@ -585,12 +400,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
 
   work-base:
     name: "L3: Work base"
-    needs: [config, convergence, level2]
+    needs: [config, prepare, level2]
     if: always() && !cancelled() && (needs.level2.result == 'success' || inputs.resume_from == 'L3')
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -607,12 +422,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
 
   work-slices:
     name: "L3: Work ${{ matrix.slice }}"
-    needs: [config, convergence, work-base]
+    needs: [config, prepare, work-base]
     if: always() && !cancelled() && needs.work-base.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -633,12 +448,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
 
   engine-base:
     name: "L4: Engine base"
-    needs: [config, convergence, work-slices]
+    needs: [config, prepare, work-slices]
     if: always() && !cancelled() && (needs.work-slices.result == 'success' || inputs.resume_from == 'L4')
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -655,12 +470,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
 
   engine-slices:
     name: "L4: Engine ${{ matrix.slice }}"
-    needs: [config, convergence, engine-base]
+    needs: [config, prepare, engine-base]
     if: always() && !cancelled() && needs.engine-base.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -681,12 +496,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
 
   level5:
     name: "L5: ${{ matrix.name }}"
-    needs: [config, convergence, engine-slices]
+    needs: [config, prepare, engine-slices]
     if: always() && !cancelled() && (needs.engine-slices.result == 'success' || inputs.resume_from == 'L5')
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l5 }}
@@ -705,12 +520,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
 
   level6:
     name: "L6: ${{ matrix.name }}"
-    needs: [config, convergence, level5]
+    needs: [config, prepare, level5]
     if: always() && !cancelled() && needs.level5.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l6 }}
@@ -729,13 +544,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
           maven-extra: ${{ matrix.maven_extra }}
 
   level7:
     name: "L7: ${{ matrix.name }}"
-    needs: [config, convergence, level6]
+    needs: [config, prepare, level6]
     if: always() && !cancelled() && needs.level6.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l7 }}
@@ -754,13 +569,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
           pom-overrides: ${{ matrix.pom_overrides || '{}' }}
 
   level8:
     name: "L8: ${{ matrix.name }}"
-    needs: [config, convergence, level7]
+    needs: [config, prepare, level7]
     if: always() && !cancelled() && (needs.level7.result == 'success' || inputs.resume_from == 'L8')
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l8 }}
@@ -779,13 +594,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
           maven-extra: ${{ matrix.maven_extra }}
 
   level9:
     name: "L9: ${{ matrix.name }}"
-    needs: [config, convergence, level8]
+    needs: [config, prepare, level8]
     if: always() && !cancelled() && needs.level8.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l9 }}
@@ -804,13 +619,13 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+          mvn-common: ${{ needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.config.outputs.maven-args }}
 
   # Finalize — dashboard + pointer advance
   finalize:
     name: "Finalize"
-    needs: [config, prepare, convergence, level1, level2, work-base, work-slices, engine-base, engine-slices, level5, level6, level7, level8, level9]
+    needs: [config, prepare, level1, level2, work-base, work-slices, engine-base, engine-slices, level5, level6, level7, level8, level9]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     env:
@@ -835,7 +650,7 @@ jobs:
         if: always()
         run: |
           BUILD_OK=true
-          for result in "${{ needs.prepare.result }}" "${{ needs.convergence.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.work-base.result }}" "${{ needs.work-slices.result }}" "${{ needs.engine-base.result }}" "${{ needs.engine-slices.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
+          for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.work-base.result }}" "${{ needs.work-slices.result }}" "${{ needs.engine-base.result }}" "${{ needs.engine-slices.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
             if [ "$result" = "failure" ]; then
               BUILD_OK=false
               break

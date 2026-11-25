@@ -25,15 +25,8 @@
 
 levels:
   - id: L0
-    repos: [platform]
-    slices: 4
-    base: Prepare + Platform base
     stacks:
-      - [Platform A]
-      - [Platform B]
-      - [Platform C]
-      - [Platform D]
-    convergence: Platform convergence
+      - [platform]
 
   - id: L1
     resume: true
