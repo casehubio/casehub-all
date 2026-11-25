@@ -45,12 +45,8 @@ levels:
 
   - id: L3
     resume: true
-    repos: [work]
-    slices: 2
-    base: Work base
     stacks:
-      - [Work A]
-      - [Work B]
+      - [work]
 
   - id: L4
     resume: true

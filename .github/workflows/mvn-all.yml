@@ -80,7 +80,7 @@ env:
 # L0:   prepare (platform — single job)
 # L1:   [ledger→eidos] | connectors | worker
 # L2:   neocortex | qhorus
-# L3:   work-base → work-slices(2)
+# L3:   work (single job)
 # L4:   engine-base → engine-slices(3)
 # L5:   [ras→desiredstate] | [claudony+agency] | [langchain4j+workers]
 # L6:   ops | mosaic  (foundational for apps)
@@ -403,34 +403,12 @@ jobs:
           mvn-common: ${{ needs.config.outputs.mvn-common }}
           maven-args: ${{ needs.config.outputs.maven-args }}
 
-  work-base:
-    name: "L3: Work base"
+  level3:
+    name: "L3: ${{ matrix.name }}"
     needs: [config, prepare, level2]
     if: always() && !cancelled() && (needs.level2.result == 'success' || inputs.resume_from == 'L3')
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-      - uses: ./.github/actions/build-sliced-level
-        with:
-          repo: work
-          level: L3
-          mode: base
-          display-name: "Work base"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          gh-token: ${{ secrets.GH_PAT }}
-          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.config.outputs.maven-args }}
-
-  work-slices:
-    name: "L3: Work ${{ matrix.slice }}"
-    needs: [config, prepare, work-base]
-    if: always() && !cancelled() && needs.work-base.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l3 }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l3 }}
@@ -438,13 +416,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - uses: ./.github/actions/build-sliced-level
+      - uses: ./.github/actions/build-level
         with:
-          repo: work
+          repos: ${{ matrix.repos }}
           level: L3
-          mode: slice
-          slice: ${{ matrix.slice }}
-          display-name: "Work ${{ matrix.slice }}"
+          name: ${{ matrix.name }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
@@ -453,8 +429,8 @@ jobs:
 
   engine-base:
     name: "L4: Engine base"
-    needs: [config, prepare, work-slices]
-    if: always() && !cancelled() && (needs.work-slices.result == 'success' || inputs.resume_from == 'L4')
+    needs: [config, prepare, level3]
+    if: always() && !cancelled() && (needs.level3.result == 'success' || inputs.resume_from == 'L4')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -625,7 +601,7 @@ jobs:
   # Finalize — dashboard + pointer advance
   finalize:
     name: "Finalize"
-    needs: [config, prepare, level1, level2, work-base, work-slices, engine-base, engine-slices, level5, level6, level7, level8, level9]
+    needs: [config, prepare, level1, level2, level3, engine-base, engine-slices, level5, level6, level7, level8, level9]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     env:
@@ -650,7 +626,7 @@ jobs:
         if: always()
         run: |
           BUILD_OK=true
-          for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.work-base.result }}" "${{ needs.work-slices.result }}" "${{ needs.engine-base.result }}" "${{ needs.engine-slices.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
+          for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.engine-base.result }}" "${{ needs.engine-slices.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
             if [ "$result" = "failure" ]; then
               BUILD_OK=false
               break
@@ -723,8 +699,7 @@ jobs:
             level5=${{ needs.level5.result }}
             engine-slices=${{ needs.engine-slices.result }}
             engine-base=${{ needs.engine-base.result }}
-            work-slices=${{ needs.work-slices.result }}
-            work-base=${{ needs.work-base.result }}
+            level3=${{ needs.level3.result }}
             level2=${{ needs.level2.result }}
             level1=${{ needs.level1.result }}
         run: bash docs/auto-retry.sh "${{ inputs.retry_count }}" "${{ inputs.test_mode }}" "${{ inputs.submodule_update }}" "${{ inputs.submodule_list }}"

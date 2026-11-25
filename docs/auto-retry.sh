@@ -25,7 +25,7 @@ for pair in $JOB_RESULTS; do
       level9|level8) RESUME="L8" ;;
       level7|level6|level5) RESUME="L5" ;;
       engine-slices|engine-base) RESUME="L4" ;;
-      work-slices|work-base) RESUME="L3" ;;
+      level3) RESUME="L3" ;;
       level2) RESUME="L2" ;;
       level1) RESUME="L1" ;;
     esac
