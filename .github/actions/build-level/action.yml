@@ -139,6 +139,7 @@ runs:
         GH_TOKEN: ${{ inputs.gh-token }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
         GH_PACKAGES_TOKEN: ${{ inputs.github-token }}
+        CI_DASHBOARD_TOKEN: ${{ inputs.dashboard-token }}
       run: |
         SKIP_FLAG=""
         TEST_MODE="${{ github.event.inputs.test_mode }}"
