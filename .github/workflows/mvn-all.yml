@@ -115,28 +115,7 @@ jobs:
           echo "No other runs in progress — proceeding."
       - name: Compute Maven flags
         id: flags
-        run: |
-          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
-          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
-            FLAGS="$FLAGS -DskipTests"
-          fi
-          # Quarkus augmentation: skip unless explicitly requested.
-          # quarkus:build deadlocks under -T 1C (multi-thread Maven) — see
-          # README §Quarkus augmentation deadlock. @QuarkusTest still works
-          # because Surefire forks a separate JVM per test class and runs
-          # augmentation there, avoiding the Maven-process deadlock.
-          if [ "${{ inputs.quarkus_build }}" != "true" ]; then
-            FLAGS="$FLAGS -Dquarkus.build.skip=true"
-          fi
-          if [ "${{ inputs.enforcer }}" != "true" ]; then
-            FLAGS="$FLAGS -Denforcer.skip=true"
-          fi
-          if [ "${{ inputs.test_mode }}" = "compile" ]; then
-            FLAGS="$FLAGS -Dnative.provision.skip=true"
-          fi
-          echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
-          echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
-          echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
+        run: bash docs/compute-mvn-flags.sh "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
 
   # Dependency cache — download all third-party deps once, cache between runs
   warm-cache:
@@ -246,19 +225,7 @@ jobs:
         run: python3 docs/compute-matrices.py >> "$GITHUB_OUTPUT"
       - name: Compute Maven flags
         id: flags
-        run: |
-          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
-          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
-            FLAGS="$FLAGS -DskipTests"
-          fi
-          if [ "${{ inputs.quarkus_build }}" != "true" ]; then
-            FLAGS="$FLAGS -Dquarkus.build.skip=true"
-          fi
-          if [ "${{ inputs.enforcer }}" != "true" ]; then
-            FLAGS="$FLAGS -Denforcer.skip=true"
-          fi
-          echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
-          echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
+        run: bash docs/compute-mvn-flags.sh "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
       - name: Validate pipeline consistency
         run: python3 docs/check-pipeline-consistency.py || echo "::warning::Pipeline consistency check found issues"
         continue-on-error: true
@@ -298,49 +265,16 @@ jobs:
 
       - name: Initialize CI dashboard
         run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          WORKER="${CI_DASHBOARD_URL}"
-          curl -sf "$WORKER/progress" 2>/dev/null > /tmp/old-progress.json || echo '{}' > /tmp/old-progress.json
-          python3 -c "
-          import json, sys, yaml
-          from datetime import datetime, timezone
-          old = json.load(open('/tmp/old-progress.json'))
-          history = old.get('history', [])
-          prev = old.get('current')
-          if prev and prev.get('run_id'):
-              started = prev.get('started', '$NOW')
-              phases = prev.get('phases', [])
-              entry = {
-                  'run_id': prev.get('run_id'), 'run_url': prev.get('run_url'),
-                  'commit': prev.get('commit'), 'conclusion': 'unknown',
-                  'started': started, 'ended': '$NOW',
-                  'total_tests': sum(p.get('tests_run', 0) for p in phases),
-                  'total_modules': sum(p.get('modules', 0) for p in phases),
-                  'phases': phases
-              }
-              failed = [p['name'] for p in phases if p.get('status') == 'failure']
-              entry['conclusion'] = 'failure' if failed else ('success' if any(p.get('status') == 'success' for p in phases) else 'unknown')
-              history.insert(0, entry)
-          data = {
-            'current': {'run_id': ${GITHUB_RUN_ID}, 'run_url': '$RUN_URL',
-                        'commit': '${GITHUB_SHA:0:7}', 'started': '$NOW',
-                        'resume_from': '${{ inputs.resume_from }}' or None,
-                        'retry_count': ${{ inputs.retry_count || 0 }},
-                        'phases': (lambda ps: [dict(ps[0], status='in_progress', started='$NOW')] + ps[1:])([{'name':p,'status':'pending'} for p in (lambda _p: [n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g])(yaml.safe_load(open('docs/pipeline.yaml')))])},
-            'history': history[:200],
-            '_archives': old.get('_archives', [])
-          }
-          print(json.dumps(data, indent=2))
-          " | curl -sf -X PUT "$WORKER/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -H "X-Init: true" \
-            -d @- > /dev/null
-          echo "::notice::Dashboard: https://casehub.org/casehub-all/"
+          python3 docs/init-dashboard-full.py \
+            --run-id $GITHUB_RUN_ID \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --commit "${GITHUB_SHA:0:7}" \
+            --resume-from "${{ inputs.resume_from }}" \
+            --retry-count ${{ inputs.retry_count || 0 }} \
+            --pipeline docs/pipeline.yaml \
+            --dashboard-url "$CI_DASHBOARD_URL" \
+            --dashboard-token "$CI_DASHBOARD_TOKEN"
         env:
-          CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
           CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
         continue-on-error: true
 
@@ -348,27 +282,7 @@ jobs:
         run: python3 docs/check-cycles.py
 
       - name: Update submodules
-        run: |
-          if [ "${{ inputs.submodule_update }}" = "all" ]; then
-            echo "Updating ALL submodules to latest main"
-            git submodule update --remote parent
-            git submodule update --remote
-          elif [ "${{ inputs.submodule_update }}" = "list" ]; then
-            echo "Updating parent + listed submodules: ${{ inputs.submodule_list }}"
-            git submodule update --remote parent
-            IFS=',' read -ra REPOS <<< "${{ inputs.submodule_list }}"
-            for repo in "${REPOS[@]}"; do
-              repo=$(echo "$repo" | xargs)
-              if [ -d "$repo" ]; then
-                echo "  Updating $repo"
-                git submodule update --remote "$repo"
-              else
-                echo "  WARNING: $repo not found, skipping"
-              fi
-            done
-          else
-            echo "Using pinned submodule SHAs (committed pointers)"
-          fi
+        run: bash docs/update-submodules.sh "${{ inputs.submodule_update }}" "${{ inputs.submodule_list }}"
         timeout-minutes: 5
 
       - name: Record SHA manifest
@@ -397,27 +311,7 @@ jobs:
 
       - name: Configure Maven flags
         id: flags
-        run: |
-          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
-          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
-            FLAGS="$FLAGS -DskipTests"
-          fi
-          # Quarkus augmentation: skip unless explicitly requested.
-          # quarkus:build deadlocks under -T 1C (multi-thread Maven) — see
-          # README §Quarkus augmentation deadlock. @QuarkusTest still works
-          # because Surefire forks a separate JVM per test class and runs
-          # augmentation there, avoiding the Maven-process deadlock.
-          if [ "${{ inputs.quarkus_build }}" != "true" ]; then
-            FLAGS="$FLAGS -Dquarkus.build.skip=true"
-          fi
-          if [ "${{ inputs.enforcer }}" != "true" ]; then
-            FLAGS="$FLAGS -Denforcer.skip=true"
-          fi
-          echo "MVN_COMMON=$FLAGS" >> "$GITHUB_ENV"
-          echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
-          echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
-          echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
-          echo "::notice::MVN_COMMON=$FLAGS MAVEN_ARGS=${{ inputs.maven_args }}"
+        run: bash docs/compute-mvn-flags.sh --env "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
 
       - name: Install parent POMs
         if: inputs.test_mode != 'dry'
@@ -578,26 +472,7 @@ jobs:
           restore-keys: m2-deps-${{ runner.os }}-
       - name: Configure Maven flags
         id: flags
-        run: |
-          FLAGS="--batch-mode -ntp -Dquarkus.http.test-port=0"
-          if [ "${{ inputs.test_mode }}" = "skip" ] || [ "${{ inputs.test_mode }}" = "compile" ]; then
-            FLAGS="$FLAGS -DskipTests"
-          fi
-          # Quarkus augmentation: skip unless explicitly requested.
-          # quarkus:build deadlocks under -T 1C (multi-thread Maven) — see
-          # README §Quarkus augmentation deadlock. @QuarkusTest still works
-          # because Surefire forks a separate JVM per test class and runs
-          # augmentation there, avoiding the Maven-process deadlock.
-          if [ "${{ inputs.quarkus_build }}" != "true" ]; then
-            FLAGS="$FLAGS -Dquarkus.build.skip=true"
-          fi
-          if [ "${{ inputs.enforcer }}" != "true" ]; then
-            FLAGS="$FLAGS -Denforcer.skip=true"
-          fi
-          echo "MVN_COMMON=$FLAGS" >> "$GITHUB_ENV"
-          echo "MAVEN_ARGS=${{ inputs.maven_args }}" >> "$GITHUB_ENV"
-          echo "mvn-common=$FLAGS" >> "$GITHUB_OUTPUT"
-          echo "maven-args=${{ inputs.maven_args }}" >> "$GITHUB_OUTPUT"
+        run: bash docs/compute-mvn-flags.sh --env "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
       - name: Restore casehub snapshot cache
         if: inputs.test_mode != 'dry' && inputs.resume_from != ''
         uses: actions/cache/restore@v4
@@ -914,18 +789,7 @@ jobs:
           git config user.email "github-actions@github.com"
           git config user.name "GitHub Actions"
       - name: Update submodules
-        run: |
-          if [ "${{ inputs.submodule_update }}" = "all" ]; then
-            git submodule update --remote parent
-            git submodule update --remote
-          elif [ "${{ inputs.submodule_update }}" = "list" ]; then
-            git submodule update --remote parent
-            IFS=',' read -ra REPOS <<< "${{ inputs.submodule_list }}"
-            for repo in "${REPOS[@]}"; do
-              repo=$(echo "$repo" | xargs)
-              [ -d "$repo" ] && git submodule update --remote "$repo"
-            done
-          fi
+        run: bash docs/update-submodules.sh "${{ inputs.submodule_update }}" "${{ inputs.submodule_list }}"
         timeout-minutes: 5
       - name: Compute build result
         id: result
@@ -998,30 +862,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          RETRY=$(( ${{ inputs.retry_count }} + 1 ))
-          # Determine which level to resume from using needs.<job>.result.
-          # Previous implementation read /tmp/progress.json which doesn't
-          # exist on the Finalize runner — always fell back to full rebuild.
-          # This version uses the job results directly from the workflow.
-          RESUME=""
-          if [ "${{ needs.level9.result }}" = "failure" ]; then RESUME="L8"
-          elif [ "${{ needs.level8.result }}" = "failure" ]; then RESUME="L8"
-          elif [ "${{ needs.level7.result }}" = "failure" ]; then RESUME="L5"
-          elif [ "${{ needs.level6.result }}" = "failure" ]; then RESUME="L5"
-          elif [ "${{ needs.level5.result }}" = "failure" ]; then RESUME="L5"
-          elif [ "${{ needs.engine-slices.result }}" = "failure" ] || [ "${{ needs.engine-base.result }}" = "failure" ]; then RESUME="L4"
-          elif [ "${{ needs.work-slices.result }}" = "failure" ] || [ "${{ needs.work-base.result }}" = "failure" ]; then RESUME="L3"
-          elif [ "${{ needs.level2.result }}" = "failure" ]; then RESUME="L2"
-          elif [ "${{ needs.level1.result }}" = "failure" ]; then RESUME="L1"
-          fi
-          if [ -n "$RESUME" ]; then
-            echo "::warning::Build failed at $RESUME (attempt $RETRY/2). Resuming from $RESUME."
-          else
-            echo "::warning::Build failed at L0 (attempt $RETRY/2). Full rebuild required."
-          fi
-          gh workflow run mvn-all.yml \
-            -f test_mode=${{ inputs.test_mode }} \
-            -f submodule_update=${{ inputs.submodule_update }} \
-            -f submodule_list="${{ inputs.submodule_list }}" \
-            -f retry_count="$RETRY" \
-            -f resume_from="$RESUME"
+          bash docs/auto-retry.sh \
+            "${{ inputs.retry_count }}" \
+            "${{ inputs.test_mode }}" \
+            "${{ inputs.submodule_update }}" \
+            "${{ inputs.submodule_list }}" \
+            '{"level9":"${{ needs.level9.result }}","level8":"${{ needs.level8.result }}","level7":"${{ needs.level7.result }}","level6":"${{ needs.level6.result }}","level5":"${{ needs.level5.result }}","engine-slices":"${{ needs.engine-slices.result }}","engine-base":"${{ needs.engine-base.result }}","work-slices":"${{ needs.work-slices.result }}","work-base":"${{ needs.work-base.result }}","level2":"${{ needs.level2.result }}","level1":"${{ needs.level1.result }}"}'
