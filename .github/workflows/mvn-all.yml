@@ -95,9 +95,6 @@ jobs:
   gate:
     name: "Concurrency gate"
     runs-on: ubuntu-latest
-    outputs:
-      mvn-common: ${{ steps.flags.outputs.mvn-common }}
-      maven-args: ${{ steps.flags.outputs.maven-args }}
     steps:
       - name: Check for in-progress runs
         if: inputs.if_running == 'abort'
@@ -113,9 +110,6 @@ jobs:
             exit 1
           fi
           echo "No other runs in progress — proceeding."
-      - name: Compute Maven flags
-        id: flags
-        run: bash docs/compute-mvn-flags.sh "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
 
   # Dependency cache — download all third-party deps once, cache between runs
   warm-cache:
@@ -861,10 +855,16 @@ jobs:
         if: steps.result.outputs.build_ok != 'true' && inputs.retry_count < 2
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          bash docs/auto-retry.sh \
-            "${{ inputs.retry_count }}" \
-            "${{ inputs.test_mode }}" \
-            "${{ inputs.submodule_update }}" \
-            "${{ inputs.submodule_list }}" \
-            '{"level9":"${{ needs.level9.result }}","level8":"${{ needs.level8.result }}","level7":"${{ needs.level7.result }}","level6":"${{ needs.level6.result }}","level5":"${{ needs.level5.result }}","engine-slices":"${{ needs.engine-slices.result }}","engine-base":"${{ needs.engine-base.result }}","work-slices":"${{ needs.work-slices.result }}","work-base":"${{ needs.work-base.result }}","level2":"${{ needs.level2.result }}","level1":"${{ needs.level1.result }}"}'
+          JOB_RESULTS: >-
+            level9=${{ needs.level9.result }}
+            level8=${{ needs.level8.result }}
+            level7=${{ needs.level7.result }}
+            level6=${{ needs.level6.result }}
+            level5=${{ needs.level5.result }}
+            engine-slices=${{ needs.engine-slices.result }}
+            engine-base=${{ needs.engine-base.result }}
+            work-slices=${{ needs.work-slices.result }}
+            work-base=${{ needs.work-base.result }}
+            level2=${{ needs.level2.result }}
+            level1=${{ needs.level1.result }}
+        run: bash docs/auto-retry.sh "${{ inputs.retry_count }}" "${{ inputs.test_mode }}" "${{ inputs.submodule_update }}" "${{ inputs.submodule_list }}"
