@@ -45,6 +45,7 @@ levels:
 
   - id: L3
     resume: true
+    timeout: 45
     stacks:
       - [work]
 
