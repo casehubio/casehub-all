@@ -112,6 +112,20 @@ runs:
         path: ~/.m2/repository/io/casehub
         merge-multiple: true
 
+    - name: Validate downloaded artifacts
+      if: github.event.inputs.test_mode != 'dry'
+      shell: bash
+      run: |
+        BAD=0
+        while IFS= read -r -d '' jar; do
+          if ! jar tf "$jar" > /dev/null 2>&1; then
+            echo "::warning::Corrupt JAR (deleted): $jar"
+            rm -f "$jar"
+            BAD=$((BAD + 1))
+          fi
+        done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
+        if [ "$BAD" -gt 0 ]; then echo "::warning::$BAD corrupt JAR(s) deleted — Maven will re-resolve"; fi
+
     - name: Build
       shell: bash
       env:
