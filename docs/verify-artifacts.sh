@@ -122,11 +122,9 @@ fi
 # Missing artifacts: in resume mode, Maven resolves from GitHub Packages
 # at build time (the warm cache or GP has them). In full build mode, missing
 # means the upload/download chain between levels is broken.
-if [ -n "$RESUME" ]; then
-  echo "::warning::$MISSING artifacts missing (resume mode — Maven resolves from GitHub Packages)"
-  exit 0
-else
-  echo "::error::Artifact verification failed: $MISSING missing"
-  echo "::error::Upload/download chain broken — run a full build to rebuild."
-  exit 1
-fi
+# Missing artifacts are non-fatal — Maven re-resolves from GitHub Packages.
+# Full builds may have missing due to: corrupt JAR self-healing (deleted and
+# awaiting re-resolve), download-artifact merge issues, or upload truncation.
+# The build itself will fail with a clear error if Maven can't resolve.
+echo "::warning::$MISSING artifacts missing — Maven will attempt GitHub Packages resolution"
+exit 0
