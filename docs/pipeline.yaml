@@ -1,5 +1,5 @@
-# Pipeline topology — single source of truth
-# Dashboard, workflow phases, and resume options all derive from this.
+# Pipeline topology — single source of truth for the CI build.
+# generate-workflow.py, dashboard, and resume options all derive from this.
 #
 # stacks: outer = parallel runners, inner = sequential phases per runner
 # base:   optional phase before stacks fan out
@@ -12,6 +12,9 @@
 #         aggregator POMs at build time. Replaces static slice assignments.
 #         Requires repos: [single-repo]. Base modules (depended on by others)
 #         are assigned automatically — no manual base/slice split needed.
+# timeout: build step timeout in minutes (default: 30)
+# pom:    override POM path for a repo (default: $repo/pom.xml)
+# maven_extra: per-repo extra Maven args (e.g. "-pl !npm-packages")
 #
 # Dashboard rendering rules (derived from structure):
 #   base present        → base shown first, then fan-out to stacks
@@ -34,6 +37,7 @@ levels:
 
   - id: L1
     resume: true
+    timeout: 35
     stacks:
       - [ledger, eidos]
       - [connectors]
@@ -41,6 +45,7 @@ levels:
 
   - id: L2
     resume: true
+    timeout: 35
     stacks:
       - [neocortex]
       - [qhorus]
@@ -66,6 +71,7 @@ levels:
 
   - id: L5
     resume: true
+    timeout: 25
     stacks:
       - [ras, desiredstate]
       - [claudony]
@@ -73,11 +79,17 @@ levels:
       - [casehub-langchain4j, workers]
 
   - id: L6
+    timeout: 25
+    maven_extra:
+      casehub-mosaic: "-pl !npm-packages"
     stacks:
       - [ops]
       - [casehub-mosaic]
 
   - id: L7
+    timeout: 25
+    pom:
+      drafthouse: drafthouse/server/pom.xml
     stacks:
       - [drafthouse]
 
