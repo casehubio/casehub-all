@@ -97,23 +97,12 @@ runs:
         restore-keys: casehub-native-${{ runner.os }}-
 
     - name: Restore casehub snapshot cache
-      if: github.event.inputs.test_mode != 'dry' && github.event.inputs.resume_from != ''
+      if: github.event.inputs.test_mode != 'dry'
       uses: actions/cache/restore@v4
       with:
         path: ~/.m2/repository/io/casehub
         key: m2-casehub-${{ runner.os }}-${{ github.sha }}
         restore-keys: m2-casehub-${{ runner.os }}-
-
-    - name: Purge casehub snapshots
-      if: github.event.inputs.test_mode != 'dry' && github.event.inputs.resume_from == ''
-      shell: bash
-      run: |
-        mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-        mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-        rm -rf ~/.m2/repository/io/casehub
-        mkdir -p ~/.m2/repository/io/casehub
-        mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-        mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
 
     - name: Install parent POMs
       if: github.event.inputs.test_mode != 'dry'
