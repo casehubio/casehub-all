@@ -314,14 +314,10 @@ json.dump(data, open('$TMPDIR/result.json', 'w'))
 " 2>/dev/null
     update_progress "$(cat "$TMPDIR/result.json")"
 
-    if [ -n "$RUN_ID" ]; then
-      while IFS= read -r phase_display_name; do
-        [ -z "$phase_display_name" ] && continue
-        phase_name=$(echo "$phase_display_name" | tr ' :+/()' '------' | tr '[:upper:]' '[:lower:]')
-        curl -sf -X DELETE "$WORKER_URL/phase-${RUN_ID}-${phase_name}" \
-          -H "Authorization: Bearer $WORKER_TOKEN" > /dev/null 2>&1 || true
-      done < <(pipeline_phases "$SCRIPT_DIR")
-    fi
+    # Phase files are keyed by ${RUN_ID}-${phase_name} so they don't
+    # collide across builds. No need to delete — they self-expire via
+    # KV TTL (set server-side). Deleting them burned through the free-tier
+    # 1,000 delete/day limit during retry-heavy builds.
     rm -rf "$TMPDIR"
 
     echo "::notice::Dashboard archived run as $CONCLUSION"
