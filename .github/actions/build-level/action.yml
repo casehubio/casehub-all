@@ -11,6 +11,21 @@ inputs:
   name:
     description: 'Display name for dashboard and artifact naming'
     required: true
+  github-token:
+    description: 'GitHub token for checkout and packages'
+    required: true
+  gh-token:
+    description: 'PAT for cross-repo operations'
+    required: true
+  dashboard-token:
+    description: 'CI dashboard auth token'
+    required: true
+  mvn-common:
+    description: 'Common Maven flags'
+    required: true
+  maven-args:
+    description: 'Extra Maven args from workflow dispatch'
+    default: ''
   pom-overrides:
     description: 'JSON dict of repo→pom path overrides'
     default: '{}'
@@ -24,28 +39,31 @@ runs:
     - uses: actions/checkout@v4
       with:
         submodules: false
-        token: ${{ env.GITHUB_TOKEN }}
+        token: ${{ inputs.github-token }}
 
     - name: Init submodules
-      if: env.DRY_RUN != 'true'
+      if: github.event.inputs.test_mode != 'dry'
       shell: bash
       run: git submodule update --init --depth=1 parent platform ${{ inputs.repos }}
 
     - name: Initialize dashboard (resume)
-      if: env.RESUME_FROM != ''
+      if: github.event.inputs.resume_from != ''
       shell: bash
-      run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "$RESUME_FROM" ${{ github.event.inputs.retry_count || 0 }}
+      run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ github.event.inputs.resume_from }}" ${{ github.event.inputs.retry_count || 0 }}
       continue-on-error: true
+      env:
+        CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+        CI_DASHBOARD_TOKEN: ${{ inputs.dashboard-token }}
 
     - name: Pull latest submodules (resume)
-      if: env.RESUME_FROM != '' && github.event.inputs.submodule_update != 'pinned' && env.DRY_RUN != 'true'
+      if: github.event.inputs.resume_from != '' && github.event.inputs.submodule_update != 'pinned' && github.event.inputs.test_mode != 'dry'
       shell: bash
       run: |
         REPOS="${{ inputs.repos }}"
         if [ -n "$REPOS" ]; then for repo in $REPOS; do git submodule update --remote "$repo"; done; fi
 
     - name: Set up Java 22
-      if: env.DRY_RUN != 'true'
+      if: github.event.inputs.test_mode != 'dry'
       uses: actions/setup-java@v4
       with:
         java-version: '22'
@@ -55,18 +73,18 @@ runs:
         server-password: GITHUB_TOKEN
 
     - name: Set up Node 22
-      if: env.DRY_RUN != 'true'
+      if: github.event.inputs.test_mode != 'dry'
       uses: actions/setup-node@v4
       with:
         node-version: '22'
 
     - name: Enable Corepack
-      if: env.DRY_RUN != 'true'
+      if: github.event.inputs.test_mode != 'dry'
       shell: bash
       run: corepack enable
 
     - name: Restore Maven cache
-      if: env.DRY_RUN != 'true'
+      if: github.event.inputs.test_mode != 'dry'
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository
@@ -74,7 +92,7 @@ runs:
         restore-keys: m2-deps-${{ runner.os }}-
 
     - name: Restore casehub snapshot cache
-      if: env.DRY_RUN != 'true' && env.RESUME_FROM != ''
+      if: github.event.inputs.test_mode != 'dry' && github.event.inputs.resume_from != ''
       uses: actions/cache/restore@v4
       with:
         path: ~/.m2/repository/io/casehub
@@ -82,12 +100,9 @@ runs:
         restore-keys: m2-casehub-${{ runner.os }}-
 
     - name: Purge casehub snapshots
-      if: env.DRY_RUN != 'true' && env.RESUME_FROM == ''
+      if: github.event.inputs.test_mode != 'dry' && github.event.inputs.resume_from == ''
       shell: bash
       run: |
-        # Full builds purge to ensure fresh from-source artifacts per level.
-        # Resume builds skip purge — casehub snapshot cache provides artifacts
-        # from the last successful build, avoiding slow GitHub Packages resolution.
         mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
         mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
         rm -rf ~/.m2/repository/io/casehub
@@ -96,16 +111,16 @@ runs:
         mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
 
     - name: Install parent POMs
-      if: env.DRY_RUN != 'true'
+      if: github.event.inputs.test_mode != 'dry'
       shell: bash
       run: |
         mvn install -N -f parent/pom.xml --batch-mode -q
         mvn install -N -f platform/pom.xml --batch-mode -q
 
     - name: Download build artifacts
-      if: env.DRY_RUN != 'true'
+      if: github.event.inputs.test_mode != 'dry'
       uses: actions/download-artifact@v4
-      continue-on-error: ${{ env.RESUME_FROM != '' }}
+      continue-on-error: ${{ github.event.inputs.resume_from != '' }}
       with:
         pattern: "m2-*"
         path: ~/.m2/repository/io/casehub
@@ -113,6 +128,10 @@ runs:
 
     - name: Build
       shell: bash
+      env:
+        MVN_COMMON: ${{ inputs.mvn-common }}
+        MAVEN_ARGS: ${{ inputs.maven-args }}
+        GH_TOKEN: ${{ inputs.gh-token }}
       run: |
         SKIP_FLAG=""
         TEST_MODE="${{ github.event.inputs.test_mode }}"
@@ -130,7 +149,7 @@ runs:
         done
 
     - name: Upload artifacts
-      if: env.DRY_RUN != 'true'
+      if: github.event.inputs.test_mode != 'dry'
       uses: actions/upload-artifact@v4
       with:
         name: "m2-${{ inputs.level }}-${{ inputs.name }}"

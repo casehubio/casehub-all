@@ -1,0 +1,141 @@
+name: 'Build Sliced Level'
+description: 'Shared build steps for a sliced level (base or slice mode)'
+
+inputs:
+  repo:
+    description: 'Repo name (work, engine)'
+    required: true
+  level:
+    description: 'Level identifier (L3, L4) for artifact naming'
+    required: true
+  mode:
+    description: 'base = build aggregator-base.xml, slice = build aggregator-slice-{slice}.xml'
+    required: true
+  slice:
+    description: 'Slice label (a, b, c) — required when mode=slice'
+    default: ''
+  display-name:
+    description: 'Dashboard display name'
+    required: true
+  github-token:
+    description: 'GitHub token for checkout and packages'
+    required: true
+  gh-token:
+    description: 'PAT for cross-repo operations'
+    required: true
+  dashboard-token:
+    description: 'CI dashboard auth token'
+    required: true
+  mvn-common:
+    description: 'Common Maven flags'
+    required: true
+  maven-args:
+    description: 'Extra Maven args from workflow dispatch'
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: false
+        token: ${{ inputs.github-token }}
+
+    - name: Init submodules
+      if: github.event.inputs.test_mode != 'dry'
+      shell: bash
+      run: git submodule update --init --depth=1 parent platform ${{ inputs.repo }}
+
+    - name: Initialize dashboard (resume)
+      if: github.event.inputs.resume_from != '' && inputs.mode == 'base'
+      shell: bash
+      run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ github.event.inputs.resume_from }}" ${{ github.event.inputs.retry_count || 0 }}
+      continue-on-error: true
+      env:
+        CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+        CI_DASHBOARD_TOKEN: ${{ inputs.dashboard-token }}
+
+    - name: Pull latest submodules (resume)
+      if: github.event.inputs.resume_from != '' && github.event.inputs.submodule_update != 'pinned' && github.event.inputs.test_mode != 'dry' && inputs.mode == 'base'
+      shell: bash
+      run: git submodule update --remote ${{ inputs.repo }}
+
+    - name: Set up Java 22
+      if: github.event.inputs.test_mode != 'dry'
+      uses: actions/setup-java@v4
+      with:
+        java-version: '22'
+        distribution: 'temurin'
+        server-id: github
+        server-username: GITHUB_ACTOR
+        server-password: GITHUB_TOKEN
+
+    - name: Restore Maven cache
+      if: github.event.inputs.test_mode != 'dry'
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
+        restore-keys: m2-deps-${{ runner.os }}-
+
+    - name: Restore casehub snapshot cache
+      if: github.event.inputs.test_mode != 'dry' && github.event.inputs.resume_from != ''
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.m2/repository/io/casehub
+        key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+        restore-keys: m2-casehub-${{ runner.os }}-
+
+    - name: Purge casehub snapshots
+      if: github.event.inputs.test_mode != 'dry' && github.event.inputs.resume_from == ''
+      shell: bash
+      run: |
+        mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
+        mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
+        rm -rf ~/.m2/repository/io/casehub
+        mkdir -p ~/.m2/repository/io/casehub
+        mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+        mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
+
+    - name: Install parent POMs
+      if: github.event.inputs.test_mode != 'dry'
+      shell: bash
+      run: |
+        mvn install -N -f parent/pom.xml --batch-mode -q
+        mvn install -N -f platform/pom.xml --batch-mode -q
+
+    - name: Download build artifacts
+      if: github.event.inputs.test_mode != 'dry'
+      uses: actions/download-artifact@v4
+      continue-on-error: ${{ github.event.inputs.resume_from != '' }}
+      with:
+        pattern: "m2-*"
+        path: ~/.m2/repository/io/casehub
+        merge-multiple: true
+
+    - name: Build
+      shell: bash
+      env:
+        MVN_COMMON: ${{ inputs.mvn-common }}
+        MAVEN_ARGS: ${{ inputs.maven-args }}
+        GH_TOKEN: ${{ inputs.gh-token }}
+      run: |
+        SKIP_FLAG=""
+        TEST_MODE="${{ github.event.inputs.test_mode }}"
+        if [ "$TEST_MODE" = "skip" ] || [ "$TEST_MODE" = "compile" ]; then
+          SKIP_FLAG="-DskipTests"
+        fi
+        if [ "${{ inputs.mode }}" = "base" ]; then
+          bash docs/run-with-progress.sh --parallel "${{ inputs.display-name }}" mvn install -fae -T 1C $SKIP_FLAG -f build/${{ inputs.repo }}-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
+        else
+          bash docs/run-with-progress.sh --parallel "${{ inputs.display-name }}" mvn install -fae -T 1C $SKIP_FLAG -f build/${{ inputs.repo }}-slices/aggregator-slice-${{ inputs.slice }}.xml $MVN_COMMON $MAVEN_ARGS
+        fi
+
+    - name: Upload artifacts
+      if: github.event.inputs.test_mode != 'dry'
+      uses: actions/upload-artifact@v4
+      with:
+        name: "m2-${{ inputs.level }}-${{ inputs.repo }}-${{ inputs.mode == 'base' && 'base' || format('slice-{0}', inputs.slice) }}"
+        path: ~/.m2/repository/io/casehub
+        retention-days: 1
+        compression-level: 1

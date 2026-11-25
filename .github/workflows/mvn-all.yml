@@ -71,6 +71,9 @@ permissions:
 
 env:
   RESUME_FROM: ${{ inputs.resume_from }}
+  CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+  MAVEN_OPTS: '-Xmx4g'
+  DRY_RUN: ${{ inputs.test_mode == 'dry' }}
 
 # Architecture: dependency-optimized parallel pipeline (10 levels)
 #
@@ -677,22 +680,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.l1-matrix) }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
           level: L1
           name: ${{ matrix.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
 
   level2:
     name: "L2: ${{ matrix.name }}"
@@ -703,335 +701,101 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.l2-matrix) }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
           level: L2
           name: ${{ matrix.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
 
-  # Level 3: work — base → slices(2)
   work-base:
     name: "L3: Work base"
     needs: [config, convergence, level2]
     if: always() && !cancelled() && (needs.level2.result == 'success' || inputs.resume_from == 'L3')
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-sliced-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform work
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: git submodule update --remote work
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        continue-on-error: ${{ inputs.resume_from != '' }}
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Build
-        run: |
-          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "Work base" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
-        # Dynamic slicing puts more modules in base than the old static split.
-        # 20 min was enough for 5 static base modules; 10 dynamic base modules
-        # with Quarkus integration tests need 30 min.
-        timeout-minutes: 30
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: m2-L3-work-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+          repo: work
+          level: L3
+          mode: base
+          display-name: "Work base"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
 
   work-slices:
     name: "L3: Work ${{ matrix.slice }}"
     needs: [config, convergence, work-base]
     if: always() && !cancelled() && needs.work-base.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
-      matrix:
-        slice: [a, b]
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+      matrix: ${{ fromJSON(needs.config.outputs.l3-slice-matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-sliced-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform work
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: "Build slice ${{ matrix.slice }}"
-        run: |
-          SLICE_NAME="Work $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
-          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f build/work-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 30
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with:
-          name: m2-L3-work-slice-${{ matrix.slice }}
-          path: ~/.m2/repository/io/casehub
-          retention-days: 1
-          compression-level: 1
+          repo: work
+          level: L3
+          mode: slice
+          slice: ${{ matrix.slice }}
+          display-name: "Work ${{ matrix.slice }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
 
-  # Level 4: engine — base → slices(3)
   engine-base:
     name: "L4: Engine base"
     needs: [config, convergence, work-slices]
     if: always() && !cancelled() && (needs.work-slices.result == 'success' || inputs.resume_from == 'L4')
     runs-on: ubuntu-latest
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-sliced-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform engine
-      - name: Initialize dashboard (resume)
-        if: inputs.resume_from != ''
-        run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ inputs.resume_from }}" ${{ inputs.retry_count || 0 }}
-        continue-on-error: true
-      - name: Pull latest submodules (resume)
-        if: inputs.resume_from != '' && inputs.submodule_update != 'pinned' && inputs.test_mode != 'dry'
-        run: git submodule update --remote engine
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        continue-on-error: ${{ inputs.resume_from != '' }}
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: Build
-        run: |
-          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "Engine base" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-base.xml $MVN_COMMON $MAVEN_ARGS
-        # Resume mode resolves casehub SNAPSHOTs from GitHub Packages (slow).
-        # Full builds take ~10 min; resumes can take ~30 min for GP resolution.
-        timeout-minutes: 45
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with: { name: m2-L4-engine-base, path: ~/.m2/repository/io/casehub, retention-days: 1, compression-level: 1 }
+          repo: engine
+          level: L4
+          mode: base
+          display-name: "Engine base"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
 
   engine-slices:
     name: "L4: Engine ${{ matrix.slice }}"
     needs: [config, convergence, engine-base]
     if: always() && !cancelled() && needs.engine-base.result == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        slice: [a, b, c]
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
+      matrix: ${{ fromJSON(needs.config.outputs.l4-slice-matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: ./.github/actions/build-sliced-level
         with:
-          submodules: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Init submodules
-        if: inputs.test_mode != 'dry'
-        run: git submodule update --init --depth=1 parent platform engine
-      - if: inputs.test_mode != 'dry'
-        uses: actions/setup-java@v4
-        with: { java-version: '22', distribution: 'temurin', server-id: github, server-username: GITHUB_ACTOR, server-password: GITHUB_TOKEN }
-      - if: inputs.test_mode != 'dry'
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
-          restore-keys: m2-deps-${{ runner.os }}-
-      - name: Restore casehub snapshot cache
-        if: inputs.test_mode != 'dry' && inputs.resume_from != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.m2/repository/io/casehub
-          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-          restore-keys: m2-casehub-${{ runner.os }}-
-      - name: Purge casehub snapshots
-        if: inputs.test_mode != 'dry' && inputs.resume_from == ''
-        run: |
-          # Full builds purge to ensure fresh from-source artifacts per level.
-          # Resume builds skip purge — casehub snapshot cache provides artifacts
-          # from the last successful build, avoiding slow GitHub Packages resolution.
-          mv ~/.m2/repository/io/casehub/casehub-pages-npm /tmp/casehub-pages-npm 2>/dev/null || true
-          mv ~/.m2/repository/io/casehub/casehub-mosaic-npm /tmp/casehub-mosaic-npm 2>/dev/null || true
-          rm -rf ~/.m2/repository/io/casehub
-          mkdir -p ~/.m2/repository/io/casehub
-          mv /tmp/casehub-pages-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-          mv /tmp/casehub-mosaic-npm ~/.m2/repository/io/casehub/ 2>/dev/null || true
-      - if: inputs.test_mode != 'dry'
-        run: |
-          mvn install -N -f parent/pom.xml --batch-mode -q
-          mvn install -N -f platform/pom.xml --batch-mode -q
-      - name: Download build artifacts
-        if: inputs.test_mode != 'dry'
-        uses: actions/download-artifact@v4
-        with: { pattern: "m2-*", path: ~/.m2/repository/io/casehub, merge-multiple: true }
-      - name: "Build slice ${{ matrix.slice }}"
-        run: |
-          SLICE_NAME="Engine $(echo ${{ matrix.slice }} | tr 'a-z' 'A-Z')"
-          SKIP_FLAG="${{ (inputs.test_mode == 'skip' || inputs.test_mode == 'compile') && '-DskipTests' || '' }}"
-          bash docs/run-with-progress.sh --parallel "$SLICE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f build/engine-slices/aggregator-slice-${{ matrix.slice }}.xml $MVN_COMMON $MAVEN_ARGS
-        timeout-minutes: 45
-      - if: inputs.test_mode != 'dry'
-        uses: actions/upload-artifact@v4
-        with:
-          name: m2-L4-engine-slice-${{ matrix.slice }}
-          path: ~/.m2/repository/io/casehub
-          retention-days: 1
-          compression-level: 1
+          repo: engine
+          level: L4
+          mode: slice
+          slice: ${{ matrix.slice }}
+          display-name: "Engine ${{ matrix.slice }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
 
   level5:
     name: "L5: ${{ matrix.name }}"
@@ -1042,22 +806,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.l5-matrix) }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
           level: L5
           name: ${{ matrix.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
 
   level6:
     name: "L6: ${{ matrix.name }}"
@@ -1068,22 +827,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.l6-matrix) }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
           level: L6
           name: ${{ matrix.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
           maven-extra: ${{ matrix.maven_extra }}
 
   level7:
@@ -1095,22 +849,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.l7-matrix) }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
           level: L7
           name: ${{ matrix.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
           pom-overrides: ${{ matrix.pom_overrides || '{}' }}
 
   level8:
@@ -1122,22 +871,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.l8-matrix) }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
           level: L8
           name: ${{ matrix.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
           maven-extra: ${{ matrix.maven_extra }}
 
   level9:
@@ -1149,22 +893,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.l9-matrix) }}
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
-      GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      MAVEN_OPTS: '-Xmx4g'
-      DRY_RUN: ${{ inputs.test_mode == 'dry' }}
-      MVN_COMMON: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
-      MAVEN_ARGS: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
     steps:
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
           level: L9
           name: ${{ matrix.name }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-token: ${{ secrets.GH_PAT }}
+          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
+          mvn-common: ${{ needs.convergence.outputs.mvn-common || needs.config.outputs.mvn-common }}
+          maven-args: ${{ needs.convergence.outputs.maven-args || needs.config.outputs.maven-args }}
 
   # Finalize — dashboard + pointer advance
   finalize:
