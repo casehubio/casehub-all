@@ -137,15 +137,24 @@ runs:
       if: github.event.inputs.test_mode != 'dry'
       shell: bash
       run: |
-        BAD=0
-        while IFS= read -r -d '' jar; do
-          if ! jar tf "$jar" > /dev/null 2>&1; then
-            echo "::warning::Corrupt JAR (deleted): $jar"
-            rm -f "$jar"
-            BAD=$((BAD + 1))
-          fi
-        done < <(find ~/.m2/repository/io/casehub -name '*.jar' -print0)
-        if [ "$BAD" -gt 0 ]; then echo "::warning::$BAD corrupt JAR(s) deleted — Maven will re-resolve"; fi
+        python3 -c "
+        import zipfile, os, sys
+        bad = 0
+        for root, dirs, files in os.walk(os.path.expanduser('~/.m2/repository/io/casehub')):
+            for f in files:
+                if f.endswith('.jar'):
+                    path = os.path.join(root, f)
+                    try:
+                        with zipfile.ZipFile(path) as z:
+                            if z.testzip() is not None:
+                                raise zipfile.BadZipFile('CRC mismatch')
+                    except (zipfile.BadZipFile, Exception) as e:
+                        print(f'::warning::Corrupt JAR (deleted): {path} — {e}')
+                        os.remove(path)
+                        bad += 1
+        if bad: print(f'::warning::{bad} corrupt JAR(s) deleted — Maven will re-resolve')
+        print(f'Validated {bad} bad / scanned')
+        "
 
     - name: Build
       shell: bash
