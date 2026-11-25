@@ -88,6 +88,14 @@ runs:
         key: m2-deps-${{ runner.os }}-${{ hashFiles('parent/pom.xml', 'platform/pom.xml') }}
         restore-keys: m2-deps-${{ runner.os }}-
 
+    - name: Restore native library cache
+      if: github.event.inputs.test_mode != 'dry'
+      uses: actions/cache@v4
+      with:
+        path: ~/.casehub
+        key: casehub-native-${{ runner.os }}-sherpa
+        restore-keys: casehub-native-${{ runner.os }}-
+
     - name: Restore casehub snapshot cache
       if: github.event.inputs.test_mode != 'dry' && github.event.inputs.resume_from != ''
       uses: actions/cache/restore@v4
