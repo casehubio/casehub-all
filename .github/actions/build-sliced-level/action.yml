@@ -97,6 +97,8 @@ runs:
     - name: Install parent POMs
       if: github.event.inputs.test_mode != 'dry'
       shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         mvn install -N -f parent/pom.xml --batch-mode -q
         mvn install -N -f platform/pom.xml --batch-mode -q
