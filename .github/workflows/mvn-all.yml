@@ -213,6 +213,7 @@ jobs:
           sparse-checkout: |
             docs/pipeline.yaml
             docs/compute-matrices.py
+            docs/compute-mvn-flags.sh
           sparse-checkout-cone-mode: false
       - name: Compute matrices from pipeline.yaml
         id: matrices
@@ -220,9 +221,6 @@ jobs:
       - name: Compute Maven flags
         id: flags
         run: bash docs/compute-mvn-flags.sh "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
-      - name: Validate pipeline consistency
-        run: python3 docs/check-pipeline-consistency.py || echo "::warning::Pipeline consistency check found issues"
-        continue-on-error: true
 
   # Phase 0: Prepare — checkout, submodule update, platform base
   prepare:
@@ -274,6 +272,10 @@ jobs:
 
       - name: Check dependency graph for cycles
         run: python3 docs/check-cycles.py
+
+      - name: Validate pipeline consistency
+        run: python3 docs/check-pipeline-consistency.py || echo "::warning::Pipeline consistency check found issues"
+        continue-on-error: true
 
       - name: Update submodules
         run: bash docs/update-submodules.sh "${{ inputs.submodule_update }}" "${{ inputs.submodule_list }}"
