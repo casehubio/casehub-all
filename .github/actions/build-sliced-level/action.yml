@@ -64,6 +64,8 @@ runs:
         server-id: github
         server-username: GITHUB_ACTOR
         server-password: GITHUB_TOKEN
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
 
     - name: Restore Maven cache
       if: github.event.inputs.test_mode != 'dry'
@@ -114,6 +116,8 @@ runs:
         MVN_COMMON: ${{ inputs.mvn-common }}
         MAVEN_ARGS: ${{ inputs.maven-args }}
         GH_TOKEN: ${{ inputs.gh-token }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GH_PACKAGES_TOKEN: ${{ inputs.github-token }}
       run: |
         SKIP_FLAG=""
         TEST_MODE="${{ github.event.inputs.test_mode }}"
