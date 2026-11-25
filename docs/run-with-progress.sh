@@ -245,7 +245,8 @@ if [ "$BUILD_MODE" = "dry-run" ]; then
 fi
 
 # Pre-flight: verify required artifacts from prior levels
-if [ -f docs/verify-artifacts.sh ] && [ -d "$PHASE" ] && [ -f "$PHASE/pom.xml" ]; then
+# SKIP_VERIFY=true for L0 (prepare) — no upstream artifacts to verify
+if [ "${SKIP_VERIFY:-}" != "true" ] && [ -f docs/verify-artifacts.sh ] && [ -d "$PHASE" ] && [ -f "$PHASE/pom.xml" ]; then
   bash docs/verify-artifacts.sh "$PHASE" 2>&1 | tail -5
 fi
 

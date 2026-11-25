@@ -326,7 +326,7 @@ jobs:
 
       - name: "Platform: build"
         run: |
-          bash docs/run-with-progress.sh --parallel "platform" mvn install -T 1C -f platform/pom.xml -pl '!memory-simulation-core' $MVN_COMMON $MAVEN_ARGS
+          SKIP_VERIFY=true bash docs/run-with-progress.sh --parallel "platform" mvn install -T 1C -f platform/pom.xml -pl '!memory-simulation-core' $MVN_COMMON $MAVEN_ARGS
         timeout-minutes: 20
 
       - name: Validate produced JARs
