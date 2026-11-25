@@ -257,17 +257,24 @@ jobs:
 
       - name: Initialize CI dashboard
         run: |
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null > /tmp/old-progress.json || echo '{}' > /tmp/old-progress.json
           python3 docs/init-dashboard-full.py \
             --run-id $GITHUB_RUN_ID \
-            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            --run-url "$RUN_URL" \
             --commit "${GITHUB_SHA:0:7}" \
             --resume-from "${{ inputs.resume_from }}" \
             --retry-count ${{ inputs.retry_count || 0 }} \
             --pipeline docs/pipeline.yaml \
-            --dashboard-url "$CI_DASHBOARD_URL" \
-            --dashboard-token "$CI_DASHBOARD_TOKEN"
-        env:
-          CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+            --old-progress /tmp/old-progress.json \
+          | curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
+            -H "Content-Type: application/json" \
+            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
+            -H "X-Init: true" \
+            -d @- > /dev/null
+          echo "::notice::Dashboard: https://casehub.org/casehub-all/"
         continue-on-error: true
 
       - name: Check dependency graph for cycles

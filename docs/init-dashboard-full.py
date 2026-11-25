@@ -1,27 +1,22 @@
 #!/usr/bin/env python3
 """
-init-dashboard-full.py — initialize CI dashboard for a new build run.
-Archives the previous run's progress, then sets up the new run with
-phase list derived from pipeline.yaml.
+init-dashboard-full.py — build CI dashboard init payload from pipeline.yaml.
 
-Called by the prepare job at the start of a full (non-resume) build.
+Outputs JSON to stdout. The caller pipes it to curl for the actual write.
+This separation keeps the script testable without network access.
 
 Usage:
   python3 docs/init-dashboard-full.py \
-    --run-id $GITHUB_RUN_ID \
-    --run-url "$RUN_URL" \
-    --commit "${GITHUB_SHA:0:7}" \
-    --resume-from "$RESUME_FROM" \
-    --retry-count 0 \
+    --run-id 12345 --run-url "https://..." --commit "abc1234" \
+    --resume-from "" --retry-count 0 \
     --pipeline docs/pipeline.yaml \
-    --dashboard-url "$CI_DASHBOARD_URL" \
-    --dashboard-token "$CI_DASHBOARD_TOKEN"
+    --old-progress /tmp/old-progress.json \
+  | curl -sf -X PUT "$WORKER/progress" -H "..." -d @-
 """
 
 import argparse
 import json
 import sys
-import urllib.request
 from datetime import datetime, timezone
 
 
@@ -49,20 +44,18 @@ def main():
     parser.add_argument('--resume-from', default='')
     parser.add_argument('--retry-count', type=int, default=0)
     parser.add_argument('--pipeline', default='docs/pipeline.yaml')
-    parser.add_argument('--dashboard-url', required=True)
-    parser.add_argument('--dashboard-token', required=True)
+    parser.add_argument('--old-progress', default=None)
     args = parser.parse_args()
 
     now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    worker = args.dashboard_url
 
-    # Fetch previous progress
-    try:
-        req = urllib.request.Request(f'{worker}/progress')
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            old = json.loads(resp.read())
-    except Exception:
-        old = {}
+    old = {}
+    if args.old_progress:
+        try:
+            with open(args.old_progress) as f:
+                old = json.load(f)
+        except Exception:
+            old = {}
 
     history = old.get('history', [])
     prev = old.get('current')
@@ -84,7 +77,6 @@ def main():
                                      else 'unknown'))
         history.insert(0, entry)
 
-    # Build new progress
     phase_list = load_phases(args.pipeline)
     phase_objects = [{'name': p, 'status': 'pending'} for p in phase_list]
     if phase_objects:
@@ -105,26 +97,7 @@ def main():
         '_archives': old.get('_archives', []),
     }
 
-    # Push to dashboard
-    payload = json.dumps(data, indent=2).encode()
-    req = urllib.request.Request(
-        f'{worker}/progress',
-        data=payload,
-        method='PUT',
-        headers={
-            'Authorization': f'Bearer {args.dashboard_token}',
-            'Content-Type': 'application/json',
-            'X-Run-Id': str(args.run_id),
-            'X-Init': 'true',
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            resp.read()
-    except Exception as e:
-        print(f'::warning::Dashboard init failed: {e}', file=sys.stderr)
-
-    print('::notice::Dashboard: https://casehub.org/casehub-all/')
+    json.dump(data, sys.stdout, indent=2)
 
 
 if __name__ == '__main__':
