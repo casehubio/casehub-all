@@ -36,11 +36,6 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: false
-        token: ${{ inputs.github-token }}
-
     - name: Init submodules
       if: github.event.inputs.test_mode != 'dry'
       shell: bash

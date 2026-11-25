@@ -547,6 +547,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l1 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
@@ -568,6 +571,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l2 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
@@ -586,6 +592,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-sliced-level
         with:
           repo: work
@@ -608,6 +617,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l3 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-sliced-level
         with:
           repo: work
@@ -628,6 +640,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-sliced-level
         with:
           repo: engine
@@ -650,6 +665,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l4 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-sliced-level
         with:
           repo: engine
@@ -673,6 +691,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l5 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
@@ -694,6 +715,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l6 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
@@ -716,6 +740,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l7 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
@@ -738,6 +765,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l8 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
@@ -760,6 +790,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l9 }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
       - uses: ./.github/actions/build-level
         with:
           repos: ${{ matrix.repos }}
