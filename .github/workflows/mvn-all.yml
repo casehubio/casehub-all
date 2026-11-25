@@ -268,13 +268,16 @@ jobs:
             --retry-count ${{ inputs.retry_count || 0 }} \
             --pipeline docs/pipeline.yaml \
             --old-progress /tmp/old-progress.json \
-          | curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
+            > /tmp/dashboard-init.json
+          echo "Dashboard payload: $(wc -c < /tmp/dashboard-init.json) bytes"
+          curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
             -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
             -H "Content-Type: application/json" \
             -H "X-Run-Id: ${GITHUB_RUN_ID}" \
             -H "X-Init: true" \
-            -d @- > /dev/null
-          echo "::notice::Dashboard: https://casehub.org/casehub-all/"
+            -d @/tmp/dashboard-init.json \
+            && echo "::notice::Dashboard: https://casehub.org/casehub-all/" \
+            || echo "::warning::Dashboard init PUT failed (exit $?)"
         continue-on-error: true
 
       - name: Check dependency graph for cycles
