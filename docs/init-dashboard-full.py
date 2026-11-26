@@ -112,10 +112,6 @@ def main():
     prev_phase_map = {}
     cached_phases = set()
     if args.resume_from and history:
-        prev_entry = history[0]
-        for p in prev_entry.get('phases', []):
-            prev_phase_map[p['name']] = p
-
         resume_level_idx = None
         for i, level in enumerate(pipeline.get('levels', [])):
             if level.get('id') == args.resume_from:
@@ -127,14 +123,23 @@ def main():
                 for name in phase_names_for_level(level):
                     cached_phases.add(name)
 
+        # Search history (most recent first) for best data per cached phase
+        for entry in history[:10]:
+            for p in entry.get('phases', []):
+                if p.get('name') in cached_phases and p['name'] not in prev_phase_map:
+                    if p.get('status') == 'success' and (p.get('duration_s') or p.get('tests_run')):
+                        prev_phase_map[p['name']] = p
+
     phase_objects = []
     for p_name in phase_list:
-        if p_name in cached_phases and p_name in prev_phase_map:
-            prev = dict(prev_phase_map[p_name])
-            prev['name'] = p_name
-            prev['cached'] = True
-            if prev.get('status') != 'success':
+        if p_name in cached_phases:
+            if p_name in prev_phase_map:
+                prev = dict(prev_phase_map[p_name])
+                prev['name'] = p_name
+                prev['cached'] = True
                 prev['status'] = 'success'
+            else:
+                prev = {'name': p_name, 'status': 'success', 'cached': True}
             phase_objects.append(prev)
         else:
             phase_objects.append({'name': p_name, 'status': 'pending'})
