@@ -224,9 +224,10 @@ jobs:
         run: |
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null > /tmp/old-progress.json || echo '{}' > /tmp/old-progress.json
-          pip install pyyaml -q 2>/dev/null
+          pip install --user pyyaml 2>&1 || echo "::warning::pip install pyyaml failed — may already be available"
           python3 docs/init-dashboard-full.py --run-id $GITHUB_RUN_ID --run-url "$RUN_URL" --commit "${GITHUB_SHA:0:7}" --resume-from "${{ inputs.resume_from }}" --retry-count ${{ inputs.retry_count || 0 }} --pipeline docs/pipeline.yaml --old-progress /tmp/old-progress.json > /tmp/dashboard-init.json
-          curl -sf -X PUT "$CI_DASHBOARD_URL/progress" -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" -H "Content-Type: application/json" -H "X-Run-Id: ${GITHUB_RUN_ID}" -H "X-Init: true" -d @/tmp/dashboard-init.json && echo "::notice::Dashboard: https://casehub.org/casehub-all/" || echo "::warning::Dashboard init failed"
+          echo "::notice::Dashboard init payload: $(wc -c < /tmp/dashboard-init.json) bytes, phases: $(python3 -c 'import json; d=json.load(open("/tmp/dashboard-init.json")); print(len(d["current"]["phases"]))' 2>/dev/null || echo 'parse error')"
+          curl -sf -X PUT "$CI_DASHBOARD_URL/progress" -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" -H "Content-Type: application/json" -H "X-Run-Id: ${GITHUB_RUN_ID}" -H "X-Init: true" -d @/tmp/dashboard-init.json && echo "::notice::Dashboard: https://casehub.org/casehub-all/" || echo "::warning::Dashboard init PUT failed"
         continue-on-error: true
       - name: Auto-detect failed repos from previous run
         if: inputs.resume_from != '' && inputs.resume_repos == ''
