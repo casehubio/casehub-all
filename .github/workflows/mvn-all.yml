@@ -81,7 +81,7 @@ env:
 # L1:   [ledger→eidos] | connectors | worker
 # L2:   neocortex | qhorus
 # L3:   work (single job)
-# L4:   engine-base → engine-slices(3)
+# L4:   engine (single job)
 # L5:   [ras→desiredstate] | [claudony+agency] | [langchain4j+workers]
 # L6:   ops | mosaic  (foundational for apps)
 # L7:   drafthouse  (uses mosaic UI)
@@ -427,34 +427,12 @@ jobs:
           mvn-common: ${{ needs.config.outputs.mvn-common }}
           maven-args: ${{ needs.config.outputs.maven-args }}
 
-  engine-base:
-    name: "L4: Engine base"
+  level4:
+    name: "L4: ${{ matrix.name }}"
     needs: [config, prepare, level3]
     if: always() && !cancelled() && (needs.level3.result == 'success' || inputs.resume_from == 'L4')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-      - uses: ./.github/actions/build-sliced-level
-        with:
-          repo: engine
-          level: L4
-          mode: base
-          display-name: "Engine base"
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          gh-token: ${{ secrets.GH_PAT }}
-          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.config.outputs.maven-args }}
-
-  engine-slices:
-    name: "L4: Engine ${{ matrix.slice }}"
-    needs: [config, prepare, engine-base]
-    if: always() && !cancelled() && needs.engine-base.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l4 }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l4 }}
@@ -462,13 +440,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - uses: ./.github/actions/build-sliced-level
+      - uses: ./.github/actions/build-level
         with:
-          repo: engine
+          repos: ${{ matrix.repos }}
           level: L4
-          mode: slice
-          slice: ${{ matrix.slice }}
-          display-name: "Engine ${{ matrix.slice }}"
+          name: ${{ matrix.name }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           gh-token: ${{ secrets.GH_PAT }}
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
@@ -477,8 +453,8 @@ jobs:
 
   level5:
     name: "L5: ${{ matrix.name }}"
-    needs: [config, prepare, engine-slices]
-    if: always() && !cancelled() && (needs.engine-slices.result == 'success' || inputs.resume_from == 'L5')
+    needs: [config, prepare, level4]
+    if: always() && !cancelled() && (needs.level4.result == 'success' || inputs.resume_from == 'L5')
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l5 }}
     strategy:
@@ -601,7 +577,7 @@ jobs:
   # Finalize — dashboard + pointer advance
   finalize:
     name: "Finalize"
-    needs: [config, prepare, level1, level2, level3, engine-base, engine-slices, level5, level6, level7, level8, level9]
+    needs: [config, prepare, level1, level2, level3, level4, level5, level6, level7, level8, level9]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     env:
@@ -626,7 +602,7 @@ jobs:
         if: always()
         run: |
           BUILD_OK=true
-          for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.engine-base.result }}" "${{ needs.engine-slices.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
+          for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.level4.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
             if [ "$result" = "failure" ]; then
               BUILD_OK=false
               break
@@ -697,8 +673,7 @@ jobs:
             level7=${{ needs.level7.result }}
             level6=${{ needs.level6.result }}
             level5=${{ needs.level5.result }}
-            engine-slices=${{ needs.engine-slices.result }}
-            engine-base=${{ needs.engine-base.result }}
+            level4=${{ needs.level4.result }}
             level3=${{ needs.level3.result }}
             level2=${{ needs.level2.result }}
             level1=${{ needs.level1.result }}

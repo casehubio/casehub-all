@@ -51,13 +51,9 @@ levels:
 
   - id: L4
     resume: true
-    repos: [engine]
-    slices: 3
-    base: Engine base
+    timeout: 45
     stacks:
-      - [Engine A]
-      - [Engine B]
-      - [Engine C]
+      - [engine]
 
   - id: L5
     resume: true
