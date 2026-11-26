@@ -33,6 +33,7 @@ on:
           - L2
           - L3
           - L4
+          - L5
           - L6
         default: ''
       resume_repos:
@@ -474,7 +475,7 @@ jobs:
   level5:
     name: "L5: ${{ matrix.name }}"
     needs: [config, prepare, level4]
-    if: always() && !cancelled() && needs.level4.result == 'success'
+    if: always() && !cancelled() && (needs.level4.result == 'success' || inputs.resume_from == 'L5')
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l5 }}
     strategy:
