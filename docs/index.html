@@ -49,8 +49,8 @@ a:hover { text-decoration: underline; }
 .pipe-full { display: flex; }
 .pipe-full .phase { flex: 1; }
 .pipe-parallel { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 3px; }
-.pipe-connector { display: flex; justify-content: center; padding: 2px 0; }
-.pipe-connector::after { content: ''; display: block; width: 1px; height: 6px; background: var(--dim); }
+.pipe-connector { display: flex; justify-content: center; padding: 1px 0; }
+.pipe-connector::after { content: ''; display: block; width: 1px; height: 4px; background: var(--dim); }
 .pipe-fan { position: relative; height: 10px; margin: 0 12%; }
 .pipe-fan::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; border-top: 1px solid var(--dim); }
 .pipe-fan::after { content: ''; position: absolute; top: 0; left: 50%; width: 1px; height: 100%; background: var(--dim); }
@@ -132,6 +132,11 @@ a:hover { text-decoration: underline; }
 .history-detail { display: none; padding: 12px; background: var(--surface2); border-top: 1px solid var(--border); }
 .history-detail.open { display: block; }
 .no-data { color: var(--muted); text-align: center; padding: 16px; font-size: 12px; }
+.hbtn { background: none; border: none; cursor: pointer; font-size: 12px; padding: 2px 4px; opacity: 0.5; transition: opacity 0.15s; }
+.hbtn:hover { opacity: 1; }
+.last-green { border-color: var(--green); background: rgba(34,197,94,0.04); }
+.last-green .history-summary { background: rgba(34,197,94,0.03); }
+.last-green-tag { font-size: 8px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 0.5px; }
 
 #event-log-entries { max-height: 200px; overflow-y: auto; font-size: 10px; color: var(--muted); line-height: 1.6; }
 #event-log-entries .ev-time { color: var(--dim); }
@@ -281,11 +286,20 @@ function lineChart(el,data,opts={}){
 // ── Pipeline renderer ─────────────────────────────────────────────
 function phaseBox(p,clickFn){
   if(!p){console.warn('Phase not found in API data:',name);return'<div class="phase pending"><div class="name">?</div></div>';}
-  // Resumed phases: pending with no data = skipped, success with no tests = verified (from cache)
   const isResumed=window._currentRun&&window._currentRun.resume_from;
   let displayStatus=p.status;
   if(isResumed&&p.status==='pending'&&!p.started)displayStatus='skipped';
-  if(isResumed&&p.status==='success'&&!p.tests_run&&!p.modules&&p.duration_s!=null&&p.duration_s<5)displayStatus='verified';
+  if(isResumed&&p.status==='success'&&p.cached)displayStatus='verified';
+  if(isResumed&&p.status==='success'&&!p.cached&&window._pipeline){
+    const resumeLevel=window._currentRun.resume_from;
+    const phaseLevelIdx=window._pipeline.levels.findIndex(lv=>{
+      if(lv.base===p.name)return true;
+      if(lv.convergence===p.name)return true;
+      return lv.stacks.some(s=>Array.isArray(s)?s.includes(p.name):(s.name||s.repos[0])===p.name);
+    });
+    const resumeLevelIdx=window._pipeline.levels.findIndex(lv=>lv.id===resumeLevel);
+    if(phaseLevelIdx>=0&&resumeLevelIdx>=0&&phaseLevelIdx<resumeLevelIdx)displayStatus='verified';
+  }
   const dur=displayStatus==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
   const parts=[];
   if(p.modules)parts.push(p.modules+' mod');
@@ -325,12 +339,12 @@ function renderPipe(phases,id,clickFn){
     const sorted=stacks.length>1?tall(stacks):stacks;
     if(level.base){
       html+=lvl(level.id,phaseBox(m[level.base],clickFn));
-      html+=conn+fan;
+      html+=fan;
       html+=row(sorted.map(s=>s.length>1?grp(s):phaseBox(s[0],clickFn)).join(''),'pipe-parallel');
       html+=fan;
-      if(level.convergence){html+=conn+row(phaseBox(m[level.convergence],clickFn));}
+      if(level.convergence){html+=row(phaseBox(m[level.convergence],clickFn));}
     }else if(stacks.length>=3){
-      html+=fan+lvl(level.id,sorted.map(s=>grp(s)).join(''),'pipe-parallel')+fan;
+      html+=lvl(level.id,sorted.map(s=>grp(s)).join(''),'pipe-parallel');
     }else if(stacks.length===2){
       html+=lvl(level.id,sorted.map(s=>grp(s)).join(''),'pipe-parallel');
     }else{
@@ -427,11 +441,14 @@ function renderCharts(hist){
 function renderHistory(hist){
   const el=document.getElementById('history');
   if(!hist?.length){el.innerHTML='<div class="no-data">No build history</div>';return;}
+  const firstGreenIdx=hist.findIndex(h=>h.conclusion==='success');
   el.innerHTML=hist.slice(0,30).map((h,i)=>{
     const sh=h.self_healing||{},hc=(sh.corrupt_jars_deleted||0)+(sh.corrupt_jandex_deleted||0)+(sh.retries||0);
-    return`<div class="history-item">`+
+    const isLastGreen=i===firstGreenIdx;
+    return`<div class="history-item${isLastGreen?' last-green':''}">`+
       `<div class="history-summary" onclick="toggleHist(${i})">`+
       `<span class="hdot ${h.conclusion}"></span>`+
+      (isLastGreen?`<span class="last-green-tag">latest green</span>`:'')+
       `<span>Run #${h.run_id||'?'}</span>`+
       `<span style="color:var(--muted)">${h.commit||''}</span>`+
       `<span>${fmt(h.duration_s)}</span>`+
@@ -441,8 +458,30 @@ function renderHistory(hist){
       (hc?`<span class="htag warn">🔧${hc}</span>`:'')+
       `<span class="htag">${shortDate(h.started)}</span>`+
       `<span class="hexpand" id="hx-${i}">▸</span>`+
+      `<button class="hbtn" title="Copy link" onclick="event.stopPropagation();copyLink(${h.run_id})">🔗</button>`+
+      `<button class="hbtn" title="Copy build-all command" onclick="event.stopPropagation();copyBuildAll('${h.commit||''}')">📋</button>`+
       `</div><div class="history-detail" id="hd-${i}"><div id="hp-${i}"></div></div></div>`;
   }).join('');
+}
+function copyLink(runId){
+  const url=window.location.origin+window.location.pathname+'#run='+runId;
+  navigator.clipboard.writeText(url).then(()=>{
+    window.location.hash='run='+runId;
+    toast('Link copied','ok',2000);
+  });
+}
+function copyBuildAll(commit){
+  if(!commit){toast('No commit SHA available','err',3000);return;}
+  const cmd=`git clone https://github.com/casehubio/parent.git && cd parent && ./build-all.sh --revision=${commit}`;
+  navigator.clipboard.writeText(cmd).then(()=>toast('build-all command copied','ok',2000));
+}
+function openPinnedBuild(){
+  const hash=window.location.hash;
+  if(!hash.startsWith('#run='))return;
+  const runId=hash.slice(5);
+  const hist=window._data?.history||[];
+  const idx=hist.findIndex(h=>String(h.run_id)===runId);
+  if(idx>=0)setTimeout(()=>toggleHist(idx),100);
 }
 function toggleHist(i){
   const d=document.getElementById('hd-'+i),a=document.getElementById('hx-'+i);
@@ -467,6 +506,7 @@ async function refresh(){
     document.querySelectorAll('.history-detail.open').forEach(d=>{const m=d.id.match(/hd-(\d+)/);if(m)openHist.add(parseInt(m[1]));});
     renderCurrent(data.current,data.history);renderStats(data.history);renderCharts(data.history);renderHistory(data.history);
     openHist.forEach(i=>{const d=document.getElementById('hd-'+i),a=document.getElementById('hx-'+i);if(d){d.classList.add('open');a?.classList.add('open');const h=data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i);}});
+    openPinnedBuild();
     document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · '+Math.round(POLL_MS/1000)+'s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
 }
