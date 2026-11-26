@@ -335,7 +335,8 @@ function renderPipe(phases,id,clickFn){
   let html='<div class="pipe">';
   window._pipeline.levels.forEach((level,i)=>{
     if(i>0) html+=conn;
-    const stacks=level.stacks.map(s=>Array.isArray(s)?s.map(n=>m[n]):[m[s.name||s.repos[0]]]);
+    const nameMap=level.names||{};
+    const stacks=level.stacks.map(s=>Array.isArray(s)?s.map(n=>m[nameMap[n]||n]):[m[s.name]||m[s.repos?.[0]]].filter(Boolean));
     const sorted=stacks.length>1?tall(stacks):stacks;
     if(level.base){
       html+=lvl(level.id,phaseBox(m[level.base],clickFn));
