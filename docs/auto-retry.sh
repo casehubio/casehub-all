@@ -22,8 +22,8 @@ for pair in $JOB_RESULTS; do
   result="${pair#*=}"
   if [ "$result" = "failure" ]; then
     case "$job" in
-      level9|level8) RESUME="L8" ;;
-      level7|level6|level5) RESUME="L5" ;;
+      level8|level7) RESUME="L7" ;;
+      level6|level5) RESUME="L4" ;;
       level4) RESUME="L4" ;;
       level3) RESUME="L3" ;;
       level2) RESUME="L2" ;;

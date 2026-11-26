@@ -31,31 +31,29 @@ levels:
   - id: L1
     resume: true
     timeout: 35
+    maven_extra:
+      qhorus: "-pl api -am"
     stacks:
       - [ledger, eidos]
       - [connectors]
       - [worker, pages]
+      - [qhorus]
 
   - id: L2
     resume: true
-    timeout: 35
+    timeout: 45
     stacks:
       - [neocortex]
       - [qhorus]
+      - [work]
 
   - id: L3
     resume: true
     timeout: 45
     stacks:
-      - [work]
-
-  - id: L4
-    resume: true
-    timeout: 45
-    stacks:
       - [engine]
 
-  - id: L5
+  - id: L4
     resume: true
     timeout: 25
     stacks:
@@ -64,7 +62,7 @@ levels:
       - [agency]
       - [casehub-langchain4j, workers]
 
-  - id: L6
+  - id: L5
     timeout: 25
     maven_extra:
       casehub-mosaic: "-pl !npm-packages"
@@ -72,14 +70,14 @@ levels:
       - [ops]
       - [casehub-mosaic]
 
-  - id: L7
+  - id: L6
     timeout: 25
     pom:
       drafthouse: drafthouse/server/pom.xml
     stacks:
       - [drafthouse]
 
-  - id: L8
+  - id: L7
     resume: true
     stacks:
       - [life]
@@ -88,6 +86,6 @@ levels:
       - [devtown, aml, soc]
       - [chat-app, clinical, openclaw]
 
-  - id: L9
+  - id: L8
     stacks:
       - [scaffold, fsitrading]

@@ -33,8 +33,7 @@ on:
           - L2
           - L3
           - L4
-          - L5
-          - L8
+          - L7
         default: ''
       submodule_update:
         description: "pinned = use committed SHAs, all = pull latest main for all repos, list = pull latest only for named repos"
@@ -77,16 +76,15 @@ env:
 
 # Architecture: dependency-optimized parallel pipeline (10 levels)
 #
-# L0:   prepare (platform — single job)
-# L1:   [ledger→eidos] | connectors | worker
-# L2:   neocortex | qhorus
-# L3:   work (single job)
-# L4:   engine (single job)
-# L5:   [ras→desiredstate] | [claudony+agency] | [langchain4j+workers]
-# L6:   ops | mosaic  (foundational for apps)
-# L7:   drafthouse  (uses mosaic UI)
-# L8:   life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]  (apps)
-# L9:   [scaffold+fsitrading]  (need ops)
+# L0:   prepare (platform)
+# L1:   [ledger+eidos] | connectors | [worker+pages] | qhorus-api
+# L2:   neocortex | qhorus | work  (work parallel with qhorus thanks to qhorus-api at L1)
+# L3:   engine
+# L4:   [ras+desiredstate] | claudony | agency | [langchain4j+workers]
+# L5:   ops | mosaic
+# L6:   drafthouse
+# L7:   life | iot | quarkmind | [devtown+aml+soc] | [chat-app+clinical+openclaw]
+# L8:   [scaffold+fsitrading]
 # fin:  dashboard finish + pointer advance
 
 jobs:
@@ -454,7 +452,7 @@ jobs:
   level5:
     name: "L5: ${{ matrix.name }}"
     needs: [config, prepare, level4]
-    if: always() && !cancelled() && (needs.level4.result == 'success' || inputs.resume_from == 'L5')
+    if: always() && !cancelled() && needs.level4.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l5 }}
     strategy:
@@ -474,6 +472,7 @@ jobs:
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
           mvn-common: ${{ needs.config.outputs.mvn-common }}
           maven-args: ${{ needs.config.outputs.maven-args }}
+          maven-extra: ${{ matrix.maven_extra }}
 
   level6:
     name: "L6: ${{ matrix.name }}"
@@ -498,12 +497,12 @@ jobs:
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
           mvn-common: ${{ needs.config.outputs.mvn-common }}
           maven-args: ${{ needs.config.outputs.maven-args }}
-          maven-extra: ${{ matrix.maven_extra }}
+          pom-overrides: ${{ matrix.pom_overrides || '{}' }}
 
   level7:
     name: "L7: ${{ matrix.name }}"
     needs: [config, prepare, level6]
-    if: always() && !cancelled() && needs.level6.result == 'success'
+    if: always() && !cancelled() && (needs.level6.result == 'success' || inputs.resume_from == 'L7')
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l7 }}
     strategy:
@@ -523,42 +522,17 @@ jobs:
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
           mvn-common: ${{ needs.config.outputs.mvn-common }}
           maven-args: ${{ needs.config.outputs.maven-args }}
-          pom-overrides: ${{ matrix.pom_overrides || '{}' }}
+          maven-extra: ${{ matrix.maven_extra }}
 
   level8:
     name: "L8: ${{ matrix.name }}"
     needs: [config, prepare, level7]
-    if: always() && !cancelled() && (needs.level7.result == 'success' || inputs.resume_from == 'L8')
+    if: always() && !cancelled() && needs.level7.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l8 }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.config.outputs.matrices).l8 }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: false
-      - uses: ./.github/actions/build-level
-        with:
-          repos: ${{ matrix.repos }}
-          level: L8
-          name: ${{ matrix.name }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          gh-token: ${{ secrets.GH_PAT }}
-          dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
-          mvn-common: ${{ needs.config.outputs.mvn-common }}
-          maven-args: ${{ needs.config.outputs.maven-args }}
-          maven-extra: ${{ matrix.maven_extra }}
-
-  level9:
-    name: "L9: ${{ matrix.name }}"
-    needs: [config, prepare, level8]
-    if: always() && !cancelled() && needs.level8.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: ${{ fromJSON(needs.config.outputs.timeouts).l9 }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.config.outputs.matrices).l9 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -577,7 +551,7 @@ jobs:
   # Finalize — dashboard + pointer advance
   finalize:
     name: "Finalize"
-    needs: [config, prepare, level1, level2, level3, level4, level5, level6, level7, level8, level9]
+    needs: [config, prepare, level1, level2, level3, level4, level5, level6, level7, level8]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     env:
@@ -602,7 +576,7 @@ jobs:
         if: always()
         run: |
           BUILD_OK=true
-          for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.level4.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}" "${{ needs.level9.result }}"; do
+          for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.level4.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}" "${{ needs.level8.result }}"; do
             if [ "$result" = "failure" ]; then
               BUILD_OK=false
               break
@@ -668,7 +642,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           JOB_RESULTS: >-
-            level9=${{ needs.level9.result }}
+            level8=${{ needs.level8.result }}
             level8=${{ needs.level8.result }}
             level7=${{ needs.level7.result }}
             level6=${{ needs.level6.result }}
