@@ -224,7 +224,7 @@ jobs:
           LEVEL="${{ inputs.resume_from }}"
           PREV_RUN=$(gh run list --workflow=mvn-all.yml --repo ${{ github.repository }} --limit 10 --json databaseId,status --jq "[.[] | select(.status == \"completed\" and .databaseId != ${{ github.run_id }})][0].databaseId")
           if [ -n "$PREV_RUN" ]; then
-            FAILED=$(gh run view "$PREV_RUN" --repo ${{ github.repository }} --json jobs --jq "[.jobs[] | select(.name | startswith(\"${LEVEL}:\")) | select(.conclusion == \"failure\" or .conclusion == \"cancelled\") | .name | split(\": \")[1]] | join(\",\")")
+            FAILED=$(gh run view "$PREV_RUN" --repo ${{ github.repository }} --json jobs --jq "[.jobs[] | select(.name | startswith(\"${LEVEL}:\")) | select(.conclusion != \"success\") | .name | split(\": \")[1]] | join(\",\")")
             if [ -n "$FAILED" ]; then
               echo "repos=$FAILED" >> "$GITHUB_OUTPUT"
               echo "::notice::Auto-detected failed repos at $LEVEL: $FAILED"
