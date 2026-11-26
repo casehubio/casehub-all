@@ -317,7 +317,7 @@ function phaseBox(p,clickFn,run){
   const loc=p.loc;
   const locStr=loc?fmtLoc(loc.total):'';
   const sh=p.self_healing,healed=sh&&(sh.corrupt_jars_deleted||sh.corrupt_jandex_deleted||sh.retries);
-  const label=displayStatus==='verified'?'cached':displayStatus==='skipped'?'skipped':'';
+  const label=displayStatus==='skipped'?'skipped':'';
   return`<div class="phase ${displayStatus}" ${clickFn?`onclick="${clickFn}('${p.name}')"`:''}>`+
     `<div class="name">${p.name}</div>`+
     `<div class="info">${label||dur||'—'}</div>`+
