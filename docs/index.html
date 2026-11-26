@@ -125,6 +125,7 @@ a:hover { text-decoration: underline; }
 .hdot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .hdot.success { background: var(--green); }
 .hdot.failure { background: var(--red); }
+.hdot.cancelled { background: var(--dim); }
 .htag { font-size: 9px; color: var(--muted); }
 .htag.warn { color: var(--yellow); }
 .hexpand { color: var(--dim); font-size: 10px; margin-left: auto; transition: transform 0.2s; }
@@ -426,15 +427,18 @@ function renderCurrent(cur,hist){
 // ── Render stats + charts + history (unchanged logic) ─────────────
 function renderStats(hist){
   const el=document.getElementById('stats');if(!hist?.length){el.innerHTML='';return;}
-  const n=hist.length,passed=hist.filter(h=>h.conclusion==='success').length;
-  const rate=Math.round(passed/n*100),rc=rate>=80?'green':rate>=50?'yellow':'red';
-  const avg=s=>Math.round(hist.reduce((a,h)=>a+(h[s]||0),0)/n);
+  const completed=hist.filter(h=>h.conclusion==='success'||h.conclusion==='failure');
+  const n=completed.length,passed=completed.filter(h=>h.conclusion==='success').length;
+  const cancelled=hist.filter(h=>h.conclusion==='cancelled').length;
+  const rate=n?Math.round(passed/n*100):0,rc=rate>=80?'green':rate>=50?'yellow':'red';
+  const avg=s=>n?Math.round(completed.reduce((a,h)=>a+(h[s]||0),0)/n):0;
   el.innerHTML=`
     <div class="stat"><div class="value ${rc}">${rate}%</div><div class="label">Pass rate</div></div>
     <div class="stat"><div class="value">${fmt(avg('duration_s'))}</div><div class="label">Avg duration</div></div>
-    <div class="stat"><div class="value">${n}</div><div class="label">Runs</div></div>
+    <div class="stat"><div class="value">${hist.length}</div><div class="label">Runs</div></div>
     <div class="stat"><div class="value green">${passed}</div><div class="label">Passed</div></div>
     <div class="stat"><div class="value red">${n-passed}</div><div class="label">Failed</div></div>
+    ${cancelled?`<div class="stat"><div class="value">${cancelled}</div><div class="label">Cancelled</div></div>`:''}
     <div class="stat"><div class="value">${avg('total_tests').toLocaleString()}</div><div class="label">Avg tests</div></div>`;
 }
 

@@ -88,10 +88,19 @@ def main():
             'total_flaky': sum(p.get('tests_flaky', 0) for p in phases),
             'phases': phases,
         }
-        failed = [p['name'] for p in phases if p.get('status') == 'failure']
-        entry['conclusion'] = ('failure' if failed
-                               else ('success' if any(p.get('status') == 'success' for p in phases)
-                                     else 'unknown'))
+        for p in phases:
+            if p.get('status') == 'in_progress':
+                p['status'] = 'cancelled'
+        failed = [p for p in phases if p.get('status') == 'failure']
+        incomplete = [p for p in phases if p.get('status') in ('pending', 'cancelled') and not p.get('cached')]
+        if failed:
+            entry['conclusion'] = 'failure'
+        elif incomplete:
+            entry['conclusion'] = 'cancelled'
+        elif any(p.get('status') == 'success' for p in phases):
+            entry['conclusion'] = 'success'
+        else:
+            entry['conclusion'] = 'unknown'
         dur = prev.get('duration_s')
         if not dur and prev.get('started'):
             try:
