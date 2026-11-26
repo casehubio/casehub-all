@@ -122,6 +122,28 @@ runs:
         key: m2-casehub-${{ runner.os }}-${{ github.sha }}
         restore-keys: m2-casehub-${{ runner.os }}-
 
+    - name: Validate JARs
+      if: github.event.inputs.test_mode != 'dry'
+      shell: bash
+      run: |
+        python3 -c "
+        import zipfile, os
+        bad = 0
+        for root, dirs, files in os.walk(os.path.expanduser('~/.m2/repository/io/casehub')):
+            for f in files:
+                if f.endswith('.jar'):
+                    path = os.path.join(root, f)
+                    try:
+                        with zipfile.ZipFile(path) as z:
+                            if z.testzip() is not None:
+                                raise zipfile.BadZipFile('CRC mismatch')
+                    except (zipfile.BadZipFile, Exception) as e:
+                        print(f'::warning::Corrupt JAR (deleted): {path} — {e}')
+                        os.remove(path)
+                        bad += 1
+        if bad: print(f'::warning::{bad} corrupt JAR(s) deleted — Maven will re-resolve from GitHub Packages')
+        "
+
     - name: Snapshot before build
       if: github.event.inputs.test_mode != 'dry'
       shell: bash
