@@ -1,0 +1,15 @@
+name = "casehub-packages"
+main = "src/index.js"
+compatibility_date = "2026-11-26"
+
+# R2 bucket binding — create with: npx wrangler r2 bucket create casehub-packages
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "casehub-packages"
+
+# Custom domain: packages.casehub.org
+# Configure in Cloudflare dashboard: Workers & Pages → casehub-packages → Settings → Domains
+# Add route: packages.casehub.org/*
+
+# Secrets (set via `npx wrangler secret put WRITE_TOKEN`):
+#   WRITE_TOKEN — auth token for publish uploads (same pattern as CI dashboard)

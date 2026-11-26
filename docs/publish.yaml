@@ -1,0 +1,50 @@
+# Public artifact publish list — repos whose artifacts are uploaded to R2
+# after a green casehub-all build. Only verified-green artifacts are published.
+#
+# Maven artifacts go to packages.casehub.org/maven/io/casehub/<artifact>/...
+# npm packages go to packages.casehub.org/npm/@casehubio/<package>/...
+#
+# To add a repo: append its submodule directory name below.
+# The publish script resolves all casehub-* artifacts under that repo's
+# groupId from ~/.m2/repository/io/casehub/.
+
+maven:
+  # Foundation
+  - platform
+  - worker
+  - ledger
+  - connectors
+  - neocortex
+  - eidos
+  - desiredstate
+  - ras
+  - qhorus
+  - work
+  - engine
+  - pages
+  - agency
+  - casehub-langchain4j
+  - workers
+  - claudony
+  - ops
+  - iot
+  - casehub-mosaic
+
+  # Applications
+  - openclaw
+  - devtown
+  - aml
+  - clinical
+  - life
+  - drafthouse
+  - soc
+  - fsitrading
+  - quarkmind
+  - scaffold
+  - chat-app
+
+npm:
+  # npm packages distributed as Maven artifacts — the publish script
+  # extracts tarballs from these JARs and uploads them in npm registry layout.
+  - casehub-pages-npm
+  - casehub-mosaic-npm
