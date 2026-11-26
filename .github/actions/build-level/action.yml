@@ -110,8 +110,7 @@ runs:
       uses: actions/cache/restore@v4
       with:
         path: ~/.m2/repository/io/casehub
-        key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-        restore-keys: m2-casehub-${{ runner.os }}-
+        key: m2-casehub-${{ runner.os }}-latest
 
     - name: Validate JARs
       if: github.event.inputs.test_mode != 'dry'
