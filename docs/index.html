@@ -321,7 +321,7 @@ function renderPipe(phases,id,clickFn){
   let html='<div class="pipe">';
   window._pipeline.levels.forEach((level,i)=>{
     if(i>0) html+=conn;
-    const stacks=level.stacks.map(s=>s.map(n=>m[n]));
+    const stacks=level.stacks.map(s=>Array.isArray(s)?s.map(n=>m[n]):[m[s.name||s.repos[0]]]);
     const sorted=stacks.length>1?tall(stacks):stacks;
     if(level.base){
       html+=lvl(level.id,phaseBox(m[level.base],clickFn));
@@ -475,7 +475,7 @@ fetch('pipeline.yaml').then(r=>{if(!r.ok)throw new Error('pipeline.yaml: '+r.sta
   const sel=document.getElementById('opt-resume');
   for(const lv of window._pipeline.levels){
     if(!lv.resume)continue;
-    const names=lv.stacks.flat().join(', ');
+    const names=lv.stacks.map(s=>Array.isArray(s)?s.join(', '):s.name||s.repos.join(', ')).join(', ');
     const opt=document.createElement('option');opt.value=lv.id;opt.textContent=lv.id+' — '+names;
     sel.appendChild(opt);
   }
@@ -492,7 +492,7 @@ function detectFailedLevel(){
   for(const lv of window._pipeline.levels){
     const id=lv.resume?lv.id:'';
     if(lv.base)levelMap[lv.base]=id;
-    for(const s of lv.stacks)for(const n of s)levelMap[n]=id;
+    for(const s of lv.stacks)for(const n of (Array.isArray(s)?s:[s.name||s.repos[0]]))levelMap[n]=id;
     if(lv.convergence)levelMap[lv.convergence]=id;
     if(lv.resume)resumeOrder.push(lv.id);
   }
