@@ -215,7 +215,19 @@ jobs:
             docs/pipeline.yaml
             docs/compute-matrices.py
             docs/compute-mvn-flags.sh
+            docs/init-dashboard-full.py
           sparse-checkout-cone-mode: false
+      - name: Initialize CI dashboard
+        env:
+          CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
+          CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+        run: |
+          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null > /tmp/old-progress.json || echo '{}' > /tmp/old-progress.json
+          pip install pyyaml -q 2>/dev/null
+          python3 docs/init-dashboard-full.py --run-id $GITHUB_RUN_ID --run-url "$RUN_URL" --commit "${GITHUB_SHA:0:7}" --resume-from "${{ inputs.resume_from }}" --retry-count ${{ inputs.retry_count || 0 }} --pipeline docs/pipeline.yaml --old-progress /tmp/old-progress.json > /tmp/dashboard-init.json
+          curl -sf -X PUT "$CI_DASHBOARD_URL/progress" -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" -H "Content-Type: application/json" -H "X-Run-Id: ${GITHUB_RUN_ID}" -H "X-Init: true" -d @/tmp/dashboard-init.json && echo "::notice::Dashboard: https://casehub.org/casehub-all/" || echo "::warning::Dashboard init failed"
+        continue-on-error: true
       - name: Auto-detect failed repos from previous run
         if: inputs.resume_from != '' && inputs.resume_repos == ''
         id: detect-failed
@@ -251,8 +263,6 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
-      CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
@@ -274,31 +284,6 @@ jobs:
           if [ "${{ inputs.submodule_update }}" = "all" ]; then
             git submodule update --init --depth=1
           fi
-
-      - name: Initialize CI dashboard
-        run: |
-          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          curl -sf "$CI_DASHBOARD_URL/progress" 2>/dev/null > /tmp/old-progress.json || echo '{}' > /tmp/old-progress.json
-          python3 docs/init-dashboard-full.py \
-            --run-id $GITHUB_RUN_ID \
-            --run-url "$RUN_URL" \
-            --commit "${GITHUB_SHA:0:7}" \
-            --resume-from "${{ inputs.resume_from }}" \
-            --retry-count ${{ inputs.retry_count || 0 }} \
-            --pipeline docs/pipeline.yaml \
-            --old-progress /tmp/old-progress.json \
-            > /tmp/dashboard-init.json
-          echo "Dashboard payload: $(wc -c < /tmp/dashboard-init.json) bytes"
-          curl -sf -X PUT "$CI_DASHBOARD_URL/progress" \
-            -H "Authorization: Bearer $CI_DASHBOARD_TOKEN" \
-            -H "Content-Type: application/json" \
-            -H "X-Run-Id: ${GITHUB_RUN_ID}" \
-            -H "X-Init: true" \
-            -d @/tmp/dashboard-init.json \
-            && echo "::notice::Dashboard: https://casehub.org/casehub-all/" \
-            || echo "::warning::Dashboard init PUT failed (exit $?)"
-        continue-on-error: true
 
       - name: Check dependency graph for cycles
         run: python3 docs/check-cycles.py
