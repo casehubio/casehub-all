@@ -96,14 +96,6 @@ runs:
         key: casehub-native-${{ runner.os }}-sherpa
         restore-keys: casehub-native-${{ runner.os }}-
 
-    - name: Restore casehub snapshot cache
-      if: github.event.inputs.test_mode != 'dry'
-      uses: actions/cache/restore@v4
-      with:
-        path: ~/.m2/repository/io/casehub
-        key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-        restore-keys: m2-casehub-${{ runner.os }}-
-
     - name: Install parent POMs
       if: github.event.inputs.test_mode != 'dry'
       shell: bash
@@ -122,28 +114,18 @@ runs:
         path: ~/.m2/repository/io/casehub
         merge-multiple: true
 
-    - name: Validate downloaded artifacts
+    - name: Restore casehub snapshot cache
+      if: github.event.inputs.test_mode != 'dry'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.m2/repository/io/casehub
+        key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+        restore-keys: m2-casehub-${{ runner.os }}-
+
+    - name: Snapshot before build
       if: github.event.inputs.test_mode != 'dry'
       shell: bash
-      run: |
-        python3 -c "
-        import zipfile, os, sys
-        bad = 0
-        for root, dirs, files in os.walk(os.path.expanduser('~/.m2/repository/io/casehub')):
-            for f in files:
-                if f.endswith('.jar'):
-                    path = os.path.join(root, f)
-                    try:
-                        with zipfile.ZipFile(path) as z:
-                            if z.testzip() is not None:
-                                raise zipfile.BadZipFile('CRC mismatch')
-                    except (zipfile.BadZipFile, Exception) as e:
-                        print(f'::warning::Corrupt JAR (deleted): {path} — {e}')
-                        os.remove(path)
-                        bad += 1
-        if bad: print(f'::warning::{bad} corrupt JAR(s) deleted — Maven will re-resolve')
-        print(f'Validated {bad} bad / scanned')
-        "
+      run: find ~/.m2/repository/io/casehub -type f \( -name '*.jar' -o -name '*.pom' \) > /tmp/m2-before.txt 2>/dev/null || touch /tmp/m2-before.txt
 
     - name: Build
       shell: bash
@@ -177,11 +159,26 @@ runs:
           bash docs/run-with-progress.sh --parallel "$PHASE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f $POM $MVN_COMMON $MAVEN_ARGS ${{ inputs.maven-extra }}
         done
 
+    - name: Collect new artifacts
+      if: github.event.inputs.test_mode != 'dry'
+      shell: bash
+      run: |
+        find ~/.m2/repository/io/casehub -type f \( -name '*.jar' -o -name '*.pom' \) > /tmp/m2-after.txt 2>/dev/null || touch /tmp/m2-after.txt
+        mkdir -p /tmp/m2-upload
+        comm -13 <(sort /tmp/m2-before.txt) <(sort /tmp/m2-after.txt) | while read f; do
+          rel="${f#$HOME/.m2/repository/io/casehub/}"
+          mkdir -p "/tmp/m2-upload/$(dirname "$rel")"
+          cp "$f" "/tmp/m2-upload/$rel"
+        done
+        NEW=$(find /tmp/m2-upload -type f | wc -l)
+        echo "::notice::Uploading $NEW new artifacts (was $(wc -l < /tmp/m2-before.txt) before, $(wc -l < /tmp/m2-after.txt) after)"
+
     - name: Upload artifacts
       if: github.event.inputs.test_mode != 'dry'
       uses: actions/upload-artifact@v4
       with:
         name: "m2-${{ inputs.level }}-${{ inputs.name }}"
-        path: ~/.m2/repository/io/casehub
+        path: /tmp/m2-upload
         retention-days: 1
         compression-level: 1
+        if-no-files-found: warn
