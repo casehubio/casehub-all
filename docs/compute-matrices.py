@@ -43,11 +43,13 @@ def build_matrix(level):
 
     pom_overrides = level.get('pom', {})
     maven_extra = level.get('maven_extra', {})
+    name_overrides = level.get('names', {})
 
     includes = []
     for stack in stacks:
         repos_str = ' '.join(stack)
-        name = ', '.join(stack)
+        display_parts = [name_overrides.get(r, r) for r in stack]
+        name = ', '.join(display_parts)
         entry = {'name': name, 'repos': repos_str}
 
         extras = []

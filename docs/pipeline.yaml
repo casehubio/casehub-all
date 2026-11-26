@@ -33,6 +33,8 @@ levels:
     timeout: 35
     maven_extra:
       qhorus: "-pl api -am"
+    names:
+      qhorus: qhorus-api
     stacks:
       - [ledger, eidos]
       - [connectors]
@@ -66,18 +68,14 @@ levels:
     timeout: 25
     maven_extra:
       casehub-mosaic: "-pl !npm-packages"
-    stacks:
-      - [ops]
-      - [casehub-mosaic]
-
-  - id: L6
-    timeout: 25
     pom:
       drafthouse: drafthouse/server/pom.xml
     stacks:
+      - [ops]
+      - [casehub-mosaic]
       - [drafthouse]
 
-  - id: L7
+  - id: L6
     resume: true
     stacks:
       - [life]
@@ -86,6 +84,6 @@ levels:
       - [devtown, aml, soc]
       - [chat-app, clinical, openclaw]
 
-  - id: L8
+  - id: L7
     stacks:
       - [scaffold, fsitrading]

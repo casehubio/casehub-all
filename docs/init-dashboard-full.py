@@ -29,12 +29,13 @@ def load_phases(pipeline_path):
     for level in pipeline.get('levels', []):
         if 'base' in level:
             phases.append(level['base'])
+        name_overrides = level.get('names', {})
         for stack in level.get('stacks', []):
             if isinstance(stack, str):
                 phases.append(stack)
             else:
                 for repo in stack:
-                    phases.append(repo)
+                    phases.append(name_overrides.get(repo, repo))
         if 'convergence' in level:
             phases.append(level['convergence'])
     return phases
