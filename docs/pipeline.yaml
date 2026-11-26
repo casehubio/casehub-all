@@ -43,11 +43,16 @@ levels:
 
   - id: L2
     resume: true
-    timeout: 45
+    timeout: 25
     stacks:
       - [neocortex]
       - [qhorus]
-      - [work]
+      - repos: [work]
+        name: work-a
+        maven_extra: "-pl api,core,client,test-support,annotations,work-support-core,runtime-core,runtime,rest,queues,reports,ai -am"
+      - repos: [work]
+        name: work-b
+        maven_extra: "-pl progress-api,progress-core,progress-memory,progress-deployment,progress-rest,progress-runtime,ledger,persistence-memory,persistence-mongodb,persistence-mongodb-core,persistence-spring-mongodb,federation,flow,graphql,issue-tracker,deployment,examples,qhorus,spring-integration-test -am"
 
   - id: L3
     resume: true

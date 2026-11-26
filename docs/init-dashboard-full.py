@@ -31,7 +31,9 @@ def load_phases(pipeline_path):
             phases.append(level['base'])
         name_overrides = level.get('names', {})
         for stack in level.get('stacks', []):
-            if isinstance(stack, str):
+            if isinstance(stack, dict):
+                phases.append(stack.get('name', ', '.join(stack['repos'])))
+            elif isinstance(stack, str):
                 phases.append(stack)
             else:
                 for repo in stack:

@@ -47,24 +47,39 @@ def build_matrix(level):
 
     includes = []
     for stack in stacks:
-        repos_str = ' '.join(stack)
-        display_parts = [name_overrides.get(r, r) for r in stack]
-        name = ', '.join(display_parts)
-        entry = {'name': name, 'repos': repos_str}
+        # Stack can be a list of repo names OR an object with repos/name/maven_extra
+        if isinstance(stack, dict):
+            repos = stack['repos']
+            repos_str = ' '.join(repos)
+            name = stack.get('name', ', '.join(repos))
+            entry = {'name': name, 'repos': repos_str}
+            if stack.get('maven_extra'):
+                entry['maven_extra'] = stack['maven_extra']
+            stack_poms = {}
+            for repo in repos:
+                if repo in pom_overrides:
+                    stack_poms[repo] = pom_overrides[repo]
+            if stack_poms:
+                entry['pom_overrides'] = json.dumps(stack_poms)
+        else:
+            repos_str = ' '.join(stack)
+            display_parts = [name_overrides.get(r, r) for r in stack]
+            name = ', '.join(display_parts)
+            entry = {'name': name, 'repos': repos_str}
 
-        extras = []
-        for repo in stack:
-            if repo in maven_extra:
-                extras.append(maven_extra[repo])
-        if extras:
-            entry['maven_extra'] = ' '.join(extras)
+            extras = []
+            for repo in stack:
+                if repo in maven_extra:
+                    extras.append(maven_extra[repo])
+            if extras:
+                entry['maven_extra'] = ' '.join(extras)
 
-        poms = {}
-        for repo in stack:
-            if repo in pom_overrides:
-                poms[repo] = pom_overrides[repo]
-        if poms:
-            entry['pom_overrides'] = json.dumps(poms)
+            stack_poms = {}
+            for repo in stack:
+                if repo in pom_overrides:
+                    stack_poms[repo] = pom_overrides[repo]
+            if stack_poms:
+                entry['pom_overrides'] = json.dumps(stack_poms)
 
         includes.append(entry)
 
@@ -84,7 +99,9 @@ def build_all_repos(pipeline):
         if level.get('repos'):
             repos.update(level['repos'])
         for stack in level.get('stacks', []):
-            if not level.get('slices'):
+            if isinstance(stack, dict):
+                repos.update(stack['repos'])
+            elif not level.get('slices'):
                 repos.update(stack)
     return sorted(repos)
 
