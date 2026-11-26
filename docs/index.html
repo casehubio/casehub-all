@@ -284,14 +284,15 @@ function lineChart(el,data,opts={}){
 }
 
 // ── Pipeline renderer ─────────────────────────────────────────────
-function phaseBox(p,clickFn){
-  if(!p){console.warn('Phase not found in API data:',name);return'<div class="phase pending"><div class="name">?</div></div>';}
-  const isResumed=window._currentRun&&window._currentRun.resume_from;
+function phaseBox(p,clickFn,run){
+  if(!p){console.warn('Phase not found in API data');return'<div class="phase pending"><div class="name">?</div></div>';}
+  const ctx=run||window._currentRun;
+  const isResumed=ctx&&ctx.resume_from;
   let displayStatus=p.status;
   if(isResumed&&p.status==='pending'&&!p.started)displayStatus='skipped';
   if(isResumed&&p.status==='success'&&p.cached)displayStatus='verified';
   if(isResumed&&p.status==='success'&&!p.cached&&window._pipeline){
-    const resumeLevel=window._currentRun.resume_from;
+    const resumeLevel=ctx.resume_from;
     const phaseLevelIdx=window._pipeline.levels.findIndex(lv=>{
       if(lv.base===p.name)return true;
       if(lv.convergence===p.name)return true;
@@ -322,14 +323,14 @@ function phaseBox(p,clickFn){
     `</div>`;
 }
 
-function renderPipe(phases,id,clickFn){
+function renderPipe(phases,id,clickFn,run){
   const el=document.getElementById(id);if(!el||!window._pipeline)return;
   const m={};(phases||[]).forEach(p=>m[p.name]=p);
   const tall=(groups)=>[...groups].sort((a,b)=>b.length-a.length);
   const row=(content,cls='pipe-full')=>`<div class="pipe-row ${cls}">${content}</div>`;
   const conn='<div class="pipe-connector"></div>';
   const fan='<div class="pipe-fan"></div>';
-  const grp=(g)=>`<div style="flex:1;display:flex;flex-direction:column;gap:2px">${g.map(r=>phaseBox(r,clickFn)).join('')}</div>`;
+  const grp=(g)=>`<div style="flex:1;display:flex;flex-direction:column;gap:2px">${g.map(r=>phaseBox(r,clickFn,run)).join('')}</div>`;
   const lvl=(label,content,cls='pipe-full')=>`<div class="pipe-level"><span class="lvl-tag">${label}</span><div class="pipe-row ${cls}">${content}</div></div>`;
 
   let html='<div class="pipe">';
@@ -339,11 +340,11 @@ function renderPipe(phases,id,clickFn){
     const stacks=level.stacks.map(s=>Array.isArray(s)?s.map(n=>m[nameMap[n]||n]):[m[s.name]||m[s.repos?.[0]]].filter(Boolean));
     const sorted=stacks.length>1?tall(stacks):stacks;
     if(level.base){
-      html+=lvl(level.id,phaseBox(m[level.base],clickFn));
+      html+=lvl(level.id,phaseBox(m[level.base],clickFn,run));
       html+=fan;
-      html+=row(sorted.map(s=>s.length>1?grp(s):phaseBox(s[0],clickFn)).join(''),'pipe-parallel');
+      html+=row(sorted.map(s=>s.length>1?grp(s):phaseBox(s[0],clickFn,run)).join(''),'pipe-parallel');
       html+=fan;
-      if(level.convergence){html+=row(phaseBox(m[level.convergence],clickFn));}
+      if(level.convergence){html+=row(phaseBox(m[level.convergence],clickFn,run));}
     }else if(stacks.length>=3){
       html+=lvl(level.id,sorted.map(s=>grp(s)).join(''),'pipe-parallel');
     }else if(stacks.length===2){
@@ -411,7 +412,7 @@ function renderCurrent(cur,hist){
     (cur.resume_from?`<span class="badge resume">resumed from ${cur.resume_from}</span>`:'')+
     (cur.retry_count>0?`<span class="badge retry">retry #${cur.retry_count}</span>`:'')+
     `</div>`+locSummary(cur.phases)+`<div id="cur-pipe"></div><div id="active-detail" class="detail-panel"></div></div>`;
-  renderPipe(cur.phases,'cur-pipe','showDetail');
+  renderPipe(cur.phases,'cur-pipe','showDetail',cur);
   if(_detailName){const saved=_detailName;_detailName=null;showDetail(saved);}
 }
 
@@ -489,7 +490,7 @@ function toggleHist(i){
   const open=d.classList.contains('open');
   document.querySelectorAll('.history-detail.open').forEach(x=>x.classList.remove('open'));
   document.querySelectorAll('.hexpand.open').forEach(x=>x.classList.remove('open'));
-  if(!open){d.classList.add('open');a.classList.add('open');const h=window._data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i);}
+  if(!open){d.classList.add('open');a.classList.add('open');const h=window._data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i,null,h);}
 }
 
 // ── Refresh ───────────────────────────────────────────────────────
@@ -506,7 +507,7 @@ async function refresh(){
     const openHist=new Set();
     document.querySelectorAll('.history-detail.open').forEach(d=>{const m=d.id.match(/hd-(\d+)/);if(m)openHist.add(parseInt(m[1]));});
     renderCurrent(data.current,data.history);renderStats(data.history);renderCharts(data.history);renderHistory(data.history);
-    openHist.forEach(i=>{const d=document.getElementById('hd-'+i),a=document.getElementById('hx-'+i);if(d){d.classList.add('open');a?.classList.add('open');const h=data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i);}});
+    openHist.forEach(i=>{const d=document.getElementById('hd-'+i),a=document.getElementById('hx-'+i);if(d){d.classList.add('open');a?.classList.add('open');const h=data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i,null,h);}});
     openPinnedBuild();
     document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · '+Math.round(POLL_MS/1000)+'s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
