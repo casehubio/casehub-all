@@ -161,13 +161,20 @@ runs:
           SKIP_FLAG="-DskipTests"
         fi
         OVERRIDES='${{ inputs.pom-overrides }}'
-        for repo in ${{ inputs.repos }}; do
+        REPOS="${{ inputs.repos }}"
+        REPO_COUNT=$(echo $REPOS | wc -w)
+        for repo in $REPOS; do
           POM="$repo/pom.xml"
           if [ "$OVERRIDES" != "{}" ]; then
             OVERRIDE=$(echo "$OVERRIDES" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('$repo',''))" 2>/dev/null || true)
             if [ -n "$OVERRIDE" ]; then POM="$OVERRIDE"; fi
           fi
-          bash docs/run-with-progress.sh --parallel "$repo" mvn install -fae -T 1C $SKIP_FLAG -f $POM $MVN_COMMON $MAVEN_ARGS ${{ inputs.maven-extra }}
+          # Use display name for single-repo entries where name differs (e.g. qhorus-api)
+          PHASE_NAME="$repo"
+          if [ "$REPO_COUNT" -eq 1 ] && [ "${{ inputs.name }}" != "$repo" ]; then
+            PHASE_NAME="${{ inputs.name }}"
+          fi
+          bash docs/run-with-progress.sh --parallel "$PHASE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f $POM $MVN_COMMON $MAVEN_ARGS ${{ inputs.maven-extra }}
         done
 
     - name: Upload artifacts
