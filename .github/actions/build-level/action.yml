@@ -41,15 +41,6 @@ runs:
       shell: bash
       run: git submodule update --init --depth=1 parent platform ${{ inputs.repos }}
 
-    - name: Initialize dashboard (resume)
-      if: github.event.inputs.resume_from != ''
-      shell: bash
-      run: bash docs/init-dashboard.sh ${GITHUB_RUN_ID} "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" "${GITHUB_SHA:0:7}" "${{ github.event.inputs.resume_from }}" ${{ github.event.inputs.retry_count || 0 }}
-      continue-on-error: true
-      env:
-        CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
-        CI_DASHBOARD_TOKEN: ${{ inputs.dashboard-token }}
-
     - name: Pull latest submodules (resume)
       if: github.event.inputs.resume_from != '' && github.event.inputs.submodule_update != 'pinned' && github.event.inputs.test_mode != 'dry'
       shell: bash
