@@ -608,18 +608,11 @@ jobs:
         with:
           path: ~/.m2/repository/io/casehub
           key: m2-casehub-${{ runner.os }}-${{ github.sha }}
-      - name: Publish artifacts to R2
+      - name: Publish artifacts to GitHub Pages
         if: steps.result.outputs.build_ok == 'true'
         env:
-          R2_PACKAGES_URL: ${{ secrets.R2_PACKAGES_URL }}
-          R2_PACKAGES_TOKEN: ${{ secrets.R2_PACKAGES_TOKEN }}
-        run: |
-          if [ -n "$R2_PACKAGES_TOKEN" ]; then
-            pip install --user pyyaml 2>&1 || true
-            bash docs/publish-to-r2.sh
-          else
-            echo "::notice::R2 publish skipped — R2_PACKAGES_TOKEN not configured"
-          fi
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: bash docs/publish-packages.sh
         continue-on-error: true
       - name: Build summary
         if: always()
