@@ -111,9 +111,15 @@ def main():
     parser.add_argument('--preview', action='store_true',
                         help='Print outputs in human-readable format')
     parser.add_argument('--pipeline', default='docs/pipeline.yaml')
+    parser.add_argument('--resume-from', default='',
+                        help='Resume level (e.g. L1)')
+    parser.add_argument('--resume-repos', default='',
+                        help='Only rebuild these repos at the resume level (comma-separated)')
     args = parser.parse_args()
 
     pipeline = load_pipeline(args.pipeline)
+    resume_level = args.resume_from.lower() if args.resume_from else ''
+    resume_repos = set(r.strip() for r in args.resume_repos.split(',') if r.strip()) if args.resume_repos else set()
 
     matrices = {}
     timeouts = {}
@@ -124,7 +130,11 @@ def main():
         if level.get('slices') and level_id != 'L0':
             matrices[key] = build_matrix(level)
         elif not level.get('slices'):
-            matrices[key] = build_matrix(level)
+            matrix = build_matrix(level)
+            if key == resume_level and resume_repos and 'include' in matrix:
+                matrix['include'] = [e for e in matrix['include']
+                                     if any(r in resume_repos for r in e['repos'].split())]
+            matrices[key] = matrix
 
         timeouts[key] = level.get('timeout', 30)
 

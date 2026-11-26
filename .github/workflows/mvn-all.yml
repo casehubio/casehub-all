@@ -35,6 +35,10 @@ on:
           - L4
           - L6
         default: ''
+      resume_repos:
+        description: "Only rebuild these repos at the resume level (comma-separated). Empty = all repos at that level."
+        type: string
+        default: ''
       submodule_update:
         description: "pinned = use committed SHAs, all = pull latest main for all repos, list = pull latest only for named repos"
         type: choice
@@ -213,7 +217,7 @@ jobs:
           sparse-checkout-cone-mode: false
       - name: Compute matrices from pipeline.yaml
         id: matrices
-        run: python3 docs/compute-matrices.py >> "$GITHUB_OUTPUT"
+        run: python3 docs/compute-matrices.py --resume-from="${{ inputs.resume_from }}" --resume-repos="${{ inputs.resume_repos }}" >> "$GITHUB_OUTPUT"
       - name: Compute Maven flags
         id: flags
         run: bash docs/compute-mvn-flags.sh "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
