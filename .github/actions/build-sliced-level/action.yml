@@ -150,6 +150,6 @@ runs:
       uses: actions/upload-artifact@v4
       with:
         name: "m2-${{ inputs.level }}-${{ inputs.repo }}-${{ inputs.mode == 'base' && 'base' || format('slice-{0}', inputs.slice) }}"
-        path: ~/.m2/repository/io/casehub
+        path: ~/.m2/repository/io/casehub/casehub-${{ inputs.repo }}*
         retention-days: 1
         compression-level: 1
