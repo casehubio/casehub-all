@@ -215,9 +215,28 @@ jobs:
             docs/compute-matrices.py
             docs/compute-mvn-flags.sh
           sparse-checkout-cone-mode: false
+      - name: Auto-detect failed repos from previous run
+        if: inputs.resume_from != '' && inputs.resume_repos == ''
+        id: detect-failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LEVEL="${{ inputs.resume_from }}"
+          PREV_RUN=$(gh run list --workflow=mvn-all.yml --repo ${{ github.repository }} --limit 10 --json databaseId,status --jq "[.[] | select(.status == \"completed\" and .databaseId != ${{ github.run_id }})][0].databaseId")
+          if [ -n "$PREV_RUN" ]; then
+            FAILED=$(gh run view "$PREV_RUN" --repo ${{ github.repository }} --json jobs --jq "[.jobs[] | select(.name | startswith(\"${LEVEL}:\")) | select(.conclusion == \"failure\" or .conclusion == \"cancelled\") | .name | split(\": \")[1]] | join(\",\")")
+            if [ -n "$FAILED" ]; then
+              echo "repos=$FAILED" >> "$GITHUB_OUTPUT"
+              echo "::notice::Auto-detected failed repos at $LEVEL: $FAILED"
+            else
+              echo "::notice::No failed jobs found at $LEVEL in previous run — rebuilding all"
+            fi
+          fi
       - name: Compute matrices from pipeline.yaml
         id: matrices
-        run: python3 docs/compute-matrices.py --resume-from="${{ inputs.resume_from }}" --resume-repos="${{ inputs.resume_repos }}" >> "$GITHUB_OUTPUT"
+        run: |
+          RESUME_REPOS="${{ inputs.resume_repos || steps.detect-failed.outputs.repos }}"
+          python3 docs/compute-matrices.py --resume-from="${{ inputs.resume_from }}" --resume-repos="$RESUME_REPOS" >> "$GITHUB_OUTPUT"
       - name: Compute Maven flags
         id: flags
         run: bash docs/compute-mvn-flags.sh "${{ inputs.test_mode }}" "${{ inputs.quarkus_build }}" "${{ inputs.enforcer }}" "${{ inputs.maven_args }}"
