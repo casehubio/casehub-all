@@ -587,6 +587,13 @@ jobs:
             git pull --rebase origin main || true
             git push
           }
+      - name: Restore snapshot cache baseline
+        if: steps.result.outputs.build_ok == 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.m2/repository/io/casehub
+          key: m2-casehub-${{ runner.os }}-${{ github.sha }}
+          restore-keys: m2-casehub-${{ runner.os }}-
       - name: Download all build artifacts for cache
         if: steps.result.outputs.build_ok == 'true'
         uses: actions/download-artifact@v4
@@ -594,13 +601,11 @@ jobs:
           pattern: "m2-*"
           path: ~/.m2/repository/io/casehub
           merge-multiple: true
+        continue-on-error: true
       - name: Save casehub snapshot cache
         if: steps.result.outputs.build_ok == 'true'
         uses: actions/cache/save@v4
         with:
-          # Cached casehub SNAPSHOTs from successful builds. Resume builds
-          # restore this instead of purging+downloading — avoids 30+ min
-          # GitHub Packages SNAPSHOT metadata resolution.
           path: ~/.m2/repository/io/casehub
           key: m2-casehub-${{ runner.os }}-${{ github.sha }}
       - name: Publish artifacts to R2
