@@ -49,8 +49,8 @@ a:hover { text-decoration: underline; }
 .pipe-full { display: flex; }
 .pipe-full .phase { flex: 1; }
 .pipe-parallel { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 3px; }
-.pipe-connector { display: flex; justify-content: center; padding: 1px 0; }
-.pipe-connector::after { content: ''; display: block; width: 1px; height: 4px; background: var(--dim); }
+.pipe-connector { display: flex; justify-content: center; padding: 2px 0; }
+.pipe-connector::after { content: ''; display: block; width: 1px; height: 8px; background: var(--dim); }
 .pipe-fan { position: relative; height: 10px; margin: 0 12%; }
 .pipe-fan::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; border-top: 1px solid var(--dim); }
 .pipe-fan::after { content: ''; position: absolute; top: 0; left: 50%; width: 1px; height: 100%; background: var(--dim); }
@@ -284,23 +284,30 @@ function lineChart(el,data,opts={}){
 }
 
 // ── Pipeline renderer ─────────────────────────────────────────────
+function findPhaseLevel(name){
+  if(!window._pipeline)return -1;
+  return window._pipeline.levels.findIndex(lv=>{
+    if(lv.base===name||lv.convergence===name)return true;
+    const nameMap=lv.names||{};
+    return lv.stacks.some(s=>{
+      if(Array.isArray(s))return s.some(n=>(nameMap[n]||n)===name||n===name);
+      return(s.name||s.repos?.[0])===name;
+    });
+  });
+}
 function phaseBox(p,clickFn,run){
   if(!p){console.warn('Phase not found in API data');return'<div class="phase pending"><div class="name">?</div></div>';}
   const ctx=run||window._currentRun;
   const isResumed=ctx&&ctx.resume_from;
   let displayStatus=p.status;
-  if(isResumed&&p.status==='pending'&&!p.started)displayStatus='skipped';
-  if(isResumed&&p.status==='success'&&p.cached)displayStatus='verified';
-  if(isResumed&&p.status==='success'&&!p.cached&&window._pipeline){
-    const resumeLevel=ctx.resume_from;
-    const phaseLevelIdx=window._pipeline.levels.findIndex(lv=>{
-      if(lv.base===p.name)return true;
-      if(lv.convergence===p.name)return true;
-      return lv.stacks.some(s=>Array.isArray(s)?s.includes(p.name):(s.name||s.repos[0])===p.name);
-    });
-    const resumeLevelIdx=window._pipeline.levels.findIndex(lv=>lv.id===resumeLevel);
-    if(phaseLevelIdx>=0&&resumeLevelIdx>=0&&phaseLevelIdx<resumeLevelIdx)displayStatus='verified';
+  if(isResumed&&window._pipeline){
+    const resumeLevelIdx=window._pipeline.levels.findIndex(lv=>lv.id===ctx.resume_from);
+    const phaseLevelIdx=findPhaseLevel(p.name);
+    const beforeResume=phaseLevelIdx>=0&&resumeLevelIdx>=0&&phaseLevelIdx<resumeLevelIdx;
+    if(beforeResume&&(p.status==='pending'||p.status==='success'))displayStatus='verified';
+    else if(p.status==='pending'&&!p.started)displayStatus='skipped';
   }
+  if(isResumed&&p.status==='success'&&p.cached)displayStatus='verified';
   const dur=displayStatus==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
   const parts=[];
   if(p.modules)parts.push(p.modules+' mod');
