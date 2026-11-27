@@ -218,7 +218,15 @@ jobs:
             docs/compute-matrices.py
             docs/compute-mvn-flags.sh
             docs/init-dashboard-full.py
+            docs/test-ci-scripts.py
+            docs/publish.yaml
+            docs/update-progress.sh
+            docs/auto-retry.sh
+            .github/workflows/mvn-all.yml
+            .github/actions/build-level/action.yml
           sparse-checkout-cone-mode: false
+      - name: CI infrastructure regression tests
+        run: pip install --user pyyaml 2>&1 || true && python3 docs/test-ci-scripts.py
       - name: Initialize CI dashboard
         env:
           CI_DASHBOARD_URL: https://casehub-ci-dashboard.casehub.workers.dev
@@ -296,8 +304,6 @@ jobs:
         run: python3 docs/check-pipeline-consistency.py || echo "::warning::Pipeline consistency check found issues"
         continue-on-error: true
 
-      - name: CI infrastructure regression tests
-        run: pip install --user pyyaml 2>&1 || true && python3 docs/test-ci-scripts.py
 
       - name: Update submodules
         run: bash docs/update-submodules.sh "${{ inputs.submodule_update }}" "${{ inputs.submodule_list }}"
