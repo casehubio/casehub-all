@@ -128,9 +128,15 @@ def main():
                 break
 
         if resume_level_idx is not None:
+            # Cache all levels before the resume point
             for level in pipeline.get('levels', [])[:resume_level_idx]:
                 for name in phase_names_for_level(level):
                     cached_phases.add(name)
+            # Also cache phases AT the resume level that passed in history
+            # (per-repo resume may only rebuild failed repos, skipping the rest)
+            resume_level = pipeline['levels'][resume_level_idx]
+            for name in phase_names_for_level(resume_level):
+                cached_phases.add(name)
 
         # Search history (most recent first) for best data per cached phase
         for entry in history[:10]:

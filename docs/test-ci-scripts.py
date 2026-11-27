@@ -821,6 +821,46 @@ if os.path.exists(WORKFLOW_PATH):
             'build_ok check must treat cancelled jobs as not-ok'
 
 
+# ── Per-repo resume tests ─────────────────────────────────────────
+
+@test('init: per-repo resume caches skipped repos at resume level')
+def _():
+    """When resume_repos filters to only agency at L4, the other L4
+    repos (ras, desiredstate, claudony, langchain4j, workers) should
+    be cached from history — not left as pending."""
+    prev_phases = [
+        {'name': 'platform', 'status': 'success', 'duration_s': 120},
+        {'name': 'ras', 'status': 'success', 'duration_s': 60, 'tests_run': 200},
+        {'name': 'desiredstate', 'status': 'success', 'duration_s': 90},
+        {'name': 'agency', 'status': 'failure'},
+    ]
+    old = {'current': {'run_id': 100, 'phases': prev_phases,
+                       'started': '2026-01-01T00:00:00Z', 'resume_from': 'L4'},
+           'history': []}
+    data = run_init(resume_from='L4', old_progress=old)
+    ras = next((p for p in data['current']['phases'] if p['name'] == 'ras'), None)
+    assert ras is not None, 'ras phase not found'
+    assert ras.get('cached') is True or ras.get('status') == 'success', \
+        f'ras should be cached at resume level L4, got status={ras.get("status")} cached={ras.get("cached")}'
+
+
+@test('init: resume_from preserved when archiving to history')
+def _():
+    """A resume build's resume_from must survive into the history entry."""
+    resumed_phases = [
+        {'name': 'platform', 'status': 'success', 'cached': True},
+        {'name': 'agency', 'status': 'success'},
+    ]
+    old = {'current': {'run_id': 100, 'resume_from': 'L4',
+                       'phases': resumed_phases,
+                       'started': '2026-01-01T00:00:00Z'},
+           'history': []}
+    data = run_init(old_progress=old)
+    archived = data['history'][0]
+    assert archived.get('resume_from') == 'L4', \
+        f'resume_from should be L4 in history, got {archived.get("resume_from")}'
+
+
 # ── Summary ───────────────────────────────────────────────────────
 
 print()
