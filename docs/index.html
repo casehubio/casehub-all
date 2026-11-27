@@ -477,6 +477,7 @@ function renderHistory(hist){
       `<span class="hexpand" id="hx-${i}">▸</span>`+
       `<button class="hbtn" title="Copy link" onclick="event.stopPropagation();copyLink(${h.run_id})">🔗</button>`+
       `<button class="hbtn" title="Copy build-all command" onclick="event.stopPropagation();copyBuildAll('${h.commit||''}')">📋</button>`+
+      `<a class="hbtn" title="Browse published artifacts" href="https://github.com/casehubio/packages/tree/main/maven" target="_blank" onclick="event.stopPropagation()">📦</a>`+
       `</div><div class="history-detail" id="hd-${i}"><div id="hp-${i}"></div></div></div>`;
   }).join('');
 }
