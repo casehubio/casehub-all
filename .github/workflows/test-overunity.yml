@@ -1,0 +1,8 @@
+name: Test Overunity Call
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    uses: casehubio/overunity/.github/workflows/test-callable.yml@main
+    with:
+      message: 'hello from casehub-all'
