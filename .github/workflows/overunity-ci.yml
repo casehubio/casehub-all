@@ -45,4 +45,6 @@ jobs:
       resume_from: ${{ inputs.resume_from }}
       resume_repos: ${{ inputs.resume_repos }}
       submodule_update: ${{ inputs.submodule_update }}
-    secrets: inherit
+    secrets:
+      DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
+      GH_PAT: ${{ secrets.GH_PAT }}
