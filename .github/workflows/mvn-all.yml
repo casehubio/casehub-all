@@ -267,6 +267,7 @@ jobs:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_TOKEN: ${{ secrets.GH_PAT }}
       GH_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CI_DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
       MAVEN_OPTS: '-Xmx4g'
       DRY_RUN: ${{ inputs.test_mode == 'dry' }}
     outputs:

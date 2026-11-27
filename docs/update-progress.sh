@@ -270,27 +270,16 @@ if cur:
     s = datetime.fromisoformat(started.replace('Z','+00:00'))
     e = datetime.fromisoformat('$NOW'.replace('Z','+00:00'))
     phases = cur.get('phases', [])
+    workflow_conclusion = '$CONCLUSION'
     for p in phases:
         if p.get('status') == 'in_progress':
-            p['status'] = 'failure'
+            # Workflow says success → dashboard update was lost, phase actually passed
+            p['status'] = 'success' if workflow_conclusion == 'success' else 'failure'
             p['ended'] = '$NOW'
 
-    # Derive conclusion from actual phase results, not workflow status
-    # (workflow may report success when levels were skipped/cancelled)
-    has_failure = any(p.get('status') == 'failure' for p in phases)
-    ran = [p for p in phases if p.get('status') != 'pending']
-    all_ran_success = ran and all(p.get('status') == 'success' for p in ran)
-    # Derive conclusion: did the build reach the end?
-    # The last phase in the list (fsitrading) must have run. If it's still
-    # pending, the build was cancelled or failed before reaching it.
-    last_phase = phases[-1] if phases else {}
-    reached_end = last_phase.get('status') in ('success', 'failure')
-    if has_failure:
-        conclusion = 'failure'
-    elif reached_end and all_ran_success:
-        conclusion = 'success'
-    else:
-        conclusion = 'failure'
+    # Trust the workflow conclusion — it checks actual GitHub Actions job results
+    # Dashboard phase updates can fail (network, timing) without affecting the build
+    conclusion = workflow_conclusion
 
     entry = {
         'run_id': cur.get('run_id'), 'run_url': cur.get('run_url'),
