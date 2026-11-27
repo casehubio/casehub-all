@@ -811,6 +811,15 @@ if os.path.exists(WORKFLOW_PATH):
             assert 'build_ok' in condition, \
                 'publish step should only run when build_ok is true'
 
+    @test('workflow: build_ok check includes cancelled jobs')
+    def _():
+        fin = workflow['jobs']['finalize']
+        result_step = next((s for s in fin['steps'] if s.get('id') == 'result'), None)
+        assert result_step, 'finalize must have a result step with id=result'
+        run_script = str(result_step.get('run', ''))
+        assert 'cancelled' in run_script, \
+            'build_ok check must treat cancelled jobs as not-ok'
+
 
 # ── Summary ───────────────────────────────────────────────────────
 

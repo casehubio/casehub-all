@@ -568,7 +568,7 @@ jobs:
         run: |
           BUILD_OK=true
           for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.level4.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}"; do
-            if [ "$result" = "failure" ]; then
+            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
               BUILD_OK=false
               break
             fi
