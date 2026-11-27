@@ -310,8 +310,8 @@ function phaseBox(p,clickFn,run){
   if(isResumed&&p.status==='success'&&p.cached)displayStatus='verified';
   const dur=displayStatus==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
   const parts=[];
-  if(p.modules)parts.push(p.modules+' mod');
-  if(p.tests_run)parts.push(p.tests_run+' tests');
+  if(p.modules!=null)parts.push(p.modules+' mod');
+  if(p.tests_run!=null)parts.push(p.tests_run+' tests');
   if(p.tests_failed)parts.push(`<span style="color:var(--red)">${p.tests_failed} fail</span>`);
   if(p.tests_flaky)parts.push(`<span style="color:var(--yellow)">${p.tests_flaky} flaky</span>`);
   const loc=p.loc;
