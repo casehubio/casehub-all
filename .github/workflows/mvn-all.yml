@@ -296,6 +296,9 @@ jobs:
         run: python3 docs/check-pipeline-consistency.py || echo "::warning::Pipeline consistency check found issues"
         continue-on-error: true
 
+      - name: CI infrastructure regression tests
+        run: pip install --user pyyaml 2>&1 || true && python3 docs/test-ci-scripts.py
+
       - name: Update submodules
         run: bash docs/update-submodules.sh "${{ inputs.submodule_update }}" "${{ inputs.submodule_list }}"
         timeout-minutes: 5
