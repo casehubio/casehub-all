@@ -57,6 +57,93 @@ for root, dirs, files in os.walk(m2):
             shutil.copy2(full, dest)
             copied += 1
 
+# Generate maven-metadata.xml for SNAPSHOT resolution
+import re, hashlib
+from datetime import datetime, timezone
+now = datetime.now(timezone.utc)
+ts = now.strftime('%Y%m%d.%H%M%S')
+updated = now.strftime('%Y%m%d%H%M%S')
+
+maven_dir = os.path.join(out, 'maven', 'casehub')
+if os.path.isdir(maven_dir):
+    for artifact_name in os.listdir(maven_dir):
+        artifact_path = os.path.join(maven_dir, artifact_name)
+        if not os.path.isdir(artifact_path):
+            continue
+        for version in os.listdir(artifact_path):
+            version_path = os.path.join(artifact_path, version)
+            if not os.path.isdir(version_path) or 'SNAPSHOT' not in version:
+                continue
+            base_version = version
+            jars = [f for f in os.listdir(version_path) if f.endswith('.jar') and not f.endswith('-sources.jar') and not f.endswith('-javadoc.jar')]
+            if not jars:
+                continue
+            # Find the build number from existing timestamped filenames
+            build_num = 1
+            for j in jars:
+                m = re.search(r'-(\d+)\.jar$', j)
+                if m:
+                    build_num = max(build_num, int(m.group(1)))
+            # Version metadata (in version dir)
+            snapshot_version = base_version.replace('-SNAPSHOT', '') + '-' + ts + '-' + str(build_num)
+            metadata = f'''<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<metadata modelVersion=\"1.1.0\">
+  <groupId>io.casehub</groupId>
+  <artifactId>{artifact_name}</artifactId>
+  <version>{base_version}</version>
+  <versioning>
+    <snapshot>
+      <timestamp>{ts}</timestamp>
+      <buildNumber>{build_num}</buildNumber>
+    </snapshot>
+    <lastUpdated>{updated}</lastUpdated>
+    <snapshotVersions>'''
+            for f_name in os.listdir(version_path):
+                if f_name.startswith(artifact_name):
+                    ext_match = re.search(r'\.(jar|pom|module)$', f_name)
+                    if ext_match:
+                        ext = ext_match.group(1)
+                        classifier = ''
+                        # Check for classifier (e.g., -sources, -tests)
+                        cm = re.search(rf'{re.escape(artifact_name)}-[^-]+-\d+-(\w+)\.{ext}$', f_name)
+                        if cm:
+                            classifier = cm.group(1)
+                        metadata += f'''
+      <snapshotVersion>
+        {f'<classifier>{classifier}</classifier>' if classifier else ''}
+        <extension>{ext}</extension>
+        <value>{snapshot_version}</value>
+        <updated>{updated}</updated>
+      </snapshotVersion>'''
+            metadata += '''
+    </snapshotVersions>
+  </versioning>
+</metadata>
+'''
+            meta_path = os.path.join(version_path, 'maven-metadata.xml')
+            with open(meta_path, 'w') as mf:
+                mf.write(metadata)
+            # Also write artifact-level metadata (parent dir)
+            artifact_meta = f'''<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<metadata>
+  <groupId>io.casehub</groupId>
+  <artifactId>{artifact_name}</artifactId>
+  <versioning>
+    <latest>{base_version}</latest>
+    <release>{base_version}</release>
+    <versions>
+      <version>{base_version}</version>
+    </versions>
+    <lastUpdated>{updated}</lastUpdated>
+  </versioning>
+</metadata>
+'''
+            with open(os.path.join(artifact_path, 'maven-metadata.xml'), 'w') as mf:
+                mf.write(artifact_meta)
+            copied += 2
+
+print(f'{copied} files staged for publish')
+
 # npm packages from Maven artifacts
 npm_artifacts = config.get('npm', [])
 for artifact in npm_artifacts:
