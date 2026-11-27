@@ -60,6 +60,7 @@ def main():
     parser.add_argument('--retry-count', type=int, default=0)
     parser.add_argument('--pipeline', default='docs/pipeline.yaml')
     parser.add_argument('--old-progress', default=None)
+    parser.add_argument('--test-mode', default='skip')
     args = parser.parse_args()
 
     now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -83,6 +84,7 @@ def main():
             'started': prev.get('started', now),
             'ended': now,
             'resume_from': prev.get('resume_from'),
+            'test_mode': prev.get('test_mode'),
             'total_tests': sum(p.get('tests_run', 0) for p in phases),
             'total_modules': sum(p.get('modules', 0) for p in phases),
             'total_flaky': sum(p.get('tests_flaky', 0) for p in phases),
@@ -171,6 +173,7 @@ def main():
             'started': now,
             'resume_from': args.resume_from or None,
             'retry_count': args.retry_count,
+            'test_mode': args.test_mode,
             'phases': phase_objects,
         },
         'history': history[:200],

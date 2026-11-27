@@ -417,6 +417,7 @@ function renderCurrent(cur,hist){
     `<span style="color:var(--muted)">${cur.commit||''}</span>`+
     `<span style="color:var(--muted)">${ago(cur.started)} ago</span>`+
     (fail?'<span class="badge failed">FAILED</span>':'')+
+    (cur.test_mode&&cur.test_mode!=='run'?`<span class="badge" style="background:rgba(107,114,128,0.2);color:var(--muted)">${cur.test_mode==='skip'?'compile only':cur.test_mode}</span>`:'')+
     (cur.resume_from?`<span class="badge resume">resumed from ${cur.resume_from}</span>`:'')+
     (cur.retry_count>0?`<span class="badge retry">retry #${cur.retry_count}</span>`:'')+
     `</div>`+locSummary(cur.phases)+`<div id="cur-pipe"></div><div id="active-detail" class="detail-panel"></div></div>`;
@@ -465,6 +466,7 @@ function renderHistory(hist){
       `<span>Run #${h.run_id||'?'}</span>`+
       `<span style="color:var(--muted)">${h.commit||''}</span>`+
       `<span>${fmt(h.duration_s)}</span>`+
+      (h.test_mode&&h.test_mode!=='run'?`<span class="htag" style="color:var(--dim)">${h.test_mode==='skip'?'compile':h.test_mode}</span>`:'')+
       `<span class="htag">${(h.total_tests||0).toLocaleString()} tests</span>`+
       `<span class="htag">${h.total_modules||'?'} mod</span>`+
       (h.total_flaky?`<span class="htag warn">${h.total_flaky} flaky</span>`:'')+

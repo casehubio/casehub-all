@@ -861,6 +861,25 @@ def _():
         f'resume_from should be L4 in history, got {archived.get("resume_from")}'
 
 
+@test('init: test_mode propagated to current build')
+def _():
+    data = run_init()
+    assert data['current'].get('test_mode') == 'skip', \
+        f'default test_mode should be skip, got {data["current"].get("test_mode")}'
+
+
+@test('init: test_mode preserved in history')
+def _():
+    old = {'current': {'run_id': 100, 'test_mode': 'run',
+                       'phases': [{'name': 'platform', 'status': 'success'}],
+                       'started': '2026-01-01T00:00:00Z'},
+           'history': []}
+    data = run_init(old_progress=old)
+    archived = data['history'][0]
+    assert archived.get('test_mode') == 'run', \
+        f'test_mode should be run in history, got {archived.get("test_mode")}'
+
+
 # ── Summary ───────────────────────────────────────────────────────
 
 print()
