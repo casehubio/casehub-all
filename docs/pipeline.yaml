@@ -47,12 +47,7 @@ levels:
     stacks:
       - [neocortex]
       - [qhorus]
-      - repos: [work]
-        name: work-a
-        maven_extra: "-pl api,core,client,test-support,annotations,work-support-core,runtime-core,runtime,rest,queues,reports -am"
-      - repos: [work]
-        name: work-b
-        maven_extra: "-pl progress-api,progress-core,progress-memory,progress-deployment,progress-rest,progress-runtime,ledger,persistence-memory,persistence-mongodb,persistence-mongodb-core,persistence-spring-mongodb,federation,flow,graphql,issue-tracker,deployment,qhorus,spring-integration-test -am"
+      - [work]
 
   - id: L3
     resume: true
