@@ -456,9 +456,9 @@ function renderHistory(hist){
   if(!hist?.length){el.innerHTML='<div class="no-data">No build history</div>';return;}
   const firstGreenIdx=hist.findIndex(h=>h.conclusion==='success');
   // Pin the latest green build at the top
-  const ordered=[...hist.slice(0,30)];
-  if(firstGreenIdx>0){const green=ordered.splice(firstGreenIdx,1)[0];ordered.unshift(green);}
-  el.innerHTML=ordered.map((h,i)=>{
+  window._orderedHistory=[...hist.slice(0,30)];
+  if(firstGreenIdx>0){const green=window._orderedHistory.splice(firstGreenIdx,1)[0];window._orderedHistory.unshift(green);}
+  el.innerHTML=window._orderedHistory.map((h,i)=>{
     const sh=h.self_healing||{},hc=(sh.corrupt_jars_deleted||0)+(sh.corrupt_jandex_deleted||0)+(sh.retries||0);
     const isLastGreen=firstGreenIdx>=0&&h.run_id===hist[firstGreenIdx].run_id;
     return`<div class="history-item${isLastGreen?' last-green':''}">`+
@@ -506,7 +506,7 @@ function toggleHist(i){
   const open=d.classList.contains('open');
   document.querySelectorAll('.history-detail.open').forEach(x=>x.classList.remove('open'));
   document.querySelectorAll('.hexpand.open').forEach(x=>x.classList.remove('open'));
-  if(!open){d.classList.add('open');a.classList.add('open');const h=window._data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i,null,h);}
+  if(!open){d.classList.add('open');a.classList.add('open');const h=(window._orderedHistory||window._data.history)[i];if(h?.phases)renderPipe(h.phases,'hp-'+i,null,h);}
 }
 
 // ── Refresh ───────────────────────────────────────────────────────
@@ -523,7 +523,7 @@ async function refresh(){
     const openHist=new Set();
     document.querySelectorAll('.history-detail.open').forEach(d=>{const m=d.id.match(/hd-(\d+)/);if(m)openHist.add(parseInt(m[1]));});
     renderCurrent(data.current,data.history);renderStats(data.history);renderCharts(data.history);renderHistory(data.history);
-    openHist.forEach(i=>{const d=document.getElementById('hd-'+i),a=document.getElementById('hx-'+i);if(d){d.classList.add('open');a?.classList.add('open');const h=data.history[i];if(h?.phases)renderPipe(h.phases,'hp-'+i,null,h);}});
+    openHist.forEach(i=>{const d=document.getElementById('hd-'+i),a=document.getElementById('hx-'+i);if(d){d.classList.add('open');a?.classList.add('open');const h=(window._orderedHistory||data.history)[i];if(h?.phases)renderPipe(h.phases,'hp-'+i,null,h);}});
     openPinnedBuild();
     document.getElementById('refresh-info').textContent=new Date().toLocaleTimeString()+' · '+Math.round(POLL_MS/1000)+'s';
   }catch(e){document.getElementById('refresh-info').textContent='Error: '+e.message;}
