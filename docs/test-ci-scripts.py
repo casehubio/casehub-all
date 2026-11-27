@@ -927,6 +927,249 @@ def _():
         f'run 99 should be retroactively cancelled, got {h99["conclusion"]}'
 
 
+# ── Auto-distributed test slices ─────────────────────────────────
+
+def make_temp_repo(tmpdir, repo_name, modules):
+    """Create a minimal repo structure for test slice auto-distribution tests.
+
+    modules: list of dicts with keys: name, has_tests (bool),
+             optional: has_quarkus_test (bool), deps (list of artifactId strings)
+    """
+    repo_dir = os.path.join(tmpdir, repo_name)
+    os.makedirs(repo_dir, exist_ok=True)
+
+    mod_entries = '\n'.join(f'    <module>{m["name"]}</module>' for m in modules)
+    root_pom = f'''<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>io.casehub</groupId>
+  <artifactId>casehub-{repo_name}</artifactId>
+  <version>0.4-SNAPSHOT</version>
+  <packaging>pom</packaging>
+  <modules>
+{mod_entries}
+  </modules>
+</project>'''
+    with open(os.path.join(repo_dir, 'pom.xml'), 'w') as f:
+        f.write(root_pom)
+
+    for m in modules:
+        mod_dir = os.path.join(repo_dir, m['name'])
+        os.makedirs(mod_dir, exist_ok=True)
+
+        dep_xml = ''
+        for dep_aid in m.get('deps', []):
+            dep_xml += f'''
+      <dependency>
+        <groupId>io.casehub</groupId>
+        <artifactId>{dep_aid}</artifactId>
+      </dependency>'''
+
+        mod_pom = f'''<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent>
+    <groupId>io.casehub</groupId>
+    <artifactId>casehub-{repo_name}</artifactId>
+    <version>0.4-SNAPSHOT</version>
+  </parent>
+  <artifactId>casehub-{repo_name}-{m["name"]}</artifactId>
+  <dependencies>{dep_xml}
+  </dependencies>
+</project>'''
+        with open(os.path.join(mod_dir, 'pom.xml'), 'w') as f:
+            f.write(mod_pom)
+
+        if m.get('has_tests'):
+            test_dir = os.path.join(mod_dir, 'src', 'test', 'java')
+            os.makedirs(test_dir, exist_ok=True)
+            if m.get('has_quarkus_test'):
+                with open(os.path.join(test_dir, 'SomeTest.java'), 'w') as f:
+                    f.write('@QuarkusTest\npublic class SomeTest {}')
+            else:
+                with open(os.path.join(test_dir, 'SomeTest.java'), 'w') as f:
+                    f.write('public class SomeTest {}')
+
+    return repo_dir
+
+
+def run_compute_matrices(pipeline_data, test_mode='run', repo_root=None):
+    """Run compute-matrices.py with a custom pipeline and optional repo root."""
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        yaml.dump(pipeline_data, f)
+        pipeline_path = f.name
+    try:
+        cmd = [sys.executable, COMPUTE_MATRICES, '--pipeline', pipeline_path,
+               '--test-mode', test_mode]
+        if repo_root:
+            cmd.extend(['--repo-root', repo_root])
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+        assert result.returncode == 0, f'exit {result.returncode}: {result.stderr}'
+        matrices_line = next(l for l in result.stdout.strip().split('\n') if l.startswith('matrices='))
+        return json.loads(matrices_line.split('=', 1)[1])
+    finally:
+        os.unlink(pipeline_path)
+
+
+@test('auto-test-slices: integer distributes modules into N slices')
+def _():
+    """test_slices: 2 auto-discovers test modules and creates 2 test slice entries."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_temp_repo(tmpdir, 'myrepo', [
+            {'name': 'api', 'has_tests': True},
+            {'name': 'core', 'has_tests': True},
+            {'name': 'runtime', 'has_tests': True},
+            {'name': 'utils', 'has_tests': True},
+            {'name': 'build-tools', 'has_tests': False},
+        ])
+        pipeline_data = {'levels': [
+            {'id': 'L0', 'stacks': [{'repos': ['myrepo'], 'test_slices': 2}]},
+            {'id': 'L1', 'stacks': [['other']]},
+        ]}
+        matrices = run_compute_matrices(pipeline_data, test_mode='run', repo_root=tmpdir)
+        l1 = matrices.get('l1', {}).get('include', [])
+        test_entries = [e for e in l1 if e.get('test_only') == 'true']
+        assert len(test_entries) == 2, f'expected 2 test slice entries, got {len(test_entries)}: {test_entries}'
+        all_modules = set()
+        for e in test_entries:
+            mods = e['maven_extra'].replace('-pl ', '').split(',')
+            all_modules.update(mods)
+        assert all_modules == {'api', 'core', 'runtime', 'utils'}, \
+            f'expected all 4 test modules distributed, got {all_modules}'
+
+
+@test('auto-test-slices: compile level has skip_tests when test_mode=run')
+def _():
+    """The repo at the compile level should have skip_tests: true."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_temp_repo(tmpdir, 'myrepo', [
+            {'name': 'api', 'has_tests': True},
+            {'name': 'core', 'has_tests': True},
+        ])
+        pipeline_data = {'levels': [
+            {'id': 'L0', 'stacks': [{'repos': ['myrepo'], 'test_slices': 2}]},
+            {'id': 'L1', 'stacks': [['other']]},
+        ]}
+        matrices = run_compute_matrices(pipeline_data, test_mode='run', repo_root=tmpdir)
+        l0 = matrices.get('l0', {}).get('include', [])
+        myrepo_entry = next((e for e in l0 if 'myrepo' in e.get('repos', '')), None)
+        assert myrepo_entry is not None, f'myrepo not found in L0 matrix: {l0}'
+        assert myrepo_entry.get('skip_tests') == 'true', \
+            f'myrepo should have skip_tests=true at compile level, got {myrepo_entry}'
+
+
+@test('auto-test-slices: ignored when test_mode is not run')
+def _():
+    """Auto test_slices should be ignored when test_mode != run."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_temp_repo(tmpdir, 'myrepo', [
+            {'name': 'api', 'has_tests': True},
+            {'name': 'core', 'has_tests': True},
+        ])
+        pipeline_data = {'levels': [
+            {'id': 'L0', 'stacks': [{'repos': ['myrepo'], 'test_slices': 2}]},
+            {'id': 'L1', 'stacks': [['other']]},
+        ]}
+        matrices = run_compute_matrices(pipeline_data, test_mode='skip', repo_root=tmpdir)
+        l1 = matrices.get('l1', {}).get('include', [])
+        test_entries = [e for e in l1 if e.get('test_only') == 'true']
+        assert len(test_entries) == 0, f'test slices should not appear when test_mode=skip, got {test_entries}'
+
+
+@test('auto-test-slices: modules without tests are excluded')
+def _():
+    """Only modules with src/test/ should be distributed into test slices."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_temp_repo(tmpdir, 'myrepo', [
+            {'name': 'api', 'has_tests': True},
+            {'name': 'spi', 'has_tests': False},
+            {'name': 'core', 'has_tests': True},
+            {'name': 'build-support', 'has_tests': False},
+        ])
+        pipeline_data = {'levels': [
+            {'id': 'L0', 'stacks': [{'repos': ['myrepo'], 'test_slices': 2}]},
+            {'id': 'L1', 'stacks': [['other']]},
+        ]}
+        matrices = run_compute_matrices(pipeline_data, test_mode='run', repo_root=tmpdir)
+        l1 = matrices.get('l1', {}).get('include', [])
+        test_entries = [e for e in l1 if e.get('test_only') == 'true']
+        all_modules = set()
+        for e in test_entries:
+            mods = e['maven_extra'].replace('-pl ', '').split(',')
+            all_modules.update(mods)
+        assert 'spi' not in all_modules, f'spi has no tests, should not be in test slices: {all_modules}'
+        assert 'build-support' not in all_modules, f'build-support has no tests: {all_modules}'
+        assert 'api' in all_modules and 'core' in all_modules, \
+            f'test modules api and core should be present: {all_modules}'
+
+
+@test('auto-test-slices: object with count and pin isolates pinned modules')
+def _():
+    """test_slices: {count: 3, pin: [...]} pins specified modules to a slice."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_temp_repo(tmpdir, 'myrepo', [
+            {'name': 'api', 'has_tests': True},
+            {'name': 'core', 'has_tests': True},
+            {'name': 'runtime', 'has_tests': True},
+            {'name': 'integration-test', 'has_tests': True, 'has_quarkus_test': True},
+            {'name': 'utils', 'has_tests': True},
+        ])
+        pipeline_data = {'levels': [
+            {'id': 'L0', 'stacks': [{'repos': ['myrepo'], 'test_slices': {
+                'count': 3,
+                'pin': [{'slice': 0, 'modules': ['integration-test']}]
+            }}]},
+            {'id': 'L1', 'stacks': [['other']]},
+        ]}
+        matrices = run_compute_matrices(pipeline_data, test_mode='run', repo_root=tmpdir)
+        l1 = matrices.get('l1', {}).get('include', [])
+        test_entries = [e for e in l1 if e.get('test_only') == 'true']
+        assert len(test_entries) == 3, f'expected 3 test slices, got {len(test_entries)}'
+        pinned = test_entries[0]
+        pinned_mods = pinned['maven_extra'].replace('-pl ', '').split(',')
+        assert 'integration-test' in pinned_mods, \
+            f'first slice should contain pinned integration-test, got {pinned_mods}'
+
+
+@test('auto-test-slices: manual list format still works')
+def _():
+    """Backward compat: existing list-of-dicts format with explicit modules."""
+    pipeline_data = {'levels': [
+        {'id': 'L0', 'stacks': [{'repos': ['work'], 'test_slices': [
+            {'name': 'work-tests-a', 'modules': 'api,core'},
+            {'name': 'work-tests-b', 'modules': 'runtime'},
+        ]}]},
+        {'id': 'L1', 'stacks': [['other']]},
+    ]}
+    matrices = run_compute_matrices(pipeline_data, test_mode='run')
+    l1 = matrices.get('l1', {}).get('include', [])
+    test_entries = [e for e in l1 if e.get('test_only') == 'true']
+    assert len(test_entries) == 2, f'expected 2 manual test slice entries, got {len(test_entries)}'
+    assert test_entries[0]['name'] == 'work-tests-a'
+    assert '-pl api,core' in test_entries[0]['maven_extra']
+
+
+@test('auto-test-slices: slice names follow repo-tests-a pattern')
+def _():
+    """Auto-generated slice names should be repo-tests-a, repo-tests-b, etc."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_temp_repo(tmpdir, 'engine', [
+            {'name': 'api', 'has_tests': True},
+            {'name': 'core', 'has_tests': True},
+            {'name': 'runtime', 'has_tests': True},
+        ])
+        pipeline_data = {'levels': [
+            {'id': 'L0', 'stacks': [{'repos': ['engine'], 'test_slices': 2}]},
+            {'id': 'L1', 'stacks': [['other']]},
+        ]}
+        matrices = run_compute_matrices(pipeline_data, test_mode='run', repo_root=tmpdir)
+        l1 = matrices.get('l1', {}).get('include', [])
+        test_entries = [e for e in l1 if e.get('test_only') == 'true']
+        names = [e['name'] for e in test_entries]
+        assert 'engine-tests-a' in names, f'expected engine-tests-a in {names}'
+        assert 'engine-tests-b' in names, f'expected engine-tests-b in {names}'
+
+
 # ── Summary ───────────────────────────────────────────────────────
 
 print()
