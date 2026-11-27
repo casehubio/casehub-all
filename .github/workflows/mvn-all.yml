@@ -567,16 +567,22 @@ jobs:
         if: always()
         run: |
           BUILD_OK=true
+          CANCELLED=false
           for result in "${{ needs.prepare.result }}" "${{ needs.level1.result }}" "${{ needs.level2.result }}" "${{ needs.level3.result }}" "${{ needs.level4.result }}" "${{ needs.level5.result }}" "${{ needs.level6.result }}" "${{ needs.level7.result }}"; do
-            if [ "$result" = "failure" ] || [ "$result" = "cancelled" ]; then
+            if [ "$result" = "failure" ]; then
               BUILD_OK=false
               break
             fi
+            if [ "$result" = "cancelled" ]; then
+              CANCELLED=true
+              BUILD_OK=false
+            fi
           done
           echo "build_ok=$BUILD_OK" >> "$GITHUB_OUTPUT"
-          echo "Build result: $BUILD_OK"
+          echo "cancelled=$CANCELLED" >> "$GITHUB_OUTPUT"
+          echo "Build result: build_ok=$BUILD_OK cancelled=$CANCELLED"
       - name: Finalize CI dashboard
-        if: always()
+        if: always() && steps.result.outputs.cancelled != 'true'
         run: |
           if [ "${{ steps.result.outputs.build_ok }}" = "true" ]; then
             bash docs/update-progress.sh finish success || true

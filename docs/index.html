@@ -306,7 +306,6 @@ function phaseBox(p,clickFn,run){
     const phaseLevelIdx=findPhaseLevel(p.name);
     const beforeResume=phaseLevelIdx>=0&&resumeLevelIdx>=0&&phaseLevelIdx<resumeLevelIdx;
     if(beforeResume&&(p.status==='pending'||p.status==='success'))displayStatus='verified';
-    else if(p.status==='pending'&&!p.started)displayStatus='skipped';
   }
   if(isResumed&&p.status==='success'&&p.cached)displayStatus='verified';
   const dur=displayStatus==='in_progress'?ago(p.started):p.duration_s!=null?fmt(p.duration_s):'';
@@ -318,7 +317,7 @@ function phaseBox(p,clickFn,run){
   const loc=p.loc;
   const locStr=loc?fmtLoc(loc.total):'';
   const sh=p.self_healing,healed=sh&&(sh.corrupt_jars_deleted||sh.corrupt_jandex_deleted||sh.retries);
-  const label=displayStatus==='skipped'?'skipped':'';
+  const label='';
   return`<div class="phase ${displayStatus}" ${clickFn?`onclick="${clickFn}('${p.name}')"`:''}>`+
     `<div class="name">${p.name}</div>`+
     `<div class="info">${label||dur||'—'}</div>`+
@@ -456,9 +455,12 @@ function renderHistory(hist){
   const el=document.getElementById('history');
   if(!hist?.length){el.innerHTML='<div class="no-data">No build history</div>';return;}
   const firstGreenIdx=hist.findIndex(h=>h.conclusion==='success');
-  el.innerHTML=hist.slice(0,30).map((h,i)=>{
+  // Pin the latest green build at the top
+  const ordered=[...hist.slice(0,30)];
+  if(firstGreenIdx>0){const green=ordered.splice(firstGreenIdx,1)[0];ordered.unshift(green);}
+  el.innerHTML=ordered.map((h,i)=>{
     const sh=h.self_healing||{},hc=(sh.corrupt_jars_deleted||0)+(sh.corrupt_jandex_deleted||0)+(sh.retries||0);
-    const isLastGreen=i===firstGreenIdx;
+    const isLastGreen=firstGreenIdx>=0&&h.run_id===hist[firstGreenIdx].run_id;
     return`<div class="history-item${isLastGreen?' last-green':''}">`+
       `<div class="history-summary" onclick="toggleHist(${i})">`+
       `<span class="hdot ${h.conclusion}"></span>`+

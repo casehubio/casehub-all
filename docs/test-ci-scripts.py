@@ -820,6 +820,18 @@ if os.path.exists(WORKFLOW_PATH):
         assert 'cancelled' in run_script, \
             'build_ok check must treat cancelled jobs as not-ok'
 
+    @test('workflow: finalize dashboard skips on cancelled builds')
+    def _():
+        """Cancelled builds must NOT be archived by finalize — the next
+        build's init handles archival with correct cancelled conclusion.
+        Finalize archiving a cancelled build as failure pollutes history."""
+        fin = workflow['jobs']['finalize']
+        dashboard_step = next((s for s in fin['steps'] if 'dashboard' in s.get('name', '').lower() and 'finalize' in s.get('name', '').lower()), None)
+        assert dashboard_step, 'finalize must have a dashboard finalize step'
+        condition = str(dashboard_step.get('if', ''))
+        assert 'cancelled' in condition, \
+            'finalize dashboard step must skip when build was cancelled'
+
 
 # ── Per-repo resume tests ─────────────────────────────────────────
 
