@@ -81,11 +81,12 @@ L0:  platform                                              (1 job)
        │
 L1:  [ledger+eidos] | connectors | [worker+pages] | qhorus-api  (4 parallel)
        │
-L2:  neocortex | qhorus | work-a | work-b                 (4 parallel)
+L2:  neocortex | qhorus | work (compile)                  (3 parallel)
        │
-L3:  engine                                                (1 job)
+L3:  engine (compile) | work-tests-a | work-tests-b       (3 parallel)
        │
-L4:  [ras+desiredstate] | claudony | agency | [langchain4j+workers]  (4 parallel)
+L4:  [ras+ds] | claudony | agency | [lc4j+workers]        (4+3 parallel)
+       + engine-tests-a | engine-tests-b | engine-tests-c
        │
 L5:  ops | casehub-mosaic | drafthouse                     (3 parallel)
        │
@@ -149,6 +150,42 @@ Object stack entries support A/B splits for large repos:
   name: work-b
   maven_extra: "-pl progress-api,progress-core,... -am"
 ```
+
+### Test Slicing — Compile Once, Fan Out Tests
+
+Large repos (engine: 77 min, work: 25 min) can split their test execution
+across multiple parallel runners. The repo compiles once at its level
+(with `-DskipTests`), then test-only slices run at the next level.
+
+```yaml
+# Auto-distribute engine's test modules into 3 balanced slices
+- repos: [engine]
+  test_slices: 3
+
+# Auto-distribute with pinning — isolate a heavy module
+- repos: [engine]
+  test_slices:
+    count: 3
+    pin:
+      - slice: 0
+        modules: [spring-integration-test]
+
+# Manual module lists (backward compat)
+- repos: [work]
+  test_slices:
+    - name: work-tests-a
+      modules: "api,core,client,runtime"
+    - name: work-tests-b
+      modules: "progress-api,progress-core,ledger"
+```
+
+**Auto-distribution** discovers modules from the repo's `pom.xml`, filters
+to modules with `src/test/`, estimates test time (QuarkusTest → 3 min,
+unit tests → 1 min), and bin-packs into balanced slices using greedy
+largest-first. Slice names follow the `{repo}-tests-{a,b,c}` pattern.
+
+Test slicing is only active when `test_mode=run`. With `test_mode=skip`
+(the default), test_slices are ignored and the repo builds normally.
 
 ### Artifact Passing
 
@@ -326,9 +363,9 @@ Every cross-repo dependency is declared in `parent/build/modules-core.csv` and
 |-------|-------|---------------|
 | L0 | platform | Foundation for everything |
 | L1 | ledger, eidos, connectors, worker, pages, qhorus-api | Depend only on platform |
-| L2 | neocortex, qhorus (full), work (A/B split) | Need eidos/connectors (L1), qhorus-api (L1) |
-| L3 | engine | Needs work (L2), neocortex (L2), qhorus (L2) |
-| L4 | ras, desiredstate, claudony, agency, casehub-langchain4j, workers | Need engine (L3) |
+| L2 | neocortex, qhorus (full), work (compile) | Need eidos/connectors (L1), qhorus-api (L1) |
+| L3 | engine (compile), work test slices | Needs work (L2), neocortex (L2), qhorus (L2) |
+| L4 | ras, desiredstate, claudony, agency, langchain4j, workers + engine test slices | Need engine (L3) |
 | L5 | ops, casehub-mosaic, drafthouse | Need agency (L4), desiredstate (L4) |
 | L6 | life, iot, quarkmind, devtown, aml, soc, chat-app, clinical, openclaw | Apps — need L5 modules |
 | L7 | scaffold, fsitrading | Need ops (L5) |
@@ -405,7 +442,8 @@ casehub-all/
     pipeline.yaml                      — pipeline topology (single source of truth)
     index.html                         — CI dashboard (HTML+CSS+JS)
     screenshots/                       — dashboard screenshots for README
-    compute-matrices.py                — reads pipeline.yaml, outputs runtime matrices + timeouts
+    compute-matrices.py                — reads pipeline.yaml, outputs runtime matrices + timeouts (auto test slicing)
+    generate-slices.py                 — auto-assigns repo modules to compile-time aggregator POMs
     compute-mvn-flags.sh               — computes MVN_COMMON flags from workflow inputs
     init-dashboard-full.py             — dashboard init (phases from pipeline.yaml, carry-forward on resume)
     update-progress.sh                 — Cloudflare Worker updater (phase-file, phase, finish)
