@@ -62,8 +62,12 @@ def estimate_test_time(repo_dir, module):
     return 1.0
 
 
-def auto_distribute_test_slices(repo_dir, repo_name, n_slices, pin=None):
+def auto_distribute_test_slices(repo_dir, repo_name, n_slices, pin=None, timing_data=None):
     """Discover test modules and bin-pack into N balanced test slices.
+
+    When timing_data is provided (dict: module_name → seconds), uses actual
+    times for bin-packing. Falls back to heuristic estimation when timing
+    data is missing for a module.
 
     Returns list of dicts: [{'name': 'repo-tests-a', 'modules': 'mod1,mod2'}, ...]
     """
@@ -72,6 +76,8 @@ def auto_distribute_test_slices(repo_dir, repo_name, n_slices, pin=None):
 
     if not test_modules:
         return []
+
+    repo_timing = timing_data.get(repo_name, {}) if timing_data else {}
 
     pinned_slices = {}
     remaining = list(test_modules)
@@ -87,7 +93,12 @@ def auto_distribute_test_slices(repo_dir, repo_name, n_slices, pin=None):
     if n_auto <= 0:
         n_auto = 1
 
-    times = [(m, estimate_test_time(repo_dir, m)) for m in remaining]
+    def get_time(m):
+        if m in repo_timing:
+            return repo_timing[m] / 60.0
+        return estimate_test_time(repo_dir, m)
+
+    times = [(m, get_time(m)) for m in remaining]
     times.sort(key=lambda x: x[1], reverse=True)
 
     auto_slices = [[] for _ in range(n_auto)]
@@ -206,13 +217,16 @@ def build_all_repos(pipeline):
     return sorted(repos)
 
 
-def collect_test_slices(pipeline, test_mode, repo_root=None):
+def collect_test_slices(pipeline, test_mode, repo_root=None, timing_data=None):
     """Collect test slices that should be injected into the next level.
 
     Supports three formats for test_slices:
       - list of dicts (manual): [{name, modules}, ...] — backward compat
       - integer (auto): N — auto-distribute into N slices
       - object (auto with pinning): {count: N, pin: [{slice, modules}]}
+
+    When timing_data is provided (dict: repo → {module → seconds}), uses
+    actual build times for bin-packing instead of heuristic estimation.
 
     Returns a dict: next_level_key → list of matrix entries.
     Only active when test_mode=run.
@@ -240,7 +254,8 @@ def collect_test_slices(pipeline, test_mode, repo_root=None):
             elif isinstance(ts_config, int):
                 if repo_root:
                     repo_dir = os.path.join(repo_root, repos[0])
-                    slices = auto_distribute_test_slices(repo_dir, repos[0], ts_config)
+                    slices = auto_distribute_test_slices(
+                        repo_dir, repos[0], ts_config, timing_data=timing_data)
                 else:
                     slices = []
             elif isinstance(ts_config, dict):
@@ -248,7 +263,8 @@ def collect_test_slices(pipeline, test_mode, repo_root=None):
                 pin = ts_config.get('pin')
                 if repo_root:
                     repo_dir = os.path.join(repo_root, repos[0])
-                    slices = auto_distribute_test_slices(repo_dir, repos[0], count, pin=pin)
+                    slices = auto_distribute_test_slices(
+                        repo_dir, repos[0], count, pin=pin, timing_data=timing_data)
                 else:
                     slices = []
             else:
@@ -280,6 +296,8 @@ def main():
                         help='Test mode (skip/run/dry)')
     parser.add_argument('--repo-root', default=None,
                         help='Root directory containing repo subdirectories (for auto test_slices)')
+    parser.add_argument('--timing-json', default=None,
+                        help='Path to JSON with per-module timing data (repo → {module → seconds})')
     args = parser.parse_args()
 
     pipeline = load_pipeline(args.pipeline)
@@ -290,7 +308,13 @@ def main():
     if not repo_root:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(args.pipeline)))
 
-    test_slices = collect_test_slices(pipeline, args.test_mode, repo_root=repo_root)
+    timing_data = None
+    if args.timing_json and os.path.isfile(args.timing_json):
+        with open(args.timing_json) as f:
+            timing_data = json.load(f)
+
+    test_slices = collect_test_slices(pipeline, args.test_mode,
+                                      repo_root=repo_root, timing_data=timing_data)
 
     matrices = {}
     timeouts = {}

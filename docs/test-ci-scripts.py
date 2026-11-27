@@ -1005,22 +1005,30 @@ def make_temp_repo(tmpdir, repo_name, modules):
     return repo_dir
 
 
-def run_compute_matrices(pipeline_data, test_mode='run', repo_root=None):
+def run_compute_matrices(pipeline_data, test_mode='run', repo_root=None, timing_data=None):
     """Run compute-matrices.py with a custom pipeline and optional repo root."""
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         yaml.dump(pipeline_data, f)
         pipeline_path = f.name
+    timing_path = None
     try:
         cmd = [sys.executable, COMPUTE_MATRICES, '--pipeline', pipeline_path,
                '--test-mode', test_mode]
         if repo_root:
             cmd.extend(['--repo-root', repo_root])
+        if timing_data:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tf:
+                json.dump(timing_data, tf)
+                timing_path = tf.name
+            cmd.extend(['--timing-json', timing_path])
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
         assert result.returncode == 0, f'exit {result.returncode}: {result.stderr}'
         matrices_line = next(l for l in result.stdout.strip().split('\n') if l.startswith('matrices='))
         return json.loads(matrices_line.split('=', 1)[1])
     finally:
         os.unlink(pipeline_path)
+        if timing_path:
+            os.unlink(timing_path)
 
 
 @test('auto-test-slices: integer distributes modules into N slices')
@@ -1159,6 +1167,56 @@ def _():
     assert len(test_entries) == 2, f'expected 2 manual test slice entries, got {len(test_entries)}'
     assert test_entries[0]['name'] == 'work-tests-a'
     assert '-pl api,core' in test_entries[0]['maven_extra']
+
+
+@test('auto-test-slices: timing data drives bin-packing over heuristics')
+def _():
+    """When timing data is provided, modules are distributed by actual times."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_temp_repo(tmpdir, 'myrepo', [
+            {'name': 'fast-a', 'has_tests': True},
+            {'name': 'fast-b', 'has_tests': True},
+            {'name': 'fast-c', 'has_tests': True},
+            {'name': 'slow', 'has_tests': True},
+        ])
+        pipeline_data = {'levels': [
+            {'id': 'L0', 'stacks': [{'repos': ['myrepo'], 'test_slices': 2}]},
+            {'id': 'L1', 'stacks': [['other']]},
+        ]}
+        timing = {'myrepo': {'slow': 300.0, 'fast-a': 10.0, 'fast-b': 10.0, 'fast-c': 10.0}}
+        matrices = run_compute_matrices(pipeline_data, test_mode='run',
+                                        repo_root=tmpdir, timing_data=timing)
+        l1 = matrices.get('l1', {}).get('include', [])
+        test_entries = [e for e in l1 if e.get('test_only') == 'true']
+        assert len(test_entries) == 2, f'expected 2 slices, got {len(test_entries)}'
+        slice_a_mods = test_entries[0]['maven_extra'].replace('-pl ', '').split(',')
+        slice_b_mods = test_entries[1]['maven_extra'].replace('-pl ', '').split(',')
+        if 'slow' in slice_a_mods:
+            assert len(slice_a_mods) == 1, f'slow module (300s) should be alone, got {slice_a_mods}'
+            assert len(slice_b_mods) == 3, f'3 fast modules should be together, got {slice_b_mods}'
+        else:
+            assert len(slice_b_mods) == 1, f'slow module (300s) should be alone, got {slice_b_mods}'
+            assert len(slice_a_mods) == 3, f'3 fast modules should be together, got {slice_a_mods}'
+
+
+@test('auto-test-slices: falls back to heuristics when timing data missing for repo')
+def _():
+    """If timing data exists but not for this repo, fall back to heuristics."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        make_temp_repo(tmpdir, 'myrepo', [
+            {'name': 'api', 'has_tests': True},
+            {'name': 'core', 'has_tests': True},
+        ])
+        pipeline_data = {'levels': [
+            {'id': 'L0', 'stacks': [{'repos': ['myrepo'], 'test_slices': 2}]},
+            {'id': 'L1', 'stacks': [['other']]},
+        ]}
+        timing = {'other-repo': {'mod': 100.0}}
+        matrices = run_compute_matrices(pipeline_data, test_mode='run',
+                                        repo_root=tmpdir, timing_data=timing)
+        l1 = matrices.get('l1', {}).get('include', [])
+        test_entries = [e for e in l1 if e.get('test_only') == 'true']
+        assert len(test_entries) == 2, f'should still produce 2 slices with heuristics, got {len(test_entries)}'
 
 
 @test('auto-test-slices: slice names follow repo-tests-a pattern')

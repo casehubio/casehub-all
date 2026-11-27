@@ -112,6 +112,7 @@ try:
     if mod_lines:
         by_time = sorted(mod_lines, key=lambda x: float(x[1]), reverse=True)
         stats['slowest_modules'] = [{'name': m[0].strip(), 'seconds': round(float(m[1]),1)} for m in by_time[:5]]
+        stats['all_module_times'] = {m[0].strip(): round(float(m[1]),1) for m in mod_lines}
 except Exception as _e: print(f'::debug::stats parse: {_e}', file=__import__('sys').stderr)
 
 try:
