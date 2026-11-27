@@ -1,0 +1,48 @@
+name: CI (Overunity)
+on:
+  workflow_dispatch:
+    inputs:
+      test_mode:
+        description: "dry = validate only, skip = compile only, run = full tests"
+        type: choice
+        options:
+          - dry
+          - skip
+          - compile
+          - run
+        default: skip
+      resume_from:
+        description: "Resume from level"
+        type: choice
+        options:
+          - ''
+          - L1
+          - L2
+          - L3
+          - L4
+          - L5
+          - L6
+        default: ''
+      resume_repos:
+        description: "Only rebuild these repos at the resume level"
+        type: string
+        default: ''
+      submodule_update:
+        description: "pinned = committed SHAs, all = latest main, list = named repos"
+        type: choice
+        options:
+          - pinned
+          - all
+          - list
+        default: pinned
+
+jobs:
+  build:
+    uses: mdproctor/overunity/.github/workflows/reactor.yml@main
+    with:
+      config_path: overunity.yaml
+      test_mode: ${{ inputs.test_mode }}
+      resume_from: ${{ inputs.resume_from }}
+      resume_repos: ${{ inputs.resume_repos }}
+      submodule_update: ${{ inputs.submodule_update }}
+    secrets: inherit
