@@ -892,6 +892,29 @@ def _():
         f'test_mode should be run in history, got {archived.get("test_mode")}'
 
 
+@test('init: retroactive fix corrects cancelled builds in history')
+def _():
+    """Historical entries archived as success/failure but with pending
+    phases should be retroactively corrected to cancelled."""
+    old = {'current': {'run_id': 200, 'phases': [{'name': 'p', 'status': 'success'}],
+                       'started': '2026-01-01T00:00:00Z'},
+           'history': [
+               {'run_id': 100, 'conclusion': 'success',
+                'phases': [{'name': 'platform', 'status': 'success'},
+                           {'name': 'ledger', 'status': 'pending'}]},
+               {'run_id': 99, 'conclusion': 'failure',
+                'phases': [{'name': 'platform', 'status': 'success'},
+                           {'name': 'engine', 'status': 'pending'}]},
+           ]}
+    data = run_init(old_progress=old)
+    h100 = next(h for h in data['history'] if h['run_id'] == 100)
+    h99 = next(h for h in data['history'] if h['run_id'] == 99)
+    assert h100['conclusion'] == 'cancelled', \
+        f'run 100 should be retroactively cancelled, got {h100["conclusion"]}'
+    assert h99['conclusion'] == 'cancelled', \
+        f'run 99 should be retroactively cancelled, got {h99["conclusion"]}'
+
+
 # ── Summary ───────────────────────────────────────────────────────
 
 print()

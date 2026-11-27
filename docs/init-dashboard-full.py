@@ -116,6 +116,17 @@ def main():
             entry['duration_s'] = dur
         history.insert(0, entry)
 
+    # Retroactive fix: correct conclusion for historical entries that were
+    # archived as success/failure but actually had pending phases (cancelled)
+    for h in history:
+        if h.get('conclusion') in ('success', 'failure'):
+            phases = h.get('phases', [])
+            has_failure = any(p.get('status') == 'failure' for p in phases)
+            has_pending = any(p.get('status') in ('pending', 'in_progress')
+                             and not p.get('cached') for p in phases)
+            if has_pending and not has_failure:
+                h['conclusion'] = 'cancelled'
+
     pipeline = load_pipeline(args.pipeline)
     phase_list = load_phases(pipeline)
 
