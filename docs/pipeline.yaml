@@ -15,6 +15,10 @@
 # timeout: build step timeout in minutes (default: 30)
 # pom:    override POM path for a repo (default: $repo/pom.xml)
 # maven_extra: per-repo extra Maven args (e.g. "-pl !npm-packages")
+# test_slices: compile once at this level, fan out test slices to the NEXT level
+#   When test_mode=run: repo compiles with -DskipTests here, test slices
+#   are injected into the next level's matrix running mvn test -pl <modules>.
+#   When test_mode!=run: test_slices are ignored, repo builds normally.
 #
 # Dashboard rendering rules (derived from structure):
 #   base present        → base shown first, then fan-out to stacks
@@ -47,7 +51,12 @@ levels:
     stacks:
       - [neocortex]
       - [qhorus]
-      - [work]
+      - repos: [work]
+        test_slices:
+          - name: work-tests-a
+            modules: "api,core,client,test-support,annotations,work-support-core,runtime-core,runtime,rest,queues,reports"
+          - name: work-tests-b
+            modules: "progress-api,progress-core,progress-memory,progress-deployment,progress-rest,progress-runtime,ledger,persistence-memory,persistence-mongodb,persistence-mongodb-core,persistence-spring-mongodb,federation,flow,graphql,issue-tracker,deployment,qhorus,spring-integration-test"
 
   - id: L3
     resume: true

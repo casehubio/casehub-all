@@ -32,6 +32,12 @@ inputs:
   maven-extra:
     description: 'Extra Maven args for this matrix entry'
     default: ''
+  test-only:
+    description: 'Run mvn test instead of mvn install (test slices)'
+    default: 'false'
+  skip-tests:
+    description: 'Force -DskipTests even when test_mode=run (compile-only for test_slices source)'
+    default: 'false'
 
 runs:
   using: 'composite'
@@ -154,6 +160,16 @@ runs:
         if [ "$TEST_MODE" = "skip" ] || [ "$TEST_MODE" = "compile" ]; then
           SKIP_FLAG="-DskipTests"
         fi
+        # test_slices: force skip tests at compile level even when test_mode=run
+        if [ "${{ inputs.skip-tests }}" = "true" ]; then
+          SKIP_FLAG="-DskipTests"
+        fi
+        # test_slices: test-only mode runs mvn test instead of mvn install
+        MVN_GOAL="install"
+        if [ "${{ inputs.test-only }}" = "true" ]; then
+          MVN_GOAL="test"
+          SKIP_FLAG=""
+        fi
         OVERRIDES='${{ inputs.pom-overrides }}'
         REPOS="${{ inputs.repos }}"
         REPO_COUNT=$(echo $REPOS | wc -w)
@@ -168,7 +184,7 @@ runs:
           if [ "$REPO_COUNT" -eq 1 ] && [ "${{ inputs.name }}" != "$repo" ]; then
             PHASE_NAME="${{ inputs.name }}"
           fi
-          bash docs/run-with-progress.sh --parallel "$PHASE_NAME" mvn install -fae -T 1C $SKIP_FLAG -f $POM $MVN_COMMON $MAVEN_ARGS ${{ inputs.maven-extra }}
+          bash docs/run-with-progress.sh --parallel "$PHASE_NAME" mvn $MVN_GOAL -fae -T 1C $SKIP_FLAG -f $POM $MVN_COMMON $MAVEN_ARGS ${{ inputs.maven-extra }}
         done
 
     - name: Collect new artifacts

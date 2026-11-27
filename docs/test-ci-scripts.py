@@ -63,13 +63,15 @@ def _():
     assert not dupes, f'duplicate phase names: {set(dupes)}'
 
 
-@test('pipeline: object stacks have repos and name')
+@test('pipeline: object stacks have repos and name or test_slices')
 def _():
     for level in pipeline['levels']:
         for stack in level.get('stacks', []):
             if isinstance(stack, dict):
                 assert 'repos' in stack, f'object stack in {level["id"]} missing repos'
-                assert 'name' in stack, f'object stack in {level["id"]} missing name'
+                has_name = 'name' in stack
+                has_test_slices = 'test_slices' in stack
+                assert has_name or has_test_slices, f'object stack in {level["id"]} missing name or test_slices'
 
 
 # ── Init script tests ─────────────────────────────────────────────
@@ -96,17 +98,27 @@ def _():
     data = run_init()
     phases = data['current']['phases']
     expected_names = []
-    for level in pipeline['levels']:
+    levels = pipeline['levels']
+    for i, level in enumerate(levels):
+        # Test slice names from the PREVIOUS level are injected here
+        if i > 0:
+            for stack in levels[i - 1].get('stacks', []):
+                if isinstance(stack, dict) and 'test_slices' in stack:
+                    for ts in stack['test_slices']:
+                        expected_names.append(ts['name'])
         overrides = level.get('names', {})
         for stack in level.get('stacks', []):
             if isinstance(stack, dict):
-                expected_names.append(stack.get('name', stack['repos'][0]))
+                if 'test_slices' in stack:
+                    expected_names.append(', '.join(stack['repos']))
+                else:
+                    expected_names.append(stack.get('name', stack['repos'][0]))
             elif isinstance(stack, str):
                 expected_names.append(stack)
             else:
                 for repo in stack:
                     expected_names.append(overrides.get(repo, repo))
-    assert len(phases) == len(expected_names), f'got {len(phases)}, expected {len(expected_names)}'
+    assert len(phases) == len(expected_names), f'got {len(phases)}, expected {len(expected_names)}: {[p["name"] for p in phases]} vs {expected_names}'
 
 
 @test('init: name overrides applied')

@@ -106,6 +106,39 @@ def build_all_repos(pipeline):
     return sorted(repos)
 
 
+def collect_test_slices(pipeline, test_mode):
+    """Collect test slices that should be injected into the next level.
+
+    Returns a dict: next_level_key → list of matrix entries.
+    Only active when test_mode=run.
+    """
+    injections = {}
+    if test_mode != 'run':
+        return injections
+
+    levels = pipeline.get('levels', [])
+    for i, level in enumerate(levels):
+        if i + 1 >= len(levels):
+            continue
+        next_key = levels[i + 1]['id'].lower()
+        for stack in level.get('stacks', []):
+            if isinstance(stack, dict) and 'test_slices' in stack:
+                repos = stack['repos']
+                pom_overrides = level.get('pom', {})
+                pom = pom_overrides.get(repos[0], repos[0] + '/pom.xml')
+                for ts in stack['test_slices']:
+                    entry = {
+                        'name': ts['name'],
+                        'repos': ' '.join(repos),
+                        'test_only': 'true',
+                        'maven_extra': f"-pl {ts['modules']}",
+                    }
+                    if pom != repos[0] + '/pom.xml':
+                        entry['pom_overrides'] = json.dumps({repos[0]: pom})
+                    injections.setdefault(next_key, []).append(entry)
+    return injections
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--preview', action='store_true',
@@ -115,11 +148,15 @@ def main():
                         help='Resume level (e.g. L1)')
     parser.add_argument('--resume-repos', default='',
                         help='Only rebuild these repos at the resume level (comma-separated)')
+    parser.add_argument('--test-mode', default='skip',
+                        help='Test mode (skip/run/dry)')
     args = parser.parse_args()
 
     pipeline = load_pipeline(args.pipeline)
     resume_level = args.resume_from.lower() if args.resume_from else ''
     resume_repos = set(r.strip() for r in args.resume_repos.split(',') if r.strip()) if args.resume_repos else set()
+
+    test_slices = collect_test_slices(pipeline, args.test_mode)
 
     matrices = {}
     timeouts = {}
@@ -131,9 +168,24 @@ def main():
             matrices[key] = build_matrix(level)
         elif not level.get('slices'):
             matrix = build_matrix(level)
+
+            # When test_mode=run and a stack has test_slices, compile-only at this level
+            if args.test_mode == 'run':
+                for entry in matrix.get('include', []):
+                    for stack in level.get('stacks', []):
+                        if isinstance(stack, dict) and 'test_slices' in stack:
+                            repos_str = ' '.join(stack['repos'])
+                            if entry.get('repos') == repos_str:
+                                entry['skip_tests'] = 'true'
+
             if key == resume_level and resume_repos and 'include' in matrix:
                 matrix['include'] = [e for e in matrix['include']
                                      if any(r in resume_repos for r in e['repos'].split())]
+
+            # Inject test slices from previous level
+            if key in test_slices:
+                matrix.setdefault('include', []).extend(test_slices[key])
+
             matrices[key] = matrix
 
         timeouts[key] = level.get('timeout', 30)

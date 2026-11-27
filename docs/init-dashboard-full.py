@@ -26,14 +26,18 @@ def load_pipeline(pipeline_path):
         return yaml.safe_load(f)
 
 
-def phase_names_for_level(level):
+def phase_names_for_level(level, next_level=None):
     names = []
     if 'base' in level:
         names.append(level['base'])
     name_overrides = level.get('names', {})
     for stack in level.get('stacks', []):
         if isinstance(stack, dict):
-            names.append(stack.get('name', ', '.join(stack['repos'])))
+            if 'test_slices' in stack:
+                # The compile phase uses the repo name
+                names.append(', '.join(stack['repos']))
+            else:
+                names.append(stack.get('name', ', '.join(stack['repos'])))
         elif isinstance(stack, str):
             names.append(stack)
         else:
@@ -44,9 +48,23 @@ def phase_names_for_level(level):
     return names
 
 
+def test_slice_names_for_level(level):
+    """Get test slice names that should appear at the NEXT level."""
+    names = []
+    for stack in level.get('stacks', []):
+        if isinstance(stack, dict) and 'test_slices' in stack:
+            for ts in stack['test_slices']:
+                names.append(ts['name'])
+    return names
+
+
 def load_phases(pipeline):
     phases = []
-    for level in pipeline.get('levels', []):
+    levels = pipeline.get('levels', [])
+    for i, level in enumerate(levels):
+        # Inject test slice names from the PREVIOUS level (they run at this level)
+        if i > 0:
+            phases.extend(test_slice_names_for_level(levels[i - 1]))
         phases.extend(phase_names_for_level(level))
     return phases
 
