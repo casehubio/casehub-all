@@ -62,11 +62,7 @@ levels:
       - [neocortex]
       - [qhorus]
       - repos: [work]
-        test_slices:
-          - name: work-tests-a
-            modules: "api,core,client,test-support,annotations,work-support-core,runtime-core,runtime,rest,queues,reports"
-          - name: work-tests-b
-            modules: "progress-api,progress-core,progress-memory,progress-deployment,progress-rest,progress-runtime,ledger,persistence-memory,persistence-mongodb,persistence-mongodb-core,persistence-spring-mongodb,federation,flow,graphql,issue-tracker,deployment,qhorus,spring-integration-test"
+        test_slices: 2
 
   - id: L3
     resume: true
