@@ -38,7 +38,7 @@ on:
 
 jobs:
   build:
-    uses: mdproctor/overunity/.github/workflows/reactor.yml@main
+    uses: casehubio/overunity/.github/workflows/reactor.yml@main
     with:
       config_path: overunity.yaml
       test_mode: ${{ inputs.test_mode }}
