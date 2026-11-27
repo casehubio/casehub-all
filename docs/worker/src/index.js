@@ -79,8 +79,48 @@ export default {
       }
 
       // Phase files get a 24h TTL — per-build ephemeral data that self-expires.
-      // Avoids needing DELETE operations (free tier: 1,000/day limit).
       const kvOptions = key.startsWith('phase-') ? { expirationTtl: 86400 } : {};
+
+      // Emit events on state transitions
+      if (key.startsWith('phase-') && body) {
+        try {
+          const phase = JSON.parse(body);
+          if (phase.name && phase.status) {
+            const eventType = phase.status === 'success' ? 'phase.success'
+              : phase.status === 'failure' ? 'phase.failure'
+              : phase.status === 'in_progress' ? 'phase.started' : null;
+            if (eventType) {
+              await emitEvent(env, eventType, {
+                phase: phase.name, run_id: parseInt(runId),
+                duration_s: phase.duration_s, tests_run: phase.tests_run,
+                tests_failed: phase.tests_failed
+              });
+            }
+          }
+        } catch (e) { /* non-JSON phase file — skip event */ }
+      }
+      if (key === 'progress') {
+        try {
+          const progress = JSON.parse(body);
+          if (isInit && progress?.current?.run_id) {
+            await emitEvent(env, 'build.started', {
+              run_id: progress.current.run_id, commit: progress.current.commit,
+              resume_from: progress.current.resume_from, test_mode: progress.current.test_mode
+            });
+          }
+          const latest = progress?.history?.[0];
+          if (latest?.conclusion && latest?.run_id) {
+            const eventType = latest.conclusion === 'success' ? 'build.success'
+              : latest.conclusion === 'cancelled' ? 'build.cancelled' : 'build.failure';
+            await emitEvent(env, eventType, {
+              run_id: latest.run_id, conclusion: latest.conclusion,
+              duration_s: latest.duration_s, total_tests: latest.total_tests,
+              test_mode: latest.test_mode
+            });
+          }
+        } catch (e) { /* skip */ }
+      }
+
       await env.KV.put(key, body, kvOptions);
 
       if (key === 'progress' || key.startsWith('phase-')) {
@@ -125,6 +165,20 @@ export default {
       return new Response(await ghResp.text(), { status: ghResp.status, headers: { ...corsHeaders(), 'content-type': 'application/json' } });
     }
 
+    if (request.method === 'GET' && key === 'events') {
+      const since = parseInt(url.searchParams.get('since') || '0');
+      const filter = url.searchParams.get('filter') || '*';
+      const raw = await env.KV.get('event-log');
+      const events = raw ? JSON.parse(raw) : [];
+      const filtered = events.filter(e => {
+        if (e.ts <= since) return false;
+        return matchFilter(e.type + (e.phase ? ':' + e.phase : ''), filter);
+      });
+      return new Response(JSON.stringify(filtered), {
+        headers: { ...corsHeaders(), 'content-type': 'application/json' }
+      });
+    }
+
     return new Response('Method not allowed', { status: 405 });
     } catch (e) {
       return new Response(JSON.stringify({ error: e.message, stack: e.stack }), {
@@ -134,6 +188,21 @@ export default {
     }
   }
 };
+
+function matchFilter(eventKey, filter) {
+  return filter.split(',').some(pattern => {
+    const re = new RegExp('^' + pattern.trim().replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+    return re.test(eventKey);
+  });
+}
+
+async function emitEvent(env, type, data) {
+  const raw = await env.KV.get('event-log');
+  const events = raw ? JSON.parse(raw) : [];
+  events.push({ type, ts: Date.now(), ...data });
+  if (events.length > 500) events.splice(0, events.length - 500);
+  await env.KV.put('event-log', JSON.stringify(events), { expirationTtl: 86400 });
+}
 
 function corsHeaders() {
   return {
