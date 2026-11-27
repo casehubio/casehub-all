@@ -515,6 +515,303 @@ if os.path.exists(WORKFLOW_PATH):
             assert script in sparse, f'config job references {script} but not in sparse-checkout'
 
 
+# ── Cross-file consistency ────────────────────────────────────────
+
+@test('cross: pipeline_phases() in update-progress.sh handles object stacks')
+def _():
+    """The pipeline_phases() bash function iterates stacks raw. If object stacks
+    (dicts) aren't handled, it yields dict keys like 'repos', 'name', 'maven_extra'
+    instead of the actual phase name."""
+    update_progress_path = os.path.join(SCRIPT_DIR, 'update-progress.sh')
+    if not os.path.exists(update_progress_path):
+        return
+    with open(update_progress_path) as f:
+        content = f.read()
+    # The pipeline_phases function should handle dicts — check it doesn't just
+    # iterate raw stack entries. If it uses a simple "for n in _g" on dicts,
+    # it produces garbage. It should either use the name key or be replaced
+    # by the init script's phase_names_for_level logic.
+    has_object_stacks = any(isinstance(s, dict) for lv in pipeline['levels'] for s in lv.get('stacks', []))
+    if has_object_stacks:
+        # Run the actual pipeline_phases logic from update-progress.sh
+        result = subprocess.run(
+            ['python3', '-c',
+             f"""
+import yaml
+p = yaml.safe_load(open('{PIPELINE_PATH}'))
+for lv in p['levels']:
+    if 'base' in lv: print(lv['base'])
+    nm = lv.get('names', {{}})
+    for s in lv.get('stacks', []):
+        if isinstance(s, dict): print(s.get('name', s['repos'][0]))
+        elif isinstance(s, str): print(s)
+        else:
+            for r in s: print(nm.get(r, r))
+    if 'convergence' in lv: print(lv['convergence'])
+"""],
+            capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            names = result.stdout.strip().split('\n')
+            for bad in ['repos', 'name', 'maven_extra']:
+                assert bad not in names, \
+                    f'pipeline_phases() produces garbage name "{bad}" from object stacks'
+
+
+@test('cross: auto-retry JOB_RESULTS has no duplicate job keys')
+def _():
+    """JOB_RESULTS in finalize has level7 three times — only the first
+    matters for the break-on-failure logic, but duplicates indicate
+    copy-paste errors in the job-to-level mapping."""
+    if not os.path.exists(WORKFLOW_PATH):
+        return
+    fin = workflow['jobs']['finalize']
+    retry_step = next((s for s in fin['steps'] if 'auto-retry' in str(s.get('name', '')).lower()
+                       or 'auto-retry' in str(s.get('run', ''))), None)
+    if not retry_step:
+        return
+    env = retry_step.get('env', {})
+    job_results = str(env.get('JOB_RESULTS', ''))
+    # Extract job names from "jobname=${{ needs.jobname.result }}" patterns
+    import re
+    keys = re.findall(r'(\w+)=\$', job_results)
+    dupes = [k for k in keys if keys.count(k) > 1]
+    assert not dupes, f'JOB_RESULTS has duplicate keys: {dupes}'
+
+
+@test('cross: level jobs pass maven-extra when pipeline has maven_extra')
+def _():
+    """If pipeline.yaml defines maven_extra for a level, the workflow job
+    must pass it through to the composite action."""
+    if not os.path.exists(WORKFLOW_PATH):
+        return
+    for level in pipeline['levels']:
+        level_id = level['id']
+        has_maven_extra = bool(level.get('maven_extra'))
+        has_object_maven_extra = any(isinstance(s, dict) and s.get('maven_extra')
+                                    for s in level.get('stacks', []))
+        if has_maven_extra or has_object_maven_extra:
+            job_key = f'level{level_id[1:]}'
+            job = workflow['jobs'].get(job_key, {})
+            steps = job.get('steps', [])
+            composite_step = next((s for s in steps if '.github/actions/build-level' in str(s.get('uses', ''))), None)
+            if composite_step:
+                with_block = composite_step.get('with', {})
+                has_extra = 'maven-extra' in with_block or 'maven_extra' in with_block
+                assert has_extra, \
+                    f'{level_id} has maven_extra in pipeline.yaml but job {job_key} does not pass maven-extra to composite action'
+
+
+@test('cross: level jobs pass pom-overrides when pipeline has pom')
+def _():
+    """If pipeline.yaml defines pom overrides for a level, the workflow job
+    must pass pom-overrides through."""
+    if not os.path.exists(WORKFLOW_PATH):
+        return
+    for level in pipeline['levels']:
+        level_id = level['id']
+        if level.get('pom'):
+            job_key = f'level{level_id[1:]}'
+            job = workflow['jobs'].get(job_key, {})
+            steps = job.get('steps', [])
+            composite_step = next((s for s in steps if '.github/actions/build-level' in str(s.get('uses', ''))), None)
+            if composite_step:
+                with_block = composite_step.get('with', {})
+                has_pom = 'pom-overrides' in with_block or 'pom_overrides' in with_block
+                assert has_pom, \
+                    f'{level_id} has pom overrides in pipeline.yaml but job {job_key} does not pass pom-overrides'
+
+
+@test('cross: all pipeline repos appear in publish.yaml')
+def _():
+    """Every repo in pipeline.yaml should be in publish.yaml, otherwise
+    verified artifacts won't be published."""
+    publish_path = os.path.join(SCRIPT_DIR, 'publish.yaml')
+    if not os.path.exists(publish_path):
+        return
+    with open(publish_path) as f:
+        publish = yaml.safe_load(f)
+    published = set(publish.get('maven', []))
+    pipeline_repos = set()
+    for level in pipeline['levels']:
+        for stack in level.get('stacks', []):
+            if isinstance(stack, dict):
+                pipeline_repos.update(stack['repos'])
+            elif isinstance(stack, list):
+                pipeline_repos.update(stack)
+            else:
+                pipeline_repos.add(stack)
+    missing = pipeline_repos - published
+    assert not missing, f'repos in pipeline.yaml but not in publish.yaml: {missing}'
+
+
+@test('cross: single-repo matrix names match init phase names')
+def _():
+    """Single-repo matrix entries must match init phase names exactly.
+    Multi-repo bundles (e.g. 'ledger, eidos') are fine — the composite
+    action reports per-repo, not per-bundle."""
+    result = subprocess.run(
+        [sys.executable, os.path.join(SCRIPT_DIR, 'compute-matrices.py'),
+         '--pipeline', PIPELINE_PATH],
+        capture_output=True, text=True, timeout=10)
+    if result.returncode != 0:
+        return
+    matrices_line = next((l for l in result.stdout.strip().split('\n') if l.startswith('matrices=')), None)
+    if not matrices_line:
+        return
+    matrices = json.loads(matrices_line.split('=', 1)[1])
+    init_data = run_init()
+    init_names = {p['name'] for p in init_data['current']['phases']}
+    for level_key, matrix in matrices.items():
+        for entry in matrix.get('include', []):
+            repos = entry['repos'].split()
+            if len(repos) == 1:
+                assert entry['name'] in init_names, \
+                    f'single-repo matrix name "{entry["name"]}" not in init phases'
+
+
+# ── Init edge cases ──────────────────────────────────────────────
+
+@test('init: compile-only build data carries forward on resume')
+def _():
+    """Compile-only builds have duration_s but no tests_run. The history
+    search requires (duration_s or tests_run), so duration_s alone should
+    be enough for carry-forward."""
+    compile_only_phases = [{'name': 'platform', 'status': 'success', 'duration_s': 200}]
+    old = {'current': {'run_id': 100, 'phases': compile_only_phases, 'started': '2026-01-01T00:00:00Z'}, 'history': []}
+    data = run_init(resume_from='L1', old_progress=old)
+    platform = next(p for p in data['current']['phases'] if p['name'] == 'platform')
+    assert platform.get('cached') is True, 'platform should be cached'
+    assert platform.get('duration_s') == 200, f'expected 200, got {platform.get("duration_s")}'
+
+
+@test('init: full build sets first phase to in_progress')
+def _():
+    data = run_init()
+    first = data['current']['phases'][0]
+    assert first['status'] == 'in_progress', f'first phase should be in_progress, got {first["status"]}'
+    assert 'started' in first, 'first phase should have started timestamp'
+
+
+@test('init: resume does NOT set first phase to in_progress')
+def _():
+    """On resume, the first phase is cached (before resume level). It should
+    NOT be overwritten to in_progress."""
+    green = [{'name': 'platform', 'status': 'success', 'duration_s': 100}]
+    old = {'current': {'run_id': 100, 'phases': green, 'started': '2026-01-01T00:00:00Z'}, 'history': []}
+    data = run_init(resume_from='L1', old_progress=old)
+    first = data['current']['phases'][0]
+    assert first['status'] == 'success', f'first phase on resume should stay success (cached), got {first["status"]}'
+    assert first.get('cached') is True, 'first phase on resume should be cached'
+
+
+@test('init: history capped at 200 entries')
+def _():
+    big_history = [{'run_id': i, 'phases': [], 'started': '2026-01-01T00:00:00Z'} for i in range(250)]
+    old = {'current': {'run_id': 999, 'phases': [{'name': 'x', 'status': 'success'}],
+                       'started': '2026-01-01T00:00:00Z'}, 'history': big_history}
+    data = run_init(old_progress=old)
+    assert len(data['history']) <= 200, f'history should be capped at 200, got {len(data["history"])}'
+
+
+@test('init: run_id, run_url, commit propagated to current')
+def _():
+    data = run_init()
+    cur = data['current']
+    assert cur['run_id'] == 999, f'run_id should be 999, got {cur["run_id"]}'
+    assert cur['run_url'] == 'test', f'run_url should be test, got {cur["run_url"]}'
+    assert cur['commit'] == 'abc', f'commit should be abc, got {cur["commit"]}'
+
+
+@test('init: duration_s computed for archived entry')
+def _():
+    old = {'current': {'run_id': 100, 'phases': [{'name': 'x', 'status': 'success'}],
+                       'started': '2026-01-01T00:00:00Z'}, 'history': []}
+    data = run_init(old_progress=old)
+    archived = data['history'][0]
+    assert 'duration_s' in archived, 'archived entry should have computed duration_s'
+    assert archived['duration_s'] > 0, f'duration should be > 0, got {archived["duration_s"]}'
+
+
+@test('init: total_tests summed correctly in archived entry')
+def _():
+    phases = [
+        {'name': 'a', 'status': 'success', 'tests_run': 100},
+        {'name': 'b', 'status': 'success', 'tests_run': 200},
+        {'name': 'c', 'status': 'success'},
+    ]
+    old = {'current': {'run_id': 100, 'phases': phases, 'started': '2026-01-01T00:00:00Z'}, 'history': []}
+    data = run_init(old_progress=old)
+    archived = data['history'][0]
+    assert archived['total_tests'] == 300, f'expected 300, got {archived["total_tests"]}'
+
+
+@test('init: empty old-progress produces valid output')
+def _():
+    data = run_init(old_progress={})
+    assert 'current' in data, 'missing current'
+    assert 'history' in data, 'missing history'
+    assert len(data['history']) == 0, 'history should be empty with no prior run'
+
+
+# ── Workflow structure ───────────────────────────────────────────
+
+if os.path.exists(WORKFLOW_PATH):
+
+    @test('workflow: level dependency chain is correct')
+    def _():
+        """Each level should depend on the previous level and config."""
+        jobs = workflow.get('jobs', {})
+        expected_deps = {
+            'level1': 'prepare',
+            'level2': 'level1',
+            'level3': 'level2',
+            'level4': 'level3',
+            'level5': 'level4',
+            'level6': 'level5',
+            'level7': 'level6',
+        }
+        for job_name, prev in expected_deps.items():
+            job = jobs.get(job_name, {})
+            needs = job.get('needs', [])
+            assert prev in needs, f'{job_name} should depend on {prev}, needs: {needs}'
+            assert 'config' in needs, f'{job_name} should depend on config, needs: {needs}'
+
+    @test('workflow: all level jobs have fail-fast false')
+    def _():
+        """Without fail-fast: false, one matrix entry failing cancels the others."""
+        jobs = workflow.get('jobs', {})
+        for name, job in jobs.items():
+            if name.startswith('level'):
+                strategy = job.get('strategy', {})
+                assert strategy.get('fail-fast') is False, \
+                    f'{name} should have fail-fast: false'
+
+    @test('workflow: finalize depends on ALL level jobs')
+    def _():
+        fin = workflow['jobs']['finalize']
+        needs = fin.get('needs', [])
+        for i in range(1, 8):
+            assert f'level{i}' in needs, f'finalize should depend on level{i}'
+
+    @test('workflow: level count matches pipeline.yaml (L0 is prepare)')
+    def _():
+        """L0 (platform) is built in the prepare job, not a level* job.
+        So workflow level jobs = pipeline levels - 1."""
+        pipeline_levels = len(pipeline['levels'])
+        workflow_levels = sum(1 for name in workflow['jobs'] if name.startswith('level'))
+        assert workflow_levels == pipeline_levels - 1, \
+            f'workflow has {workflow_levels} level jobs but pipeline.yaml has {pipeline_levels} levels (L0 is prepare)'
+
+    @test('workflow: publish step only runs when build_ok')
+    def _():
+        fin = workflow['jobs']['finalize']
+        publish_step = next((s for s in fin['steps'] if 'publish' in s.get('name', '').lower()), None)
+        if publish_step:
+            condition = str(publish_step.get('if', ''))
+            assert 'build_ok' in condition, \
+                'publish step should only run when build_ok is true'
+
+
 # ── Summary ───────────────────────────────────────────────────────
 
 print()

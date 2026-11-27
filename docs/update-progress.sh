@@ -19,7 +19,19 @@ WORKER_TOKEN="${CI_DASHBOARD_TOKEN:-}"
 
 pipeline_phases() {
   local dir="${1:-$(cd "$(dirname "$0")" && pwd)}"
-  python3 -c "import yaml;_p=yaml.safe_load(open('$dir/pipeline.yaml'));print('\n'.join(n for _l in _p['levels'] for _g in [([_l['base']] if 'base' in _l else [])]+_l['stacks']+[([_l['convergence']] if 'convergence' in _l else [])] for n in _g))"
+  python3 -c "
+import yaml
+p = yaml.safe_load(open('$dir/pipeline.yaml'))
+for lv in p['levels']:
+    if 'base' in lv: print(lv['base'])
+    nm = lv.get('names', {})
+    for s in lv.get('stacks', []):
+        if isinstance(s, dict): print(s.get('name', s['repos'][0]))
+        elif isinstance(s, str): print(s)
+        else:
+            for r in s: print(nm.get(r, r))
+    if 'convergence' in lv: print(lv['convergence'])
+"
 }
 
 fetch_progress() {

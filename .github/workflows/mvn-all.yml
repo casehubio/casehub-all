@@ -391,6 +391,7 @@ jobs:
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
           mvn-common: ${{ needs.config.outputs.mvn-common }}
           maven-args: ${{ needs.config.outputs.maven-args }}
+          maven-extra: ${{ matrix.maven_extra }}
 
   level2:
     name: "L2: ${{ matrix.name }}"
@@ -415,6 +416,7 @@ jobs:
           dashboard-token: ${{ secrets.CI_DASHBOARD_TOKEN }}
           mvn-common: ${{ needs.config.outputs.mvn-common }}
           maven-args: ${{ needs.config.outputs.maven-args }}
+          maven-extra: ${{ matrix.maven_extra }}
 
   level3:
     name: "L3: ${{ matrix.name }}"
@@ -655,8 +657,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           JOB_RESULTS: >-
-            level7=${{ needs.level7.result }}
-            level7=${{ needs.level7.result }}
             level7=${{ needs.level7.result }}
             level6=${{ needs.level6.result }}
             level5=${{ needs.level5.result }}
