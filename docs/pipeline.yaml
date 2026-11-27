@@ -15,10 +15,20 @@
 # timeout: build step timeout in minutes (default: 30)
 # pom:    override POM path for a repo (default: $repo/pom.xml)
 # maven_extra: per-repo extra Maven args (e.g. "-pl !npm-packages")
-# test_slices: compile once at this level, fan out test slices to the NEXT level
+# test_slices: compile once at this level, fan out test slices to the NEXT level.
 #   When test_mode=run: repo compiles with -DskipTests here, test slices
 #   are injected into the next level's matrix running mvn test -pl <modules>.
 #   When test_mode!=run: test_slices are ignored, repo builds normally.
+#   Formats:
+#     test_slices: 3                    — auto-distribute into 3 balanced slices
+#     test_slices:                      — auto with pinning
+#       count: 3
+#       pin:
+#         - slice: 0
+#           modules: [heavy-module]
+#     test_slices:                      — manual (backward compat)
+#       - name: repo-tests-a
+#         modules: "mod1,mod2,mod3"
 #
 # Dashboard rendering rules (derived from structure):
 #   base present        → base shown first, then fan-out to stacks
@@ -62,11 +72,12 @@ levels:
     resume: true
     timeout: 45
     stacks:
-      - [engine]
+      - repos: [engine]
+        test_slices: 3
 
   - id: L4
     resume: true
-    timeout: 25
+    timeout: 30
     stacks:
       - [ras, desiredstate]
       - [claudony]

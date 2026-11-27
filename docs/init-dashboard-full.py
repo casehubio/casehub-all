@@ -49,12 +49,30 @@ def phase_names_for_level(level, next_level=None):
 
 
 def test_slice_names_for_level(level):
-    """Get test slice names that should appear at the NEXT level."""
+    """Get test slice names that should appear at the NEXT level.
+
+    Handles three test_slices formats:
+      - list of dicts (manual): [{name, modules}, ...]
+      - integer (auto): N → repo-tests-a, repo-tests-b, ...
+      - object (auto with pinning): {count: N, ...}
+    """
+    labels = 'abcdefghijklmnopqrstuvwxyz'
     names = []
     for stack in level.get('stacks', []):
         if isinstance(stack, dict) and 'test_slices' in stack:
-            for ts in stack['test_slices']:
-                names.append(ts['name'])
+            ts_config = stack['test_slices']
+            if isinstance(ts_config, list):
+                for ts in ts_config:
+                    names.append(ts['name'])
+            elif isinstance(ts_config, int):
+                repo = stack['repos'][0]
+                for i in range(ts_config):
+                    names.append(f'{repo}-tests-{labels[i]}')
+            elif isinstance(ts_config, dict):
+                repo = stack['repos'][0]
+                count = ts_config.get('count', 2)
+                for i in range(count):
+                    names.append(f'{repo}-tests-{labels[i]}')
     return names
 
 

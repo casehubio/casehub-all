@@ -93,6 +93,19 @@ def run_init(resume_from='', old_progress=None):
         os.unlink(old_path)
 
 
+def test_slice_phase_names(ts_config, repos):
+    """Extract expected phase names from a test_slices config."""
+    labels = 'abcdefghijklmnopqrstuvwxyz'
+    if isinstance(ts_config, list):
+        return [ts['name'] for ts in ts_config]
+    elif isinstance(ts_config, int):
+        return [f'{repos[0]}-tests-{labels[i]}' for i in range(ts_config)]
+    elif isinstance(ts_config, dict):
+        count = ts_config.get('count', 2)
+        return [f'{repos[0]}-tests-{labels[i]}' for i in range(count)]
+    return []
+
+
 @test('init: produces correct phase count')
 def _():
     data = run_init()
@@ -100,12 +113,11 @@ def _():
     expected_names = []
     levels = pipeline['levels']
     for i, level in enumerate(levels):
-        # Test slice names from the PREVIOUS level are injected here
         if i > 0:
             for stack in levels[i - 1].get('stacks', []):
                 if isinstance(stack, dict) and 'test_slices' in stack:
-                    for ts in stack['test_slices']:
-                        expected_names.append(ts['name'])
+                    expected_names.extend(test_slice_phase_names(
+                        stack['test_slices'], stack['repos']))
         overrides = level.get('names', {})
         for stack in level.get('stacks', []):
             if isinstance(stack, dict):
