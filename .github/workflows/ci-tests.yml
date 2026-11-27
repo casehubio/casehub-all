@@ -1,0 +1,25 @@
+name: CI Infrastructure Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/pipeline.yaml'
+      - 'docs/init-dashboard-full.py'
+      - 'docs/update-progress.sh'
+      - 'docs/compute-matrices.py'
+      - 'docs/auto-retry.sh'
+      - 'docs/publish-packages.sh'
+      - 'docs/publish.yaml'
+      - 'docs/test-ci-scripts.py'
+      - '.github/workflows/mvn-all.yml'
+      - '.github/actions/build-level/action.yml'
+
+jobs:
+  test:
+    name: CI infrastructure tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --user pyyaml
+      - run: python3 docs/test-ci-scripts.py
