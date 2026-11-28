@@ -1,0 +1,59 @@
+org: casehubio
+
+build:
+  provider: maven
+  java-version: '22'
+  base-modules:
+    - parent
+    - platform
+  artifact-group: io/casehub
+  extra-cache-path: ~/.casehub
+  extra-cache-key: native-sherpa
+  extra-warm-commands:
+    - mvn com.diffplug.spotless:spotless-maven-plugin:3.4.0:apply -f engine/pom.xml --batch-mode -ntp -q
+
+pipeline: docs/pipeline.yaml
+
+dashboard:
+  backend: cloudflare
+  url: https://casehub-ci-dashboard.casehub.workers.dev
+  token-secret: CI_DASHBOARD_TOKEN
+
+publish:
+  target: github-pages
+  format: maven
+  repo: casehubio/packages
+  repos:
+    - platform
+    - worker
+    - ledger
+    - connectors
+    - neocortex
+    - eidos
+    - desiredstate
+    - ras
+    - qhorus
+    - work
+    - engine
+    - pages
+    - agency
+    - casehub-langchain4j
+    - workers
+    - claudony
+    - ops
+    - iot
+    - casehub-mosaic
+    - openclaw
+    - devtown
+    - aml
+    - clinical
+    - life
+    - drafthouse
+    - soc
+    - fsitrading
+    - quarkmind
+    - scaffold
+    - chat-app
+
+events:
+  backend: cloudflare-kv
