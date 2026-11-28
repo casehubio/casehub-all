@@ -36,6 +36,11 @@ on:
           - list
         default: pinned
 
+permissions:
+  contents: write
+  packages: read
+  actions: write
+
 jobs:
   build:
     uses: mdproctor/overunity/.github/workflows/reactor.yml@main

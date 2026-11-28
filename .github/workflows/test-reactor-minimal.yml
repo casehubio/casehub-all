@@ -1,6 +1,11 @@
 name: Test Reactor Minimal
 on:
   workflow_dispatch:
+permissions:
+  contents: write
+  packages: read
+  actions: write
+
 jobs:
   build:
     uses: mdproctor/overunity/.github/workflows/reactor-minimal.yml@main
