@@ -1,0 +1,11 @@
+name: Test Reactor Minimal
+on:
+  workflow_dispatch:
+jobs:
+  build:
+    uses: mdproctor/overunity/.github/workflows/reactor-minimal.yml@main
+    with:
+      config_path: overunity.yaml
+      test_mode: dry
+    secrets:
+      DASHBOARD_TOKEN: ${{ secrets.CI_DASHBOARD_TOKEN }}
